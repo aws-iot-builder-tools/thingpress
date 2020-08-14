@@ -1,0 +1,276 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  ThingPress instance for importing certificates via Multi Account
+  Registration at scale.
+
+Globals:
+  Function:
+    Timeout: 3
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: ThingPress
+    Description: >-
+        An application that accelerates Multi-Account Registration
+        bulk certificate provisioning for the Internet of Things.
+    Author: Richard Elberger (rpcme)
+    SpdxLicense: MIT-0
+    LicenseUrl: LICENSE
+    ReadmeUrl: README.md
+    HomePageUrl: https://github.com/awslabs/thingpress
+    SemanticVersion: 0.0.1
+    SourceCodeUrl: https://github.com/awslabs/thingpress
+
+Parameters:
+
+  IamUserArn:
+    Default: arn:aws:iam::517295686160:user/rich
+    Description: >-
+      The ARN for the user having access to the S3 bucket for uploading manifests.
+    Type: String
+
+  IoTPolicy:
+    Default: None
+    Type: String
+    Description: >-
+      The AWS IoT Policy that you will apply to every certificate
+      being imported. Using best practice techniques, abstract the
+      Policy using Policy variables.
+
+  IoTThingGroup:
+    Default: None
+    Type: String
+    Description: >-
+      The AWS IoT Thing Group you apply to the Thing being
+      created. Put None if no Thing Group.
+
+  IoTThingType:
+    Default: None
+    Type: String
+    Description: >-
+      The AWS IoT Thing Type you apply to the Thing being created. Put
+      None if no Thing Type.
+
+  MicrochipVerifyCertName:
+    Default: verify-cert.cer
+    Type: String
+    Description: >-
+      The verify certificate that is provided by Microchip. This must
+      not have a .json filename suffix.
+
+  ConcurrentExecutions:
+    Default: 10
+    Type: Number
+    Description: >-
+      By default the concurrent executions for the bulk importer is 10
+      since the IoT Limit TPS for most APIs is 10, and there is some
+      balance.  In case of throttling failure, the payload will be requeued.
+
+Resources:
+
+  BulkImporterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Bulk-Importer"
+      VisibilityTimeout: 300
+
+  BulkImporterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref BulkImporterQueue
+      PolicyDocument:
+        Id: BulkImporterQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: BulkImporterQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt BulkImporterQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt BulkImporterFunctionRole.Arn
+                - !GetAtt ProductProviderFunctionRole.Arn
+
+  BulkImporterFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-bulk-importer/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt BulkImporterFunctionRole.Arn
+      ReservedConcurrentExecutions: !Ref ConcurrentExecutions
+      Timeout: 300
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt BulkImporterQueue.Arn
+
+  ProductProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Product-Provider"
+      VisibilityTimeout: 300
+
+  ProductProviderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ProductProviderQueue
+      PolicyDocument:
+        Id: ProductProviderQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: ProductProviderQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt ProductProviderQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt MicrochipSupplierProviderFunctionRole.Arn
+                - !GetAtt ProductProviderFunctionRole.Arn
+
+  ProductProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-product-providers/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt ProductProviderFunctionRole.Arn
+      Timeout: 300
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref BulkImporterQueue
+          POLICY_NAME: !Ref IoTPolicy
+          THING_GROUP_NAME: !Ref IoTThingGroup
+          THING_TYPE_NAME: !Ref IoTThingType
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt ProductProviderQueue.Arn
+
+
+  MicrochipSupplierProviderBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-microchip"
+
+  MicrochipSupplierProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-supplier-providers/Microchip
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt MicrochipSupplierProviderFunctionRole.Arn
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ProductProviderQueue
+          VERIFY_CERT: !Ref MicrochipVerifyCertName
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref MicrochipSupplierProviderBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .json
+
+  MicrochipSupplierProviderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-MicrochipSupplierProviderFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  BulkImporterFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-BulkImporterFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  ProductProviderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-ProductProviderFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+  MicrochipSupplierProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt MicrochipSupplierProviderFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt MicrochipSupplierProviderBucket.Arn
+
+  ProductProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ProductProviderFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'sqs.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt ProductProviderQueue.Arn
+
+  BulkImporterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt BulkImporterFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'sqs.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt BulkImporterQueue.Arn
+
+Outputs:
+  BulkImporterFunction:
+    Description: "Hello World Lambda Function ARN"
+    Value: !GetAtt BulkImporterFunction.Arn
