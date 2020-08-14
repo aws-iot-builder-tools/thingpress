@@ -1,7 +1,7 @@
 # ThingPress: AWS IoT Certificate Multi-Account Registration Bulk Import
 
-In 2019, AWS provided the capability to import AWS IoT certificates to
-does not have a registered Certificate Authority.  Customers purchase
+In 2019, AWS launched the capability to import AWS IoT certificates to
+AWS IoT Core that does not have a registered Certificate Authority.  Customers purchase
 pre-provisioned hardware security components such as secure elements,
 enclaves, or TPMs that directly ship to contract manufacturing
 sites.
