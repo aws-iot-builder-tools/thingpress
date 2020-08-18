@@ -1,0 +1,284 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: >
+  Use this to clean ThingPress imported objects. Note, ALL
+    certificates and their related things will be destroyed!!
+
+Globals:
+  Function:
+    Timeout: 3
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: CleanPress
+    Description: >-
+        An application that removes certificates and related things in
+        a target region. EXTREMELY DESTRUCTIVE USE WITH CAUTION
+    Author: Richard Elberger (rpcme)
+    SpdxLicense: MIT-0
+    LicenseUrl: ../../LICENSE
+    ReadmeUrl: README.md
+    HomePageUrl: https://github.com/awslabs/thingpress
+    SemanticVersion: 0.0.1
+    SourceCodeUrl: https://github.com/awslabs/thingpress
+
+Resources:
+  IoTStageQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Clean-Staging"
+      VisibilityTimeout: 300
+  IoTPolicyQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Clean-IoTPolicy"
+      VisibilityTimeout: 300
+  IoTThingQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Clean-IoTThing"
+      VisibilityTimeout: 300
+  IoTCertificateQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "${AWS::StackName}-Clean-IoTCertificate"
+      VisibilityTimeout: 300
+  InvokerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-cleanpress-invoke/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt InvokerFunctionRole.Arn
+      ReservedConcurrentExecutions: 10
+      Timeout: 900
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref IoTPolicyQueue
+          QUEUE_STAGING: !Ref IoTStageQueue
+  IoTPolicyFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-cleanpress-policy/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt IoTPolicyFunctionRole.Arn
+      ReservedConcurrentExecutions: 10
+      Timeout: 300
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref IoTThingQueue
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt IoTPolicyQueue.Arn
+  IoTThingFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-cleanpress-thing/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt IoTThingFunctionRole.Arn
+      ReservedConcurrentExecutions: 10
+      Timeout: 300
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref IoTCertificateQueue
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt IoTThingQueue.Arn
+  IoTCertificateFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-cleanpress-cert/
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt IoTCertificateFunctionRole.Arn
+      ReservedConcurrentExecutions: 10
+      Timeout: 300
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt IoTCertificateQueue.Arn
+  IoTPolicyQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IoTPolicyQueue
+      PolicyDocument:
+        Id: IoTPolicyQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: IoTPolicyQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt IoTPolicyQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt InvokerFunctionRole.Arn
+                - !GetAtt IoTPolicyFunctionRole.Arn
+  IoTStageQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IoTStageQueue
+      PolicyDocument:
+        Id: IoTStageQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: IoTStageQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt IoTStageQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt InvokerFunctionRole.Arn
+  IoTThingQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IoTThingQueue
+      PolicyDocument:
+        Id: IoTThingQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: IoTThingQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt IoTThingQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt IoTPolicyFunctionRole.Arn
+                - !GetAtt IoTThingFunctionRole.Arn
+  IoTCertificateQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref IoTCertificateQueue
+      PolicyDocument:
+        Id: IoTCertificateQueuePolicyId
+        Version: "2012-10-17"
+        Statement:
+          - Sid: IoTCertificateQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt IoTCertificateQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt IoTThingFunctionRole.Arn
+                - !GetAtt IoTCertificateFunctionRole.Arn
+  IoTPolicyInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt IoTPolicyFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'sqs.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt IoTPolicyQueue.Arn
+  IoTThingInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt IoTThingFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'sqs.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt IoTThingQueue.Arn
+  IoTCertificateInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt IoTCertificateFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 'sqs.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt IoTCertificateQueue.Arn
+  InvokerFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-InvokerFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  IoTThingFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-IoTThingFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  IoTPolicyFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-IoTPolicyFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  IoTCertificateFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-IoTCertificateFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+
+Outputs:
+  InvokerFunction:
+    Description: "DANGER Invoke this function to remove all certificates and things"
+    Value: !GetAtt InvokerFunction.Arn
