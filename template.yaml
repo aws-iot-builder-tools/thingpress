@@ -56,8 +56,8 @@ Parameters:
     Default: verify-cert.cer
     Type: String
     Description: >-
-      The verify certificate that is provided by Microchip. This must
-      not have a .json filename suffix.
+      Microchip only: The verify certificate that is provided by
+      Microchip. This must not have a .json filename suffix.
 
   ConcurrentExecutions:
     Default: 10
@@ -104,6 +104,9 @@ Resources:
       Role: !GetAtt BulkImporterFunctionRole.Arn
       ReservedConcurrentExecutions: !Ref ConcurrentExecutions
       Timeout: 300
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref BulkImporterQueue
       Events:
         QueueEvent:
           Type: SQS
@@ -165,6 +168,10 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-microchip"
+  InfineonSupplierProviderBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-infineon"
 
   MicrochipSupplierProviderFunction:
     Type: AWS::Serverless::Function
@@ -190,12 +197,52 @@ Resources:
                 Rules:
                   - Name: Suffix
                     Value: .json
+  InfineonSupplierProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-supplier-providers/Infineon
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt InfineonSupplierProviderFunctionRole.Arn
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ProductProviderQueue
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref InfineonSupplierProviderBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .xml
 
   MicrochipSupplierProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
       RoleName: !Sub "${AWS::StackName}-MicrochipSupplierProviderFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  InfineonSupplierProviderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-InfineonSupplierProviderFunctionRole"
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
@@ -251,6 +298,14 @@ Resources:
       Principal: 's3.amazonaws.com'
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !GetAtt MicrochipSupplierProviderBucket.Arn
+  InfineonSupplierProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt InfineonSupplierProviderFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt InfineonSupplierProviderBucket.Arn
 
   ProductProviderInvokePermission:
     Type: AWS::Lambda::Permission
@@ -271,6 +326,11 @@ Resources:
       SourceArn: !GetAtt BulkImporterQueue.Arn
 
 Outputs:
-  BulkImporterFunction:
-    Description: "Hello World Lambda Function ARN"
-    Value: !GetAtt BulkImporterFunction.Arn
+  InfineonIngestPoint:
+    Description: >-
+        The Amazon S3 bucket for uploading Infineon manifests (XML)
+    Value: !Ref InfineonSupplierProviderBucket
+  MicrochipIngestPoint:
+    Description: >-
+      The Amazon S3 bucket for uploading Microchip manifests (JSON)
+    Value: !Ref MicrochipSupplierProviderBucket
