@@ -32,6 +32,7 @@ from cryptography.hazmat.primitives.asymmetric import ec
 iot_client = boto3.client('iot')
 
 verbose = True
+config = None
 
 def get_certificate(certificateId):
     try:
@@ -61,7 +62,7 @@ def get_policy(policyName):
     try:
         response = iot_client.get_policy(policyName=policyName)
         return response.get('policyArn')
-    except botocore.exceptions.ClientError as e:
+    except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] == 'ResourceNotFoundException':
             print("ERROR: You need to configure the policy [" + policyName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
@@ -75,7 +76,7 @@ def get_thing_group(thingGroupName):
     try:
         response = iot_client.describe_thing_group(thingGroupName=thingGroupName)
         return response.get('thingGroupArn')
-    except botocore.exceptions.ClientError as e:
+    except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] == 'ResourceNotFoundException':
             print("ERROR: You need to configure the Thing Group [" + thingGroupName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
@@ -89,7 +90,7 @@ def get_thing_type(typeName):
     try:
         response = iot_client.describeThingType(thingTypeName=thingTypeName)
         return response.get('thingTypeArn')
-    except botocore.exceptions.ClientError as e:
+    except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] == 'ResourceNotFoundException':
             print("ERROR: You need to configure the Thing Type [" + thingTypeName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
@@ -128,6 +129,12 @@ def process_thing(thingName, certificateId, thingTypeName):
         print(e)
         return None
 
+def requeue():
+    iot_client = boto3.client('sqs')
+    queueUrl = os.environ.get('QUEUE_TARGET')
+    client.send_message( QueueUrl=queueUrl,
+                         MessageBody=json.dumps(config))
+
 def process_certificate(payload):
     client = boto3.client('iot')
 
@@ -153,7 +160,15 @@ def process_certificate(payload):
     try:
         response = iot_client.register_certificate_without_ca(certificatePem=certificateText.decode('ascii'),
                                                               status='ACTIVE')
+        
         return response.get("certificateId")
+    except botocore.exceptions.ClientError as e:
+        if error.response['Error']['Code'] == 'ThrottlingException':
+            print("ERROR: ThrottlingException. Requeue for processing.")
+            requeue()
+        if error.response['Error']['Code'] == 'UnauthorizedException':
+            print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
+        return None
     except BaseException as e:
         print("exception occurred: {}".format(e))
 
@@ -183,7 +198,8 @@ def get_name_from_certificate(certificateId):
     print("Common name to be Thing Name: [" + cn + "]")
     return cn
 
-def process_sqs(config):
+def process_sqs():
+    global config
     certificate = config.get('certificate')
     policyName = config.get('policy_name')
     thingGroupName = config.get('thing_group_name')
@@ -195,17 +211,23 @@ def process_sqs(config):
         print("certificateId is None. Something bad happened. Exiting.")
         return None
 
-    thingName = get_name_from_certificate(certificateId)
+    if 'thing' in config:
+        thingName = config['thing']
+    else:
+        thingName = get_name_from_certificate(certificateId)
 
     process_thing(thingName, certificateId, thingTypeName)
     process_policy(policyName, certificateId)
     process_thing_group(thingGroupName, thingName)
 
 def lambda_handler(event, context):
+    global config
+    
     if event.get('Records') is None:
         print("ERROR: Configuration incorrect: no event record on invoke")
         return
     
     for record in event['Records']:
         if record.get('eventSource') == 'aws:sqs':
-            process_sqs(json.loads(record["body"]))
+            config = json.loads(record["body"])
+            process_sqs()
