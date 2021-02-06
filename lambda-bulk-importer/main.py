@@ -63,7 +63,6 @@ def get_policy(policyName):
         response = iot_client.get_policy(policyName=policyName)
         return response.get('policyArn')
     except botocore.exceptions.ClientError as error:
-        if error.response['Error']['Code'] == 'ResourceNotFoundException':
             print("ERROR: You need to configure the policy [" + policyName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
             print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
@@ -120,12 +119,18 @@ def process_thing(thingName, certificateId, thingTypeName):
             response = iot_client.create_thing(thingName=thingName,
                                                thingTypeName=thingTypeName)
 
+    except Exception as e:
+        print("ERROR Thing creation failed.")
+        print(e)
+        return None
+
+    try:
         response = iot_client.attach_thing_principal( thingName=thingName,
                                                       principal=certificateArn)
             
         return 
     except Exception as e:
-        print("ERROR Thing creation and attachment failed.")
+        print("ERROR Certificate attachment failed.")
         print(e)
         return None
 
@@ -208,10 +213,6 @@ def process_sqs():
     certificateId = process_certificate(certificate)
     
     if (certificateId is None):
-        print("certificateId is None. Something bad happened. Exiting.")
-        return None
-
-    if 'thing' in config:
         thingName = config['thing']
     else:
         thingName = get_name_from_certificate(certificateId)

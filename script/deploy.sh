@@ -19,16 +19,21 @@
 #! /bin/bash
 echo Arguments are as follows. If you do not want to define the object \(except
 echo stack name\) then just use empty double quotes.
-echo 1. stack name
+echo 1. name of CloudFormation stack to be created or updated
 echo 2. iot policy name
 echo 3. iot thing group name
 echo 4. iot thing type name
+echo 5. s3 bucket name
+echo 6. the AWS Region to deploy to. Example: us-east-1
+echo "7. ARN of an IAM role that CloudFormation can assume. Example: arn:aws:iam::<account id>:role/<role name>"
 
-if test $# != 4; then echo Please read instructions above.; exit 1; fi
+if test $# != 7; then echo Insufficient arguments - Please read instructions above.; exit 1; fi
 
 iot_policy="ParameterKey=IoTPolicy,ParameterValue=\"$2\""
 iot_thing_group="ParameterKey=IoTThingGroup,ParameterValue=\"$3\""
 iot_thing_type="ParameterKey=IoTThingType,ParameterValue=\"$4\""
+s3bucket="ParameterKey=S3Bucket,ParameterValue=\"$5\""
+region="ParameterKey=AWSRegion,ParameterValue=\"$6\""
 
 P=$(pwd)/$(dirname $0)
 cd ${P}/..
@@ -37,4 +42,7 @@ sam deploy \
     --template-file packaged.yaml \
     --capabilities CAPABILITY_NAMED_IAM \
     --stack-name $1 \
+    --s3-bucket $5 \
+    --region $6 \
+    --role-arn $7 \
     --parameter-overrides "${iot_policy} ${iot_thing_group} ${iot_thing_type}"
