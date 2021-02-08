@@ -19,7 +19,7 @@
 #! /bin/bash
 echo Arguments are as follows. If you do not want to define the object \(except
 echo stack name\) then just use empty double quotes.
-echo 1. name of CloudFormation stack to be created or updated
+echo 1. name of CloudFormation stack to be created or updated 
 echo 2. iot policy name
 echo 3. iot thing group name
 echo 4. iot thing type name
@@ -28,6 +28,20 @@ echo 6. the AWS Region to deploy to. Example: us-east-1
 echo "7. ARN of an IAM role that CloudFormation can assume. Example: arn:aws:iam::<account id>:role/<role name>"
 
 if test $# != 7; then echo Insufficient arguments - Please read instructions above.; exit 1; fi
+
+# validate stack name for compliance with s3 bucket naming rules
+stackname=$1
+for (( i=0; i<${#stackname}; i++ )); do
+  letter="${stackname:$i:1}"
+  if [[ $letter =~ ^[A-Z] ]]
+  then
+	  echo "ERROR: Stack name should not have uppercase letters - exiting..."
+      exit  1
+  elif [[ $letter == "." ]]; then
+	  echo "ERROR: Stack name should not have '.'- exiting..."
+      exit  1
+  fi
+done
 
 iot_policy="ParameterKey=IoTPolicy,ParameterValue=\"$2\""
 iot_thing_group="ParameterKey=IoTThingGroup,ParameterValue=\"$3\""
