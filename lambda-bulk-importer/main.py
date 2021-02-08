@@ -63,6 +63,7 @@ def get_policy(policyName):
         response = iot_client.get_policy(policyName=policyName)
         return response.get('policyArn')
     except botocore.exceptions.ClientError as error:
+        if error.response['Error']['Code'] == 'ResourceNotFoundException':
             print("ERROR: You need to configure the policy [" + policyName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
             print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
