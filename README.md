@@ -105,7 +105,7 @@ These steps assume you are building and installing the tool on a
 GNU/Linux operating system such as a local workstation or EC2 instance
 with the appropriate policy and/or IAM programmatic credential.
 
-1. Clone this repository.
+1. Clone the thingpress repository.
 
    ```bash
    git clone https://github.com/awslabs/thingpress thingpress
@@ -144,10 +144,10 @@ with the appropriate policy and/or IAM programmatic credential.
    deploy phase these objects are NOT cross-checked for validity.
    
    ```bash
-   ./deploy.sh <stackname> <policyname> <thinggroupname> <thingtypename> 
+   ./deploy.sh <stackname> <policyname> <thinggroupname> <thingtypename> <s3 bucket name> <aws region> <arn of IAM role> 
    ```
 
-The tool is now installed.
+Tool installation is now complete.
 
 # Invocation
 
@@ -171,13 +171,15 @@ page for more information.
 1. Obtain the Manifest file and verification certificate from MicrochipDirect
 2. Login to the AWS Console.
 3. Ensure you are in the target region where your application operates.
-4. Navigate to Amazon S3 via the Services menu.
-5. Identify the bucket for Microchip. It will be your deployment Stack Name suffixed with "-microchip".
-6. Upload (or drag and drop) the verification certificate.  The
-   verification certificate should not have a .json extension.
-7. Upload (or drag and drop) the certificate manifest to the S3
+4. Get a current summary of your IoT things and certificates as follows: ```get-iot-summary <aws region> ```
+5. Navigate to Amazon S3 via the Services menu.
+6. Identify the bucket for Microchip. It will be your deployment Stack Name suffixed with "-microchip".
+7. Upload (or drag and drop) the verification certificate.  The
+   8erification certificate should not have a .json extension.
+8. Upload (or drag and drop) the certificate manifest to the S3
    bucket.  On this event, the Thingpress tool begins processing the manifest
-8. The certificates and objects will be created and configured in AWS IoT Core.
+9. The certificates and objects will be created and configured in AWS IoT Core.
+10. Verify that the operation has been succesful by getting the updated summary as follows: ```get-iot-summary <aws region> ```
 
 ## Infineon Provider Invocation
 **NEED TO CHECK THIS**
