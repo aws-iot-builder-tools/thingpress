@@ -216,7 +216,7 @@ to a target Amazon SQS queue.
 The installation expects that you are running on a GNU/Linux based
 system. Mileage may vary under Mac OSX.  If your workstation is not a
 GNU/Linux variant, it may be best to invoke this process from a
-t1.micro Amazon Linux instance in the AWS Cloud.
+t2.micro Amazon Linux instance in the AWS Cloud.
 
 To invoke the installation, you must perform three steps:
 
