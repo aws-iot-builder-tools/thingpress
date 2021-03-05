@@ -67,7 +67,7 @@ and the result is sent to the bulk import SQS queue.
 3. The bulk import facility listens to messages being added to the
    bulk import SQS queue and invokes the API calls to import the
    certificate, create any necessary objects (such as Thing), and
-   attaches any necessary objects (like Thing Groups, Types, and
+   attach any necessary objects (like Thing Groups, Types, and
    Policies).
 
 
@@ -80,7 +80,8 @@ and the result is sent to the bulk import SQS queue.
   - Amazon Web Services Command Line Interface (CLI)
   - Amazon Web Services Serverless Application Model (SAM) CLI
   - Amazon Web Services IAM credentials with appropriate Role
-    permissions and programmatic access
+    permissions and programmatic access for: 
+        IAM, SQS, S3, Lambda, IoT, CloudFormation, CloudWatch
 
 # Installation
 
