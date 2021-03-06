@@ -27,12 +27,13 @@ else
 	myregion=$1
 fi
 
-echo "IoT Summary for $(aws iam get-user | grep UserName) Region:$myregion" | sed 's/,//'
+echo "IoT Summary"
+echo "$(aws iam get-user | grep UserName) Region:$myregion" | sed 's/,//' | sed 's/        //'
 echo "Number of things: $(aws iot list-things --region $myregion| grep thingArn | wc -l) "
 
 echo "Number of thing types: $(aws iot list-thing-types --region $myregion| grep thingTypeArn | wc -l) "
 
-echo "Number of thing groups: $(aws iot list-thing-groups --region $myregion| grep thingGroupArn | wc -l) "
+echo "Number of thing groups: $(aws iot list-thing-groups --region $myregion| grep groupArn | wc -l) "
 
 echo "Number of certificates: $(aws iot list-certificates --region $myregion| grep certificateArn | wc -l) "
 
