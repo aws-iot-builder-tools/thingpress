@@ -1,4 +1,5 @@
-# Copyright (C) 2020 Amazon.com, Inc. All Rights Reserved.
+
+# Copyright (C) 2021 Amazon.com, Inc. All Rights Reserved.
 #
 # Permission is hereby granted, free of charge, to any person obtaining a copy of
 # this software and associated documentation files (the "Software"), to deal in
@@ -17,13 +18,15 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #! /bin/bash
-echo Arguments are as follows. If you do not want to define the object \(except
+
+echo Thingpress deploy script.
+echo Arguments are shown below. If you do not want to define a parameter \(except
 echo stack name\) then just use empty double quotes.
 echo 1. name of CloudFormation stack to be created or updated 
 echo 2. iot policy name
 echo 3. iot thing group name
 echo 4. iot thing type name
-echo 5. s3 bucket name
+echo 5. s3 bucket name (globally unique)
 echo 6. the AWS Region to deploy to. Example: us-east-1
 echo "7. ARN of an IAM role that CloudFormation can assume. Example: arn:aws:iam::<account id>:role/<role name>"
 
@@ -43,13 +46,23 @@ for (( i=0; i<${#stackname}; i++ )); do
   fi
 done
 
+P=$(pwd)/$(dirname $0)
+cd ${P}/..
+sam build --use-container
+
+echo Build successful
+
+sam package --s3-bucket $5 \
+    --output-template-file ${P}/../packaged.yaml
+
+echo Packaging successful
+
 iot_policy="ParameterKey=IoTPolicy,ParameterValue=\"$2\""
 iot_thing_group="ParameterKey=IoTThingGroup,ParameterValue=\"$3\""
 iot_thing_type="ParameterKey=IoTThingType,ParameterValue=\"$4\""
 s3bucket="ParameterKey=S3Bucket,ParameterValue=\"$5\""
 region="ParameterKey=AWSRegion,ParameterValue=\"$6\""
 
-P=$(pwd)/$(dirname $0)
 cd ${P}/..
 
 sam deploy \

@@ -25,7 +25,7 @@ Metadata:
 Parameters:
 
   IamUserArn:
-    Default: arn:aws:iam::517295686160:user/rich
+    Default: None
     Description: >-
       The ARN for the user having access to the S3 bucket for uploading manifests.
     Type: String
