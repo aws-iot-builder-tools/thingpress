@@ -74,6 +74,7 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-Bulk-Importer"
       VisibilityTimeout: 300
+      KmsMasterKeyId: 'alias/aws/sqs'
 
   BulkImporterQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -120,6 +121,7 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-Product-Provider"
       VisibilityTimeout: 300
+      KmsMasterKeyId: 'alias/aws/sqs'
 
   ProductProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -168,10 +170,25 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-microchip"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: 'alias/aws/s3'
+      VersioningConfiguration:
+        Status: Enabled
+
   InfineonSupplierProviderBucket:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-infineon"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: 'alias/aws/s3'
+      VersioningConfiguration:
+        Status: Enabled
 
   MicrochipSupplierProviderFunction:
     Type: AWS::Serverless::Function
@@ -238,6 +255,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action:
               - 'sts:AssumeRole'
+
   InfineonSupplierProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -255,6 +273,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action:
               - 'sts:AssumeRole'
+
   BulkImporterFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -272,6 +291,7 @@ Resources:
               Service: lambda.amazonaws.com
             Action:
               - 'sts:AssumeRole'
+
   ProductProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
