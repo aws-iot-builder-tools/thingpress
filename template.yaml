@@ -75,6 +75,7 @@ Resources:
       QueueName: !Sub "${AWS::StackName}-Bulk-Importer"
       VisibilityTimeout: 300
       KmsMasterKeyId: 'alias/aws/sqs'
+      SqsManagedSseEnabled: true
 
   BulkImporterQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -122,6 +123,7 @@ Resources:
       QueueName: !Sub "${AWS::StackName}-Product-Provider"
       VisibilityTimeout: 300
       KmsMasterKeyId: 'alias/aws/sqs'
+      SqsManagedSseEnabled: true
 
   ProductProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
