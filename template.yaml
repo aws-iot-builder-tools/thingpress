@@ -12,8 +12,8 @@ Metadata:
   AWS::ServerlessRepo::Application:
     Name: ThingPress
     Description: >-
-        An application that accelerates Multi-Account Registration
-        bulk certificate provisioning for the Internet of Things.
+      An application that accelerates Multi-Account Registration
+      bulk certificate provisioning for the Internet of Things.
     Author: Richard Elberger (rpcme)
     SpdxLicense: MIT-0
     LicenseUrl: LICENSE
@@ -74,7 +74,6 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-Bulk-Importer"
       VisibilityTimeout: 300
-      KmsMasterKeyId: 'alias/aws/sqs'
       SqsManagedSseEnabled: true
 
   BulkImporterQueuePolicy:
@@ -122,7 +121,6 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-Product-Provider"
       VisibilityTimeout: 300
-      KmsMasterKeyId: 'alias/aws/sqs'
       SqsManagedSseEnabled: true
 
   ProductProviderQueuePolicy:
@@ -144,6 +142,7 @@ Resources:
               AWS:
                 - !GetAtt MicrochipSupplierProviderFunctionRole.Arn
                 - !GetAtt ProductProviderFunctionRole.Arn
+                - !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
 
   ProductProviderFunction:
     Type: AWS::Serverless::Function
@@ -184,6 +183,18 @@ Resources:
     Type: AWS::S3::Bucket
     Properties:
       BucketName: !Sub "${AWS::StackName}-infineon"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'aws:kms'
+              KMSMasterKeyID: 'alias/aws/s3'
+      VersioningConfiguration:
+        Status: Enabled
+
+  ESP32S3SupplierProviderBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "${AWS::StackName}-esp32s3"
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -240,6 +251,30 @@ Resources:
                   - Name: Suffix
                     Value: .xml
 
+  ESP32S3SupplierProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-supplier-providers/ESP32-S3
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ProductProviderQueue
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref ESP32S3SupplierProviderBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .csv
+
   MicrochipSupplierProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -263,6 +298,23 @@ Resources:
     Properties:
       Path: /
       RoleName: !Sub "${AWS::StackName}-InfineonSupplierProviderFunctionRole"
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
+        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
+        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+      AssumeRolePolicyDocument:
+        Statement:
+          -
+            Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+  ESP32S3SupplierProviderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub "${AWS::StackName}-ESP32S3SupplierProviderFunctionRole"
       ManagedPolicyArns:
         - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
         - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
@@ -320,6 +372,7 @@ Resources:
       Principal: 's3.amazonaws.com'
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !GetAtt MicrochipSupplierProviderBucket.Arn
+
   InfineonSupplierProviderInvokePermission:
     Type: AWS::Lambda::Permission
     Properties:
@@ -328,6 +381,15 @@ Resources:
       Principal: 's3.amazonaws.com'
       SourceAccount: !Ref 'AWS::AccountId'
       SourceArn: !GetAtt InfineonSupplierProviderBucket.Arn
+
+  ESP32S3SupplierProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ESP32S3SupplierProviderFunction.Arn
+      Action: 'lambda:InvokeFunction'
+      Principal: 's3.amazonaws.com'
+      SourceAccount: !Ref 'AWS::AccountId'
+      SourceArn: !GetAtt ESP32S3SupplierProviderBucket.Arn
 
   ProductProviderInvokePermission:
     Type: AWS::Lambda::Permission
@@ -350,7 +412,7 @@ Resources:
 Outputs:
   InfineonIngestPoint:
     Description: >-
-        The Amazon S3 bucket for uploading Infineon manifests (XML)
+      The Amazon S3 bucket for uploading Infineon manifests (XML)
     Value: !Ref InfineonSupplierProviderBucket
   MicrochipIngestPoint:
     Description: >-

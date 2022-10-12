@@ -1,3 +1,5 @@
 tarz
 packaged.yaml
 .aws-sam
+/thingpress.iml
+/.idea/
