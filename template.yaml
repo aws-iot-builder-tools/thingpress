@@ -250,30 +250,29 @@ Resources:
                 Rules:
                   - Name: Suffix
                     Value: .xml
-
-    ESP32S3SupplierProviderFunction:
-      Type: AWS::Serverless::Function
-      Properties:
-        CodeUri: lambda-supplier-providers/ESP32-S3
-        Handler: main.lambda_handler
-        Runtime: python3.8
-        Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
-        Timeout: 900
-        MemorySize: 2048
-        Environment:
-          Variables:
-            QUEUE_TARGET: !Ref ProductProviderQueue
-        Events:
-          S3Event:
-            Type: S3
-            Properties:
-              Bucket: !Ref  ESP32S3SupplierProviderBucket
-              Events: s3:ObjectCreated:*
-              Filter:
-                S3Key:
-                  Rules:
-                    - Name: Suffix
-                      Value: .csv
+  ESP32S3SupplierProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: lambda-supplier-providers/ESP32-S3
+      Handler: main.lambda_handler
+      Runtime: python3.8
+      Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
+      Timeout: 900
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ProductProviderQueue
+      Events:
+        S3Event:
+          Type: S3
+          Properties:
+            Bucket: !Ref  ESP32S3SupplierProviderBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .csv
 
   MicrochipSupplierProviderFunctionRole:
     Type: AWS::IAM::Role
