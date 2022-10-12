@@ -153,7 +153,8 @@ You perform invocation based on the Vendor Provider
 mechanism. Currently, the following providers are supported:
 
 - Microchip Technology, Inc.
-- Infineon
+- Infineon 
+- ESP32-S3
 
 **NOTE** There is a possibility that your account may be throttled for
 the ```RegisterCertificateWithoutCA``` API call.  If this occurs,
@@ -191,6 +192,17 @@ page for more information.
 7. Upload (or drag and drop) the certificate manifest xml file to the S3
    bucket.  On this event, the Thingpress tool begins processing the manifest
 8. The certificates and objects will be created and configured in AWS IoT Core.
+
+## ESP32-S3 Provider Invocation
+**NEED TO CHECK THIS**
+1. Obtain the Manifest file and verification certificate from Espressif Systems.
+2. Login to the AWS Console.
+3. Ensure you are in the target region where your application operates.
+4. Navigate to Amazon S3 via the Services menu.
+5. Identify the bucket for ESP32-S3. It will be your deployment Stack Name suffixed with "-esp32s3".
+6. Upload (or drag and drop) the certificate manifest csv file to the S3.
+   bucket.  On this event, the Thingpress tool begins processing the manifest.
+7. The certificates and objects will be created and configured in AWS IoT Core.
 
 # Customization / Extension
 ## Defining the Product Provider
