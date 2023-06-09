@@ -28,21 +28,25 @@ Resources:
     Properties:
       QueueName: !Sub "${AWS::StackName}-Clean-Staging"
       VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
   IoTPolicyQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${AWS::StackName}-Clean-IoTPolicy"
       VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
   IoTThingQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${AWS::StackName}-Clean-IoTThing"
       VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
   IoTCertificateQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub "${AWS::StackName}-Clean-IoTCertificate"
       VisibilityTimeout: 300
+      SqsManagedSseEnabled: true
   InvokerFunction:
     Type: AWS::Serverless::Function
     Properties:
