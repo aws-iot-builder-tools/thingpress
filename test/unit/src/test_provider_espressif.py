@@ -22,11 +22,13 @@ class TestProviderEspressif(TestCase):
     
     def setUp(self):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
+        self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
         s3_client = client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
         with open('./test/artifacts/manifest-espressif.csv', 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv", Body=data)
+            self.test_s3_object_content = s3_client.get_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv")['Body']
         mocked_s3_resource = resource("s3")
         mocked_s3_resource = { "resource" : resource('s3'),
                                "bucket_name" : self.test_s3_bucket_name }
@@ -50,12 +52,20 @@ class TestProviderEspressif(TestCase):
         assert str(e.value) == "An error occurred (NoSuchBucket) when calling the HeadObject operation: The specified bucket does not exist"
 
     def test_pos_s3_filebuf_bytes(self):
-        s3_filebuf_bytes("unit_test_s3_bucket", "manifest.csv")
+        # The bytes should equal to the object in the bucket
+        v = s3_filebuf_bytes("unit_test_s3_bucket", "manifest.csv")
+        assert v == self.test_s3_object_content.read()
 
     def test_pos_invoke_export(self):
         invoke_export("unit_test_s3_bucket", "manifest.csv", "provider")
-        # The number of items in the queue should be 1
-        
+        # The number of items in the queue should be 7 since there are
+        # seven certificates in the test file
+        sqs_client = client("sqs", "us-east-1")
+        sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)
+        sqs_queue_url = sqs_queue_url_r['QueueUrl']
+        p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url, AttributeNames=['ApproximateNumberOfMessages'])
+        assert p['Attributes']['ApproximateNumberOfMessages'] == '7'
+
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")
         s3_bucket = s3_resource.Bucket( self.test_s3_bucket_name )

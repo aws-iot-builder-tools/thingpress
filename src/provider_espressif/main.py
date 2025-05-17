@@ -37,7 +37,6 @@ def s3_object_stream(bucket_name: str, object_name: str):
 # Given a bucket name and object name, return bytes representing
 # the object content.
 def s3_filebuf_bytes(bucket_name: str, object_name: str):
-    file_stream = io.BytesIO()
     object_stream = s3_object_stream(bucket_name=bucket_name,
                                      object_name=object_name)
     return object_stream.getvalue()
@@ -62,7 +61,7 @@ def invoke_export(bucket_name: str, object_name: str, queueUrl: str):
         certificate_data['thing'] = thing_name
         sqs_client.send_message( QueueUrl=queueUrl,
                              MessageBody=json.dumps(certificate_data) )
-        
+
 def lambda_handler(event, context):
     queueUrl = os.environ['QUEUE_TARGET']
     bucket_name = event['Records'][0]['s3']['bucket']['name']

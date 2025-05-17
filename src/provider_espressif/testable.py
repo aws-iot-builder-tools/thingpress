@@ -14,7 +14,7 @@ class LambdaSQSClass:
     """
     def __init__(self, lambda_sqs_resource):  
         """
-        Initialize an S3 Resource
+        Initialize an SQS Resource
         """
         self.resource = lambda_sqs_resource["resource"]
         self.queue_name = lambda_sqs_resource["queue_name"]
