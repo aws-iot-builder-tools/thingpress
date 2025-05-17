@@ -60,7 +60,7 @@ Parameters:
       Microchip. This must not have a .json filename suffix.
 
   ConcurrentExecutions:
-    Default: 10
+    Default: '10'
     Type: Number
     Description: >-
       By default the concurrent executions for the bulk importer is 10
@@ -99,9 +99,9 @@ Resources:
   BulkImporterFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: lambda-bulk-importer/
+      CodeUri: src/bulk_importer/
       Handler: main.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.13
       Role: !GetAtt BulkImporterFunctionRole.Arn
       ReservedConcurrentExecutions: !Ref ConcurrentExecutions
       Timeout: 300
@@ -147,9 +147,9 @@ Resources:
   ProductProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: lambda-product-providers/
+      CodeUri: src/product_provider/
       Handler: main.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.13
       Role: !GetAtt ProductProviderFunctionRole.Arn
       Timeout: 300
       Environment:
@@ -206,9 +206,9 @@ Resources:
   MicrochipSupplierProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: lambda-supplier-providers/Microchip
+      CodeUri: src/provider_microchip/
       Handler: main.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.13
       Role: !GetAtt MicrochipSupplierProviderFunctionRole.Arn
       Timeout: 900
       MemorySize: 2048
@@ -230,9 +230,9 @@ Resources:
   InfineonSupplierProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: lambda-supplier-providers/Infineon
+      CodeUri: src/provider_infineon/
       Handler: main.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.13
       Role: !GetAtt InfineonSupplierProviderFunctionRole.Arn
       Timeout: 900
       MemorySize: 2048
@@ -254,9 +254,9 @@ Resources:
   ESP32S3SupplierProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: lambda-supplier-providers/ESP32-S3
+      CodeUri: src/provider_espressif/
       Handler: main.lambda_handler
-      Runtime: python3.8
+      Runtime: python3.13
       Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
       Timeout: 900
       MemorySize: 2048

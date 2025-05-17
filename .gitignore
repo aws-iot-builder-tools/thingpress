@@ -3,3 +3,5 @@ packaged.yaml
 .aws-sam
 /thingpress.iml
 /.idea/
+.coverage
+**/__pycache__

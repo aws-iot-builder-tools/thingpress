@@ -18,18 +18,39 @@
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 import botocore
-import boto3
+from boto3 import resource as boto3resource, client as boto3client
 import base64
 import json
 import binascii
 import os
+import logging
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 
-iot_client = boto3.client('iot')
+from aws_lambda_powertools.utilities.data_classes import S3Event
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.validation import validator
+from schemas import INPUT_SCHEMA, OUTPUT_SCHEMA
+
+_LAMBDA_S3_RESOURCE = { "resource" : boto3resource('s3'),
+                        "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
+_LAMBDA_SQS_RESOURCE = { "resource" : boto3resource('sqs'),
+                         "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
+_LAMBDA_IOT_RESOURCE = { "resource" : boto3resource('iot'),
+                         "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
+
+logger = logging.getLogger()
+logger.setLevel("INFO")
+
+iot_client = boto3client('iot')
+
+error_messages = {
+    100: "d",
+}
+
 
 verbose = True
 config = None
@@ -136,9 +157,9 @@ def process_thing(thingName, certificateId, thingTypeName):
         return None
 
 def requeue():
-    iot_client = boto3.client('sqs')
+    sqs_client = boto3.client('sqs')
     queueUrl = os.environ.get('QUEUE_TARGET')
-    client.send_message( QueueUrl=queueUrl,
+    sqs_client.send_message( QueueUrl=queueUrl,
                          MessageBody=json.dumps(config))
 
 def process_certificate(payload):
@@ -169,10 +190,10 @@ def process_certificate(payload):
         
         return response.get("certificateId")
     except botocore.exceptions.ClientError as e:
-        if error.response['Error']['Code'] == 'ThrottlingException':
+        if e.response['Error']['Code'] == 'ThrottlingException':
             print("ERROR: ThrottlingException. Requeue for processing.")
             requeue()
-        if error.response['Error']['Code'] == 'UnauthorizedException':
+        if e.response['Error']['Code'] == 'UnauthorizedException':
             print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
         return None
     except BaseException as e:
@@ -201,7 +222,7 @@ def get_name_from_certificate(certificateId):
     cn = certificateObj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     # spaces are evil
     cn = "".join(cn.split())
-    print("Common name to be Thing Name: [" + cn + "]")
+    logger.info("Certificate common name [" + cn + "] to be IoT Thing name" )
     return cn
 
 def process_sqs():
@@ -224,12 +245,23 @@ def process_sqs():
 
 def lambda_handler(event, context):
     global config
-    
     if event.get('Records') is None:
         print("ERROR: Configuration incorrect: no event record on invoke")
-        return
+        return {
+            "statusCode": 400,
+            "body": json.dumps({
+                "message": "No SQS event records available for processing."
+            })
+        }
     
     for record in event['Records']:
         if record.get('eventSource') == 'aws:sqs':
             config = json.loads(record["body"])
             process_sqs()
+
+    return {
+        "statusCode": 204,
+        "body": json.dumps({
+            "message": "Processing succeeded."
+        })
+    }

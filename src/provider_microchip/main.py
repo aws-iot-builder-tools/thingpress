@@ -17,9 +17,7 @@
 # IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
 # CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-import jmespath
-import json
-import uuid
+from lsplib import s3_filebuf_bytes
 import boto3
 import os
 import io
