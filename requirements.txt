@@ -4,6 +4,7 @@ boto3==1.38.15
 coverage==7.8.0
 coverage-badge==1.1.2
 cryptography==44.0.3
+fastjsonschema==2.21.1
 moto==5.1.4
 pylint==3.3.7
 pytest==8.3.5
