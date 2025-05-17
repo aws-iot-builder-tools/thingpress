@@ -12,6 +12,7 @@ jobs:
             - name: 'Install dependencies'
               run: |
                 pip install -r ./requirements.txt
+                pip install fastjsonschema
             - name: 'Run coverage'
               run: |
                   coverage run --source=src/bulk_importer,src/product_provider,src/provider_espressif,src/provider_infineon,src/provider_microchip -m pytest
