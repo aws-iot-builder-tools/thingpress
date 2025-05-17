@@ -12,7 +12,7 @@ from aws_lambda_powertools.utilities.validation import validate
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 sys.path.append('./src/provider_espressif')
-os.environ['AWS_REGION'] = "us-east-1"
+os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 from src.provider_espressif.testable import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
 from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
 from src.provider_espressif.main import s3_object_stream
