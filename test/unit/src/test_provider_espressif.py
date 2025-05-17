@@ -2,9 +2,9 @@ import sys
 import os
 import io
 import pytest
-import warnings
 
 import botocore
+
 from boto3 import resource, client
 from moto import mock_aws, settings
 from aws_lambda_powertools.utilities.validation import validate
@@ -12,7 +12,8 @@ from aws_lambda_powertools.utilities.validation import validate
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 sys.path.append('./src/provider_espressif')
-from src.provider_espressif.main import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
+os.environ['AWS_REGION'] = "us-east-1"
+from src.provider_espressif.testable import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
 from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
 from src.provider_espressif.main import s3_object_stream
 from src.provider_espressif.main import INPUT_SCHEMA                     # pylint: disable=wrong-import-position

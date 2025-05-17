@@ -1,18 +1,12 @@
-import warnings
-with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=DeprecationWarning)
-    import botocore
-    from boto3 import resource, client, s3
-    import botocore
-    import boto3
-    from boto3 import resource, client
-    from moto import mock_aws, settings
-    from aws_lambda_powertools.utilities.validation import validate
-
 import os
 import io
 import json
 import csv
+import botocore
+from boto3 import resource, client, s3
+import botocore
+from moto import mock_aws, settings
+from aws_lambda_powertools.utilities.validation import validate
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -20,8 +14,6 @@ import base64
 
 from schemas import INPUT_SCHEMA, OUTPUT_SCHEMA
 from testable import LambdaSQSClass, LambdaS3Class
-
-
 
 # Given a bucket and object, verify its existence and return the resource.
 def s3_object_stream(bucket_name: str, object_name: str):
