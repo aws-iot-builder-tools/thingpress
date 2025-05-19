@@ -1,5 +1,7 @@
 # ThingPress: AWS IoT Certificate Multi-Account Registration Bulk Import
 
+![Coverage](coverage.svg)
+
 AWS IoT Core supports the capability to import AWS IoT certificates that don't have a registered Certificate Authority. Customers purchase pre-provisioned hardware security components such as secure elements, enclaves, or TPMs that directly ship to contract manufacturing sites.
 
 In parallel, customers receive a list from hardware security suppliers containing copies of the certificates that were provisioned to the hardware security components. This list can consist of up to millions of certificates, each representing the physical component. Importing so many certificates manually is time-consuming and costly. This project simplifies the certificate import and thing provisioning process in AWS using automation.
