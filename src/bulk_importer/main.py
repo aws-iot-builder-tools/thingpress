@@ -179,9 +179,10 @@ def process_certificate(payload):
             print("Certificate [" + fingerprint + "] not found in IoT Core. Importing.")
 
     try:
+        print("Importing certificate.")
         response = iot_client.register_certificate_without_ca(certificatePem=certificateText.decode('ascii'),
                                                               status='ACTIVE')
-        
+        print("Certificate imported.")
         return response.get("certificateId")
     except botocore.exceptions.ClientError as e:
         if e.response['Error']['Code'] == 'ThrottlingException':
@@ -191,7 +192,7 @@ def process_certificate(payload):
             print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
         return None
     except BaseException as e:
-        print("exception occurred: {}".format(e))
+        print("Base exception occurred: {}".format(e))
 
     return None
 
