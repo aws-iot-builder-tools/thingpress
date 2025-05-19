@@ -33,14 +33,6 @@ from cryptography.hazmat.primitives.asymmetric import ec
 from aws_lambda_powertools.utilities.data_classes import S3Event
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.validation import validator
-from schemas import INPUT_SCHEMA, OUTPUT_SCHEMA
-
-_LAMBDA_S3_RESOURCE = { "resource" : boto3resource('s3'),
-                        "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
-_LAMBDA_SQS_RESOURCE = { "resource" : boto3resource('sqs'),
-                         "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
-_LAMBDA_IOT_RESOURCE = { "resource" : boto3resource('iot'),
-                         "bucket_name" : os.environ.get("S3_BUCKET_NAME","NONE") }
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -51,10 +43,10 @@ error_messages = {
     100: "d",
 }
 
-
 verbose = True
 config = None
 
+# Verify that the certificate is in IoT Core
 def get_certificate(certificateId):
     try:
         response = iot_client.describe_certificate(certificateId=certificateId)
@@ -63,6 +55,7 @@ def get_certificate(certificateId):
         print("Certificate [" + certificateId + "] not found in IoT Core.")
         return None
 
+# Retrieve the certificate Arn. 
 def get_certificate_arn(certificateId):
     try:
         response = iot_client.describe_certificate(certificateId=certificateId)
@@ -109,11 +102,11 @@ def get_thing_group(thingGroupName):
 
 def get_thing_type(typeName):
     try:
-        response = iot_client.describeThingType(thingTypeName=thingTypeName)
+        response = iot_client.describeThingType(thingTypeName=typeName)
         return response.get('thingTypeArn')
     except botocore.exceptions.ClientError as error:
         if error.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("ERROR: You need to configure the Thing Type [" + thingTypeName + "] in your target region first.")
+            print("ERROR: You need to configure the Thing Type [" + typeName + "] in your target region first.")
         if error.response['Error']['Code'] == 'UnauthorizedException':
             print("ERROR: There is a deployment problem with the attached Role. Unable to reach IoT Core object.")
         return None
@@ -157,13 +150,16 @@ def process_thing(thingName, certificateId, thingTypeName):
         return None
 
 def requeue():
-    sqs_client = boto3.client('sqs')
+    sqs_client = boto3client('sqs')
     queueUrl = os.environ.get('QUEUE_TARGET')
     sqs_client.send_message( QueueUrl=queueUrl,
-                         MessageBody=json.dumps(config))
+                             MessageBody=json.dumps(config))
+
+def get_certificate_fingerprint(certificate: x509.Certificate):
+    return binascii.hexlify(certificate.fingerprint(hashes.SHA256())).decode('UTF-8')
 
 def process_certificate(payload):
-    client = boto3.client('iot')
+    client = boto3client('iot')
 
     certificateText = base64.b64decode(eval(payload))
 
@@ -171,8 +167,7 @@ def process_certificate(payload):
     certificateObj = x509.load_pem_x509_certificate(data=certificateText,
                                                     backend=default_backend())
 
-    fingerprint = binascii.hexlify(certificateObj.fingerprint(hashes.SHA256())).decode('UTF-8')
-    print("Fingerprint: " + fingerprint)
+    fingerprint = get_certificate_fingerprint(certificateObj)
 
     if (get_certificate(fingerprint)):
         try:
@@ -183,7 +178,6 @@ def process_certificate(payload):
         except:
             print("Certificate [" + fingerprint + "] not found in IoT Core. Importing.")
 
-        
     try:
         response = iot_client.register_certificate_without_ca(certificatePem=certificateText.decode('ascii'),
                                                               status='ACTIVE')

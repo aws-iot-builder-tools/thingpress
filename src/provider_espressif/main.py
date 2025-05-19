@@ -12,9 +12,6 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 import base64
 
-from schemas import INPUT_SCHEMA, OUTPUT_SCHEMA
-from testable import LambdaSQSClass, LambdaS3Class
-
 # Given a bucket and object, verify its existence and return the resource.
 def s3_object_stream(bucket_name: str, object_name: str):
     s3 = resource('s3')

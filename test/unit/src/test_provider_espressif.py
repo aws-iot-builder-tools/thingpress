@@ -16,7 +16,7 @@ os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 from src.provider_espressif.testable import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
 from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
 from src.provider_espressif.main import s3_object_stream
-from src.provider_espressif.main import INPUT_SCHEMA                     # pylint: disable=wrong-import-position
+from src.provider_espressif.schemas import INPUT_SCHEMA                     # pylint: disable=wrong-import-position
 
 @mock_aws
 class TestProviderEspressif(TestCase):
