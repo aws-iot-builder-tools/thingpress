@@ -22,7 +22,13 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 import base64
 
-@mock_aws(config={'iot': {'use_valid_cert': True}})
+@mock_aws(config={
+    "core": {
+        "mock_credentials": True,
+        "reset_boto3_session": False,
+        "service_whitelist": None,
+    },
+    'iot': {'use_valid_cert': True}})
 class TestBulkImporter(TestCase):
     def setUp(self):
         self.test_sqs_queue_name = "provider"
