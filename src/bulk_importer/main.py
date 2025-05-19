@@ -37,8 +37,6 @@ from aws_lambda_powertools.utilities.validation import validator
 logger = logging.getLogger()
 logger.setLevel("INFO")
 
-iot_client = boto3client('iot')
-
 error_messages = {
     100: "d",
 }
@@ -48,6 +46,7 @@ config = None
 
 # Verify that the certificate is in IoT Core
 def get_certificate(certificateId):
+    iot_client = boto3client('iot')
     try:
         response = iot_client.describe_certificate(certificateId=certificateId)
         return response["certificateDescription"].get("certificateId")
@@ -57,6 +56,7 @@ def get_certificate(certificateId):
 
 # Retrieve the certificate Arn. 
 def get_certificate_arn(certificateId):
+    iot_client = boto3client('iot')
     try:
         response = iot_client.describe_certificate(certificateId=certificateId)
         return response["certificateDescription"].get("certificateArn")
@@ -65,6 +65,7 @@ def get_certificate_arn(certificateId):
         return None
 
 def get_thing(thingName):
+    iot_client = boto3client('iot')
     try:
         response = iot_client.describe_thing(thingName=thingName)
         return response.get("thingArn")
@@ -73,6 +74,7 @@ def get_thing(thingName):
         return None
 
 def get_policy(policyName):
+    iot_client = boto3client('iot')
     try:
         response = iot_client.get_policy(policyName=policyName)
         return response.get('policyArn')
@@ -87,6 +89,8 @@ def get_policy(policyName):
         return None
 
 def get_thing_group(thingGroupName):
+    iot_client = boto3client('iot')
+
     try:
         response = iot_client.describe_thing_group(thingGroupName=thingGroupName)
         return response.get('thingGroupArn')
@@ -101,6 +105,7 @@ def get_thing_group(thingGroupName):
         return None
 
 def get_thing_type(typeName):
+    iot_client = boto3client('iot')
     try:
         response = iot_client.describeThingType(thingTypeName=typeName)
         return response.get('thingTypeArn')
@@ -115,10 +120,12 @@ def get_thing_type(typeName):
         return None
 
 def process_policy(policyName, certificateId):
+    iot_client = boto3client('iot')
     iot_client.attach_policy(policyName=policyName,
                              target=get_certificate_arn(certificateId))
 
 def process_thing(thingName, certificateId, thingTypeName):
+    iot_client = boto3client('iot')
     certificateArn = get_certificate_arn(certificateId)
     try:
         response = iot_client.describe_thing(thingName=thingName)
@@ -159,7 +166,7 @@ def get_certificate_fingerprint(certificate: x509.Certificate):
     return binascii.hexlify(certificate.fingerprint(hashes.SHA256())).decode('UTF-8')
 
 def process_certificate(payload):
-    client = boto3client('iot')
+    iot_client = boto3client('iot')
 
     certificateText = base64.b64decode(eval(payload))
 
@@ -197,6 +204,7 @@ def process_certificate(payload):
     return None
 
 def process_thing_group(thingGroupName, thingName):
+    iot_client = boto3client('iot')
     try:
         thingGroupArn = get_thing_group(thingGroupName)
         thingArn = get_thing(thingName)
@@ -211,6 +219,7 @@ def process_thing_group(thingGroupName, thingName):
         return None
 
 def get_name_from_certificate(certificateId):
+    iot_client = boto3client('iot')
     response = iot_client.describe_certificate(certificateId=certificateId)
     certificateText = response["certificateDescription"].get("certificatePem")
     certificateObj = x509.load_pem_x509_certificate(data=certificateText.encode('ascii'), backend=default_backend())
