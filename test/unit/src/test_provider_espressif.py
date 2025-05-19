@@ -18,7 +18,13 @@ from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke
 from src.provider_espressif.main import s3_object_stream
 from src.provider_espressif.schemas import INPUT_SCHEMA                     # pylint: disable=wrong-import-position
 
-@mock_aws
+@mock_aws(config={
+    "core": {
+        "mock_credentials": True,
+        "reset_boto3_session": False,
+        "service_whitelist": None,
+    },
+    'iot': {'use_valid_cert': True}})
 class TestProviderEspressif(TestCase):
     
     def setUp(self):
