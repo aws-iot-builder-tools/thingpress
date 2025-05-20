@@ -4,13 +4,12 @@ import json
 import csv
 import botocore
 from boto3 import resource, client, s3
-import botocore
 from moto import mock_aws, settings
 from aws_lambda_powertools.utilities.validation import validate
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-import base64
+from base64 import b64encode
 
 # Given a bucket and object, verify its existence and return the resource.
 def s3_object_stream(bucket_name: str, object_name: str):
@@ -36,7 +35,7 @@ def format_certificate(certString):
     pem_obj = x509.load_pem_x509_certificate(encodedCert,
                                              backend=default_backend())
     block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-    return {'certificate': str(base64.b64encode(block.encode('ascii')))}
+    return {'certificate': str(b64encode(block.encode('ascii')))}
 
 def invoke_export(bucket_name: str, object_name: str, queueUrl: str):
     sqs_client = client("sqs")

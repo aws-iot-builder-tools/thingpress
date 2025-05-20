@@ -1,7 +1,8 @@
 import os
 import io
 import json
-import boto3
+from botocore import exceptions as botoexceptions
+from boto3 import resource as boto3resource, client as boto3client
 import binascii
 from xml.etree import ElementTree
 from cryptography import x509
@@ -9,26 +10,36 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from base64 import b64encode
 
-def s3_filebuf_bytes(bucket, obj):
-    s3 = boto3.resource('s3')
-    bucket = s3.Bucket(bucket)
-    obj = bucket.Object(obj)
-    file_stream = io.BytesIO()
-    obj.download_fileobj(file_stream)
-    return file_stream.getvalue()
+# Given a bucket and object, verify its existence and return the resource.
+def s3_object_stream(bucket_name: str, object_name: str):
+    s3 = boto3resource('s3')
+    res = s3.Object(bucket_name=bucket_name, key=object_name)
+    try: 
+        fs = io.BytesIO()
+        res.download_fileobj(fs)
+        return fs
+    except botoexceptions.ClientError as ce:
+        raise ce
 
-def format_certificate(der):
-    der_raw = ''.join(der.split())
-    der_bin = binascii.a2b_hex(der_raw)
-    der_enc = der_raw.encode('ascii')
-    der_obj = x509.load_der_x509_certificate( der_bin,
-                                              backend=default_backend())
-    block = der_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+# Given a bucket name and object name, return bytes representing
+# the object content.
+def s3_filebuf_bytes(bucket_name: str, object_name: str):
+    object_stream = s3_object_stream(bucket_name=bucket_name,
+                                     object_name=object_name)
+    return object_stream.getvalue()
+
+def format_certificate(certString):
+    encodedCert = certString.encode('ascii')
+
+    pem_obj = x509.load_pem_x509_certificate(encodedCert,
+                                             backend=default_backend())
+    block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
     return {'certificate': str(b64encode(block.encode('ascii')))}
+
     
 
 def invoke_export(manifest, queueUrl):
-    client = boto3.client("sqs")
+    client = boto3client("sqs")
     
     root = ElementTree.fromstring(manifest)
 
