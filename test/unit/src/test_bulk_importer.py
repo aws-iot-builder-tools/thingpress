@@ -45,7 +45,8 @@ class TestBulkImporter(TestCase):
                                                      backend=default_backend())
             block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
             cert = str(base64.b64encode(block.encode('ascii')))
-            r = process_certificate(cert)
+            c = {'certificate': cert}
+            r = process_certificate(c, requeue)
             assert (r == get_certificate_fingerprint(pem_obj))
 
     def tearDown(self):

@@ -1,3 +1,4 @@
+"""Resouce class file for testing"""
 from os import environ
 import warnings
 with warnings.catch_warnings():
@@ -10,7 +11,7 @@ class LambdaSQSClass:
     """
     AWS SQS Resource Class
     """
-    def __init__(self, lambda_sqs_resource):  
+    def __init__(self, lambda_sqs_resource):
         """
         Initialize an SQS Resource
         """

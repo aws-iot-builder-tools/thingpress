@@ -1,3 +1,5 @@
+"""The schema for invoking this lambda function"""
+
 INPUT_SCHEMA = {
     "$schema": "http://json-schema.org/draft-07/schema",
     "$id": "http://example.com/example.json",
@@ -39,7 +41,8 @@ OUTPUT_SCHEMA = {
     "examples": [{"statusCode": 200, "body": "OK"}],
     "required": ["statusCode", "body"],
     "properties": {
-        "statusCode": {"$id": "#/properties/statusCode", "type": "integer", "title": "The statusCode"},
+        "statusCode": {"$id": "#/properties/statusCode", "type": "integer",
+                       "title": "The statusCode"},
         "body": {"$id": "#/properties/body", "type": "string", "title": "The response"}
     },
 }
