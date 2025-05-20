@@ -1,41 +1,30 @@
-# Copyright (C) 2020 Amazon.com, Inc. All Rights Reserved.
-#
-# Permission is hereby granted, free of charge, to any person obtaining a copy of
-# this software and associated documentation files (the "Software"), to deal in
-# the Software without restriction, including without limitation the rights to
-# use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
-# the Software, and to permit persons to whom the Software is furnished to do so,
-# subject to the following conditions:
-#
-# The above copyright notice and this permission notice shall be included in all
-# copies or substantial portions of the Software.
-#
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
-# FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-# COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
-# IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
-# CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
 
-import jmespath
+Library to handle Microchip manifests
+"""
+from base64 import b64decode, b64encode
 import json
-import uuid
+#import jmespath
+#import uuid
 import boto3
-from base64 import b64decode, b64encode, b16encode
-from argparse import ArgumentParser
-import jose.jws
+#from base64 import b64decode, b64encode, b16encode
+#from argparse import ArgumentParser
+#from jose import jws
+import jose
 from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import ec
+#from cryptography.hazmat.primitives.asymmetric import ec
 
 verification_algorithms = [
     'RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'
 ]
 
 class ManifestIterator:
-
+    """Helper for going through list of certificates"""
     def __init__(self, manifest):
         self.manifest = manifest
         self.index = len(manifest)
@@ -50,7 +39,7 @@ class ManifestIterator:
         return self.manifest[self.index]
 
 class ManifestItem:
-
+    """Represents a single 'certificate' in the manifest"""
     def __init__(self, signed_se, verification_cert_raw):
         verification_cert = x509.load_pem_x509_certificate(
             data=verification_cert_raw,
@@ -115,7 +104,6 @@ class ManifestItem:
         except KeyError:
             public_keys = []
         for jwk in public_keys:
-            cert_chain = ''
             for cert_b64 in jwk.get('x5c', []):
                 cert = x509.load_der_x509_certificate(
                     data=b64decode(cert_b64),
@@ -125,17 +113,16 @@ class ManifestItem:
                     encoding=serialization.Encoding.PEM
                 ).decode('ascii')
 
-def invoke_export(manifestFile, verifyCert, queueUrl):
+def invoke_export(manifest_file, verify_cert, queue_url):
     client = boto3.client("sqs")
 
-    iter = ManifestIterator( json.loads(manifestFile) )
+    manifest_iterator = ManifestIterator( json.loads(manifest_file) )
 
-    print("number of certificates: {}\n".format(iter.index))
+    print(f"number of certificates: {manifest_iterator.index}\n" )
 
-    while iter.index != 0:
-        manifestItem = ManifestItem( next( iter ), verifyCert )
-        block = manifestItem.get_certificate_chain()
+    while manifest_iterator.index != 0:
+        manifest_item = ManifestItem( next( manifest_iterator ), verify_cert )
+        block = manifest_item.get_certificate_chain()
         payload = {'certificate': str(b64encode(block.encode('ascii')))}
-        client.send_message( QueueUrl=queueUrl,
+        client.send_message( QueueUrl=queue_url,
                              MessageBody=json.dumps(payload))
-
