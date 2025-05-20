@@ -1,6 +1,14 @@
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+Unit tests for bulk_importer
+"""
 import sys
 import os
-import io
+#import io
+from unittest import TestCase
+#from unittest.mock import MagicMock, patch
 import pytest
 
 import botocore
@@ -11,8 +19,6 @@ from moto.settings import iot_use_valid_cert
 
 from aws_lambda_powertools.utilities.validation import validate
 
-from unittest import TestCase
-from unittest.mock import MagicMock, patch
 sys.path.append('./src/bulk_importer')
 os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 from src.bulk_importer.testable import LambdaSQSClass   # pylint: disable=wrong-import-position

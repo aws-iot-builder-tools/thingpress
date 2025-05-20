@@ -31,11 +31,11 @@ logger.setLevel("INFO")
 
 #config = None
 
-def get_certificate(certificateId):
+def get_certificate(certificate_id):
     """Verify that the certificate is in IoT Core"""
     iot_client = boto3client('iot')
     try:
-        response = iot_client.describe_certificate(certificateId=certificateId)
+        response = iot_client.describe_certificate(certificateId=certificate_id)
         return response["certificateDescription"].get("certificateId")
     except ClientError as error:
         assert error.response['Error']['Code'] == 'ResourceNotFoundException'
@@ -144,7 +144,7 @@ def process_thing(thing_name, certificate_id, thing_type_name):
         print(error)
     return None
 
-def requeue():
+def requeue(config):
     """
     Requeues the message for processing in case of unrecoverable error such
     as throttling. The structure is:
@@ -199,21 +199,26 @@ def process_certificate(config, requeue_cb):
     return None
 
 def process_thing_group(thing_group_name, thing_name):
+    """Attaches the configured thing group to the iot thing"""
     iot_client = boto3client('iot')
     try:
         thing_group_arn = get_thing_group(thing_group_name)
         thing_arn = get_thing(thing_name)
-        
         iot_client.add_thing_to_thing_group(thingGroupName=thing_group_name,
                                             thingGroupArn=thing_group_arn,
                                             thingName=thing_name,
                                             thingArn=thing_arn,
                                             overrideDynamicGroups=False)
-    except Exception as e:
-        print(e)
-        return None
+    except ClientError as error:
+        print(error)
+
+    return None
 
 def get_name_from_certificate(certificate_id):
+    """Assume the certificate cn is the thing name.
+       TODO: Evaluate for deprecation, thing name identifier better
+             evaluated in the vendor specific provider.
+    """
     iot_client = boto3client('iot')
     response = iot_client.describe_certificate(certificateId=certificate_id)
     certificate_text = response["certificateDescription"].get("certificatePem")
@@ -221,13 +226,13 @@ def get_name_from_certificate(certificate_id):
                                                      backend=default_backend())
     cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
     cn.replace(" ", "")
-    # TODO: This must be really old because thing name is prescribed to the 
+    # TODO: This must be really old because thing name is prescribed to the
     #       sqs message from the beginning, this might be eliminated
     logger.info("Certificate common name [%s] to be IoT Thing name", cn)
     return cn
 
 def process_sqs(config):
-    certificate = config.get('certificate')
+    """Main processing function to procedurally run through processing steps."""
     policy_name = config.get('policy_name')
     thing_group_name = config.get('thing_group_name')
     thing_type_name = config.get('thing_type_name')
@@ -244,6 +249,7 @@ def process_sqs(config):
     process_thing_group(thing_group_name, thing_name)
 
 def lambda_handler(event, context):
+    """Lambda function main entry point"""
     if event.get('Records') is None:
         print("ERROR: Configuration incorrect: no event record on invoke")
         return {

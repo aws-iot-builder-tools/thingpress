@@ -1,22 +1,27 @@
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+Unit tests for provider_infineon
+"""
 import sys
 import os
 import io
+from unittest import TestCase
 import pytest
 
 import botocore
-
 from boto3 import resource, client
-from moto import mock_aws, settings
-from aws_lambda_powertools.utilities.validation import validate
+from moto import mock_aws
+#from moto import mock_aws, settings
+#from aws_lambda_powertools.utilities.validation import validate
 
-from unittest import TestCase
-from unittest.mock import MagicMock, patch
+#from unittest.mock import MagicMock, patch
 sys.path.append('./src/provider_infineon')
 os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
-from src.provider_infineon.testable import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
-from src.provider_infineon.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
-from src.provider_infineon.main import s3_object_stream
-from src.provider_infineon.schemas import INPUT_SCHEMA                     # pylint: disable=wrong-import-position
+from src.provider_infineon.testable import LambdaS3Class, LambdaSQSClass
+from src.provider_infineon.main import lambda_handler, s3_object_stream, s3_filebuf_bytes, invoke_export
+from src.provider_infineon.schemas import INPUT_SCHEMA
 
 @mock_aws(config={
     "core": {
