@@ -12,6 +12,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 
+
 from boto3 import resource, client
 from src.bulk_importer.testable import LambdaSQSClass
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
@@ -20,7 +21,6 @@ from src.bulk_importer.main import get_certificate_fingerprint, requeue, process
 #    from src.bulk_importer.main import process_policy, process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 
-os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 
 @mock_aws(config={
     "core": {

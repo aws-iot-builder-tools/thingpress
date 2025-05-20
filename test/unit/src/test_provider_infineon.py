@@ -17,11 +17,11 @@ from moto import mock_aws
 #from aws_lambda_powertools.utilities.validation import validate
 
 #from unittest.mock import MagicMock, patch
-sys.path.append('./src/provider_infineon')
-os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
+
 from src.provider_infineon.testable import LambdaS3Class, LambdaSQSClass
-from src.provider_infineon.main import lambda_handler, s3_object_stream, s3_filebuf_bytes, invoke_export
-from src.provider_infineon.schemas import INPUT_SCHEMA
+from src.provider_infineon.main import s3_object_stream, s3_filebuf_bytes
+#from src.provider_infineon.main import lambda_handler, invoke_export
+#from src.provider_infineon.schemas import INPUT_SCHEMA
 
 @mock_aws(config={
     "core": {
