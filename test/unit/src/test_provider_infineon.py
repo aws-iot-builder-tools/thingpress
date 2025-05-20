@@ -4,7 +4,6 @@
 
 Unit tests for provider_infineon
 """
-import sys
 import os
 import io
 from unittest import TestCase
@@ -31,7 +30,7 @@ from src.provider_infineon.main import s3_object_stream, s3_filebuf_bytes
     },
     'iot': {'use_valid_cert': True}})
 class TestProviderInfineon(TestCase):
-    
+    """Infineon test cases"""
     def setUp(self):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
