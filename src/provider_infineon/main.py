@@ -1,70 +1,82 @@
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+Lambda function to decompose Infineon based certificate manifest(s) and begin
+the import processing pipeline
+"""
 import os
 import io
 import json
+from xml.etree import ElementTree
+from base64 import b64encode
 from botocore import exceptions as botoexceptions
 from boto3 import resource as boto3resource, client as boto3client
-import binascii
-from xml.etree import ElementTree
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from base64 import b64encode
 
-# Given a bucket and object, verify its existence and return the resource.
 def s3_object_stream(bucket_name: str, object_name: str):
+    """Given a bucket and object, verify its existence and return the resource."""
     s3 = boto3resource('s3')
     res = s3.Object(bucket_name=bucket_name, key=object_name)
-    try: 
+    try:
         fs = io.BytesIO()
         res.download_fileobj(fs)
         return fs
     except botoexceptions.ClientError as ce:
         raise ce
 
-# Given a bucket name and object name, return bytes representing
-# the object content.
+
 def s3_filebuf_bytes(bucket_name: str, object_name: str):
+    """ Given a bucket name and object name, return bytes representing
+        the object content."""
     object_stream = s3_object_stream(bucket_name=bucket_name,
                                      object_name=object_name)
     return object_stream.getvalue()
 
-def format_certificate(certString):
-    encodedCert = certString.encode('ascii')
+def format_certificate(cert_string):
+    """Encode certificate so that it can safely travel via sqs"""
+    cert_encoded = cert_string.encode('ascii')
 
-    pem_obj = x509.load_pem_x509_certificate(encodedCert,
+    pem_obj = x509.load_pem_x509_certificate(cert_encoded,
                                              backend=default_backend())
     block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-    return {'certificate': str(b64encode(block.encode('ascii')))}
+    return str(b64encode(block.encode('ascii')))
 
-    
+def queue_certificate(identity, certificate, queue_url):
+    """Send the thing name and certificate to sqs queue"""
+    sqs_client = boto3client("sqs")
+    payload = {
+        'thing': identity,
+        'certificate': certificate
+    }
+    sqs_client.send_message( QueueUrl=queue_url,
+                             MessageBody=json.dumps(payload) )
 
-def invoke_export(manifest, queueUrl):
-    client = boto3client("sqs")
-    
+def invoke_export(manifest, queue_url):
+    """Function to Iterate through the certificate list and queue for processing"""
     root = ElementTree.fromstring(manifest)
 
     for group in root.findall('group'): # /binaryhex
         thing_name = ''
 
+        # TODO: Evaluate what happens when this fails
         for hex_element in group.findall('hex'):
             if hex_element.get('name') == 'TpmMAC':
                 thing_name = hex_element.get('value')
 
-        # There can be more than one certificate
         for hexdata_element in group.findall('binaryhex'):
             certificate_data = format_certificate(hexdata_element.text)
-            # Need to send each certificate separately
-            certificate_data['thing'] = thing_name
-            print(certificate_data)
-            client.send_message( QueueUrl=queueUrl,
-                                 MessageBody=json.dumps(certificate_data) )
-        
+            queue_certificate(thing_name, certificate_data, queue_url)
+
 def lambda_handler(event, context):
-    queueUrl = os.environ['QUEUE_TARGET']
+    """Lambda function main entry point"""
+    queue_url = os.environ['QUEUE_TARGET']
 
     bucket = event['Records'][0]['s3']['bucket']['name']
-    manifest = event['Records'][0]['s3']['object']['key'] 
+    manifest = event['Records'][0]['s3']['object']['key']
 
-    manifestContent = s3_filebuf_bytes(bucket, manifest)
+    manifest_content = s3_filebuf_bytes(bucket, manifest)
 
-    invoke_export(manifestContent, queueUrl)
+    invoke_export(manifest_content, queue_url)

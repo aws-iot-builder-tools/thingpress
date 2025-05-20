@@ -4,29 +4,23 @@
 
 Unit tests for bulk_importer
 """
-import sys
 import os
-#import io
+import base64
 from unittest import TestCase
-#from unittest.mock import MagicMock, patch
-import pytest
-
-import botocore
-
-from boto3 import resource, client
-from moto import mock_aws, settings
-from moto.settings import iot_use_valid_cert
-
-from aws_lambda_powertools.utilities.validation import validate
-
-sys.path.append('./src/bulk_importer')
-os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
-from src.bulk_importer.testable import LambdaSQSClass   # pylint: disable=wrong-import-position
-from src.bulk_importer.main import lambda_handler, get_certificate, get_certificate_fingerprint, get_certificate_arn, get_thing, get_policy, get_thing_group, get_thing_type, process_policy, process_thing, requeue, process_certificate, process_thing_group, get_name_from_certificate, process_sqs # pylint: disable=wrong-import-position
+from moto import mock_aws
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-import base64
+
+from boto3 import resource, client
+from src.bulk_importer.testable import LambdaSQSClass
+from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
+#    from src.bulk_importer.main import lambda_handler, get_certificate, get_thing, get_policy
+#    from src.bulk_importer.main import get_certificate_arn, get_thing_group, get_thing_type
+#    from src.bulk_importer.main import process_policy, process_thing
+#    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
+
+os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 
 @mock_aws(config={
     "core": {
@@ -36,6 +30,7 @@ import base64
     },
     'iot': {'use_valid_cert': True}})
 class TestBulkImporter(TestCase):
+    """Test cases for bulk importer lambda function"""
     def setUp(self):
         self.test_sqs_queue_name = "provider"
         sqs_client = client('sqs', region_name="us-east-1")
@@ -46,6 +41,7 @@ class TestBulkImporter(TestCase):
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
     def test_pos_process_certificate(self):
+        """Positive test case for processing certificate"""
         with open('./test/artifacts/single.pem', 'rb') as data:
             pem_obj = x509.load_pem_x509_certificate(data.read(),
                                                      backend=default_backend())
@@ -53,7 +49,7 @@ class TestBulkImporter(TestCase):
             cert = str(base64.b64encode(block.encode('ascii')))
             c = {'certificate': cert}
             r = process_certificate(c, requeue)
-            assert (r == get_certificate_fingerprint(pem_obj))
+            assert r == get_certificate_fingerprint(pem_obj)
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")

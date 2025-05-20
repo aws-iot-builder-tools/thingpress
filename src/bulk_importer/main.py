@@ -5,7 +5,7 @@
 Lambda function to import certificate, construct IoT Thing, and associate
 the Thing, Policy, Certificate, Thing Type, and Thing Group
 """
-
+import ast
 import base64
 import json
 import binascii
@@ -163,7 +163,7 @@ def process_certificate(config, requeue_cb):
        TODO: This should be simplified"""
     iot_client = boto3client('iot')
     payload = config['certificate']
-    certificate_text = base64.b64decode(eval(payload))
+    certificate_text = base64.b64decode(ast.literal_eval(payload))
 
     # See if the certificate has already been registered.  If so, bail.
     certificate_obj = x509.load_pem_x509_certificate(data=certificate_text,

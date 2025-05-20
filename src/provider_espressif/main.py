@@ -1,12 +1,17 @@
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+Lambda function to decompose Espressif based certificate manifest(s) and begin
+the import processing pipeline
+"""
 import os
 import io
 import json
 import csv
 from base64 import b64encode
 import botocore
-from boto3 import resource, client, s3
-from moto import mock_aws, settings
-from aws_lambda_powertools.utilities.validation import validate
+from boto3 import resource, client
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
@@ -62,6 +67,6 @@ def lambda_handler(event, context):
     """Lambda function main entry point"""
     queue_url = os.environ['QUEUE_TARGET']
     bucket_name = event['Records'][0]['s3']['bucket']['name']
-    manifest_name = event['Records'][0]['s3']['object']['key'] 
+    manifest_name = event['Records'][0]['s3']['object']['key']
 
     invoke_export(bucket_name, manifest_name, queue_url)
