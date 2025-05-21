@@ -24,15 +24,6 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 logger = logging.getLogger()
 logger.setLevel("INFO")
 
-#from cryptography.hazmat.primitives.asymmetric import ec
-
-#from aws_lambda_powertools.utilities.data_classes import S3Event
-#from aws_lambda_powertools.utilities.typing import LambdaContext
-#from aws_lambda_powertools.utilities.validation import validator
-
-
-#config = None
-
 def get_certificate(certificate_id):
     """Verify that the certificate is in IoT Core"""
     iot_client = boto3client('iot')

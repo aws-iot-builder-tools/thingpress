@@ -4,23 +4,19 @@
 
 Unit tests for bulk_importer
 """
-import os
 import base64
 from unittest import TestCase
 from moto import mock_aws
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-
-
 from boto3 import resource, client
-from src.bulk_importer.testable import LambdaSQSClass
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
 #    from src.bulk_importer.main import lambda_handler, get_certificate, get_thing, get_policy
 #    from src.bulk_importer.main import get_certificate_arn, get_thing_group, get_thing_type
 #    from src.bulk_importer.main import process_policy, process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
-
+from .model_bulk_importer import LambdaSQSClass
 
 @mock_aws(config={
     "core": {
