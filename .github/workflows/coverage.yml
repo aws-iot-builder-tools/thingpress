@@ -32,7 +32,6 @@ jobs:
                 git config --local user.name "github-actions[bot]"
                 git add coverage.svg
                 git commit -m "Updated coverage.svg"
-
             - name: 'Push changes'
               if: steps.verify-changed-files.outputs.files_changed == 'true'
               uses: ad-m/github-push-action@master
@@ -41,6 +40,7 @@ jobs:
                 branch: ${{ github.ref }}
     Linting:
         runs-on: ubuntu-latest
+        needs: Coverage
         steps:
           - uses: Silleellie/pylint-github-action@v2.1
             with:
