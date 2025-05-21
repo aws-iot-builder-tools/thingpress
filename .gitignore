@@ -6,3 +6,4 @@ packaged.yaml
 .coverage
 **/__pycache__
 htmlcov
+.vscode
