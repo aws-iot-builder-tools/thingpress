@@ -112,13 +112,19 @@ with the appropriate policy and/or IAM programmatic credential.
    git clone https://github.com/awslabs/thingpress thingpress
    ```
    
-2. Enter the script directory.
+2. Install python module dependencies.
+   
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Enter the script directory.
    
    ```bash
    cd thingpress/script
    ```
    
-3. Invoke the Lambda function build script.  It has been known that
+4. Invoke the Lambda function build script.  It has been known that
    VPN interrupts this process since it can interfere with Docker
    operation.
    
@@ -126,13 +132,13 @@ with the appropriate policy and/or IAM programmatic credential.
    ./build.sh
    ```
    
-4. Create a private S3 bucket that will be used for deployment
+5. Create a private S3 bucket that will be used for deployment
 
    ```bash
    aws s3api create-bucket --acl private –-bucket <my_unique_s3_bucket>
    ```
 
-5. Invoke the packaging process.  This will copy files to S3 and
+6. Invoke the packaging process.  This will copy files to S3 and
    create a ```packaged.yaml`` file that evolves the template.yaml file to use S3
    URLs for deployment.
 
@@ -140,7 +146,7 @@ with the appropriate policy and/or IAM programmatic credential.
    ./package.sh <my_unique_s3_bucket>
    ```
 
-6. Invoke the deploy script with a unique stack name and parameters
+7. Invoke the deploy script with a unique stack name and parameters
    for the IoT objects you wish to attach later. Note that during the
    deploy phase these objects are NOT cross-checked for validity.
    
