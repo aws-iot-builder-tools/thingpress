@@ -6,12 +6,15 @@ Unit tests for bulk_importer
 """
 import base64
 from unittest import TestCase
+from pytest import raises
 from moto import mock_aws
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
+from src.bulk_importer.main import get_certificate_arn
 #    from src.bulk_importer.main import lambda_handler, get_certificate, get_thing, get_policy
 #    from src.bulk_importer.main import get_certificate_arn, get_thing_group, get_thing_type
 #    from src.bulk_importer.main import process_policy, process_thing
@@ -46,6 +49,26 @@ class TestBulkImporter(TestCase):
             c = {'certificate': cert}
             r = process_certificate(c, requeue)
             assert r == get_certificate_fingerprint(pem_obj)
+
+    def test_pos_get_certificate_arn(self):
+        """Positive test for get_certificate_arn"""
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+        certificate_id = get_certificate_fingerprint(pem_obj)
+        block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+        cert = str(base64.b64encode(block.encode('ascii')))
+        r = process_certificate({'certificate':cert}, requeue)
+        r = get_certificate_arn(certificate_id)
+        assert r is not None
+
+    def test_neg_get_certificate_arn(self):
+        """Negative test for get_certificate_arn"""
+
+        with raises(ClientError) as exc:
+            get_certificate_arn("9"*64)
+        err = exc.value.response['Error']
+        assert err['Code'] == 'ResourceNotFoundException'
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")

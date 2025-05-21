@@ -41,8 +41,11 @@ def get_certificate_arn(certificate_id):
         response = iot_client.describe_certificate(certificateId=certificate_id)
         return response["certificateDescription"].get("certificateArn")
     except ClientError as error:
-        assert error.response['Error']['Code'] == 'ResourceNotFoundException'
-        return None
+        error_code = error.response['Error']['Code']
+        error_message = error.response['Error']['Message']
+        if error_code == 'ResourceNotFoundException':
+            logger.error("get_certificate_arn failed: {error_message}")
+            raise error
 
 def get_thing(thing_name):
     """Retrieve the Thing ARN"""

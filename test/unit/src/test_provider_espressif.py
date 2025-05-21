@@ -81,7 +81,8 @@ class TestProviderEspressif(TestCase):
         sqs_client = client("sqs", "us-east-1")
         sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
-        p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url, AttributeNames=['ApproximateNumberOfMessages'])
+        p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url,
+                                            AttributeNames=['ApproximateNumberOfMessages'])
         assert p['Attributes']['ApproximateNumberOfMessages'] == '7'
 
     def test_pos_lambda_handler_1(self):
