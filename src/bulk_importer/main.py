@@ -18,6 +18,8 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -58,7 +60,8 @@ def get_thing(thing_name):
         response = iot_client.describe_thing(thingName=thing_name)
         return response.get("thingArn")
     except ClientError as error:
-        assert error.response['Error']['Code'] == 'ResourceNotFoundException'
+        error_code = error.response['Error']['Code']
+        assert error_code == 'ResourceNotFoundException'
         return None
 
 def get_policy(policy_name):
@@ -67,12 +70,13 @@ def get_policy(policy_name):
     try:
         response = iot_client.get_policy(policyName=policy_name)
         return response.get('policyArn')
-    except botocore.exceptions.ClientError as error:
-        if error.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("ERROR: You need to configure the policy [" + policy_name +
-                  "] in your target region first.")
-        if error.response['Error']['Code'] == 'UnauthorizedException':
-            print("ERROR: There is a deployment problem with the attached Role."
+    except ClientError as error:
+        error_code = error.response['Error']['Code']
+        if error_code == 'ResourceNotFoundException':
+            logger.error("ERROR: You need to configure the policy {policy_name} "
+                         "in your target region first.")
+        if error_code == 'UnauthorizedException':
+            logger.error("There is a deployment problem with the attached Role."
                   "Unable to reach IoT Core object.")
         return None
 
@@ -83,13 +87,14 @@ def get_thing_group(thing_group_name):
     try:
         response = iot_client.describe_thing_group(thingGroupName=thing_group_name)
         return response.get('thingGroupArn')
-    except botocore.exceptions.ClientError as error:
-        if error.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("ERROR: You need to configure the Thing Group [" + thing_group_name +
-                  "] in your target region first.")
-        if error.response['Error']['Code'] == 'UnauthorizedException':
-            print("ERROR: There is a deployment problem with the attached Role. Unable"
-                  "to reach IoT Core object.")
+    except ClientError as error:
+        error_code = error.response['Error']['Code']
+        if 'ResourceNotFoundException' == error_code:
+            logger.error("You need to configure the Thing Group {thing_group_name} "
+                         "in your target region first.")
+        if 'UnauthorizedException' == error_code:
+            logger.error("There is a deployment problem with the attached Role. Unable"
+                         "to reach IoT Core object.")
         return None
 
 def get_thing_type(type_name):
@@ -99,12 +104,13 @@ def get_thing_type(type_name):
         response = iot_client.describeThingType(thingTypeName=type_name)
         return response.get('thingTypeArn')
     except ClientError as error:
-        if error.response['Error']['Code'] == 'ResourceNotFoundException':
-            print("ERROR: You need to configure the Thing Type [" + type_name +
-                  "] in your target region first.")
-        if error.response['Error']['Code'] == 'UnauthorizedException':
-            print("ERROR: There is a deployment problem with the attached Role."
-                  "Unable to reach IoT Core object.")
+        error_code = error.response['Error']['Code']
+        if 'ResourceNotFoundException' == error_code:
+            logger.error("You need to configure the Thing Type {type_name} "
+                         "in your target region first.")
+        if 'UnauthorizedException' == error_code:
+            logger.error("There is a deployment problem with the attached Role."
+                         "Unable to reach IoT Core object.")
         return None
 
 def process_policy(policy_name, certificate_id):
@@ -121,7 +127,8 @@ def process_thing(thing_name, certificate_id, thing_type_name):
         iot_client.describe_thing(thingName=thing_name)
         return None
     except ClientError as error:
-        print("Thing not found (" + error.response['Error']['Code'] + "). Creating.")
+        error_code = error.response['Error']['Code']
+        logger.info("Thing not found {error_code}. Creating.")
 
     # Create thing
     try:
@@ -132,8 +139,8 @@ def process_thing(thing_name, certificate_id, thing_type_name):
                                     thingTypeName=thing_type_name)
 
     except ClientError as error:
-        print("ERROR Thing creation failed.")
-        print(error)
+        error_code = error.response['Error']['Code']
+        logger.error("ERROR Thing creation failed: {error_code}")
         return None
 
     try:
@@ -182,11 +189,9 @@ def process_certificate(config, requeue_cb):
                         fingerprint, error.response['Error']['Code'])
 
     try:
-        print("Importing certificate.")
         response = iot_client.register_certificate_without_ca(
             certificatePem=certificate_text.decode('ascii'),
             status='ACTIVE')
-        print("Certificate imported.")
         return response.get("certificateId")
     except botocore.exceptions.ClientError as e:
         if e.response['Error']['Code'] == 'ThrottlingException':
@@ -248,7 +253,7 @@ def process_sqs(config):
     process_policy(policy_name, certificate_id)
     process_thing_group(thing_group_name, thing_name)
 
-def lambda_handler(event, context):
+def lambda_handler(event: SQSEvent, context: LambdaContext):
     """Lambda function main entry point"""
     if event.get('Records') is None:
         print("ERROR: Configuration incorrect: no event record on invoke")
@@ -264,9 +269,4 @@ def lambda_handler(event, context):
             config = json.loads(record["body"])
             process_sqs(config)
 
-    return {
-        "statusCode": 204,
-        "body": json.dumps({
-            "message": "Processing succeeded."
-        })
-    }
+    return event

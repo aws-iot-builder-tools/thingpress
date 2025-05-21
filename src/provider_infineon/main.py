@@ -18,8 +18,6 @@ from cryptography.hazmat.primitives import serialization
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event, event_source
 
-from . import schemas
-
 def s3_object_stream(bucket_name: str, object_name: str):
     """Given a bucket and object, verify its existence and return the resource."""
     s3 = boto3resource('s3')
