@@ -15,6 +15,10 @@ from boto3 import resource as boto3resource, client as boto3client
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import S3Event, event_source
+
+from . import schemas
 
 def s3_object_stream(bucket_name: str, object_name: str):
     """Given a bucket and object, verify its existence and return the resource."""
@@ -70,13 +74,14 @@ def invoke_export(manifest, queue_url):
             certificate_data = format_certificate(hexdata_element.text)
             queue_certificate(thing_name, certificate_data, queue_url)
 
-def lambda_handler(event, context):
+def lambda_handler(event: dict, context: LambdaContext) -> dict:
     """Lambda function main entry point"""
+    s3_event = S3Event(event)
     queue_url = os.environ['QUEUE_TARGET']
 
-    bucket = event['Records'][0]['s3']['bucket']['name']
-    manifest = event['Records'][0]['s3']['object']['key']
-
-    manifest_content = s3_filebuf_bytes(bucket, manifest)
-
-    invoke_export(manifest_content, queue_url)
+    bucket = s3_event.bucket_name
+    for record in s3_event.records:
+        manifest = record.s3.get_object.key
+        manifest_content = s3_filebuf_bytes(bucket, manifest)
+        invoke_export(manifest_content, queue_url)
+    return event

@@ -3,6 +3,9 @@
 # SPDX-License-Identifier: MIT-0
 
 Unit tests for provider_infineon
+
+If run local with no local aws credentials, AWS_DEFAULT_REGION must be
+set to the environment.
 """
 import os
 import io
@@ -13,14 +16,11 @@ import botocore
 from boto3 import resource, client
 from moto import mock_aws
 #from moto import mock_aws, settings
-#from aws_lambda_powertools.utilities.validation import validate
-
 #from unittest.mock import MagicMock, patch
 
 from src.provider_infineon.testable import LambdaS3Class, LambdaSQSClass
 from src.provider_infineon.main import s3_object_stream, s3_filebuf_bytes
-#from src.provider_infineon.main import lambda_handler, invoke_export
-#from src.provider_infineon.schemas import INPUT_SCHEMA
+from src.provider_infineon.main import lambda_handler, invoke_export
 
 @mock_aws(config={
     "core": {

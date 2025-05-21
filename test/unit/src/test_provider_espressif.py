@@ -1,6 +1,19 @@
-import sys
+"""
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+
+Unit tests for provider_espressif
+
+If run local with no local aws credentials, AWS_DEFAULT_REGION must be
+set to the environment.
+"""
+
+
+#import sys
 import os
 import io
+from unittest import TestCase
+from unittest.mock import MagicMock, patch
 import pytest
 
 import botocore
@@ -9,14 +22,9 @@ from boto3 import resource, client
 from moto import mock_aws, settings
 from aws_lambda_powertools.utilities.validation import validate
 
-from unittest import TestCase
-from unittest.mock import MagicMock, patch
-sys.path.append('./src/provider_espressif')
-os.environ['AWS_DEFAULT_REGION'] = "us-east-1"
 from src.provider_espressif.testable import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
 from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
 from src.provider_espressif.main import s3_object_stream
-from src.provider_espressif.schemas import INPUT_SCHEMA                     # pylint: disable=wrong-import-position
 
 @mock_aws(config={
     "core": {
@@ -26,7 +34,7 @@ from src.provider_espressif.schemas import INPUT_SCHEMA                     # py
     },
     'iot': {'use_valid_cert': True}})
 class TestProviderEspressif(TestCase):
-    
+    """Unit tests for the espressif provider module"""
     def setUp(self):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
@@ -72,6 +80,20 @@ class TestProviderEspressif(TestCase):
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url, AttributeNames=['ApproximateNumberOfMessages'])
         assert p['Attributes']['ApproximateNumberOfMessages'] == '7'
+
+    def test_pos_lambda_handler_1(self):
+        """Invoke the main handler with one file"""
+        e = { "Records": [
+                { "s3": {
+                    "bucket": { "name": "unit_test_s3_bucket" },
+                    "object": { "key": "manifest.csv" },
+
+            }}]}
+        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
+        c = None
+        v = lambda_handler(e, c)
+        os.environ['QUEUE_TARGET']=""
+        assert v == e
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

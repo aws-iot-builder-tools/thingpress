@@ -6,8 +6,6 @@ Lambda function to import Microchip manifest
 """
 import os
 import io
-#from base64 import b64encode
-#from lsplib import s3_filebuf_bytes
 import boto3
 from .manifest_handler import invoke_export
 
@@ -22,7 +20,7 @@ def s3_filebuf_bytes(bucket, obj):
 def lambda_handler(event, context):
     queue_url = os.environ['QUEUE_TARGET']
     verify_certname = os.environ['VERIFY_CERT']
-    
+
     # there can be only one manifest file per event?  Need to verify
     # this
 
