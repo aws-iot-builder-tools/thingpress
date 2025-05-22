@@ -1,0 +1,16 @@
+{
+    "python.analysis.extraPaths": [
+        "${workspaceFolder}/src/layer_utils"
+    ],
+    "python.autoComplete.extraPaths": [
+        "${workspaceFolder}/src/layer_utils"
+    ],
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.testing.pytestArgs": [
+        "--disable-socket",
+        "-s",
+        "test/unit/src/"
+    ],
+    "python.testing.pytestEnabled": true,
+    "python.testing.unittestEnabled": false,
+}
