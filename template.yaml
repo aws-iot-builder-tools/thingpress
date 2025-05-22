@@ -68,6 +68,14 @@ Parameters:
       balance.  In case of throttling failure, the payload will be requeued.
 
 Resources:
+  UtilsLayer:
+    Type: AWS::Serverless::LayerVersion
+    Properties:
+      ContentUri: src/layer_utils
+      CompatibleRuntimes:
+        - python3.13
+    Metadata:
+      BuildMethod: python3.13
 
   BulkImporterQueue:
     Type: AWS::SQS::Queue
@@ -105,6 +113,8 @@ Resources:
       Role: !GetAtt BulkImporterFunctionRole.Arn
       ReservedConcurrentExecutions: !Ref ConcurrentExecutions
       Timeout: 300
+      Layers:
+        - !Ref UtilsLayer
       Environment:
         Variables:
           QUEUE_TARGET: !Ref BulkImporterQueue
@@ -152,6 +162,8 @@ Resources:
       Runtime: python3.13
       Role: !GetAtt ProductProviderFunctionRole.Arn
       Timeout: 300
+      Layers:
+        - !Ref UtilsLayer
       Environment:
         Variables:
           QUEUE_TARGET: !Ref BulkImporterQueue
@@ -211,6 +223,8 @@ Resources:
       Runtime: python3.13
       Role: !GetAtt MicrochipSupplierProviderFunctionRole.Arn
       Timeout: 900
+      Layers:
+        - !Ref UtilsLayer
       MemorySize: 2048
       Environment:
         Variables:
@@ -235,6 +249,8 @@ Resources:
       Runtime: python3.13
       Role: !GetAtt InfineonSupplierProviderFunctionRole.Arn
       Timeout: 900
+      Layers:
+        - !Ref UtilsLayer
       MemorySize: 2048
       Environment:
         Variables:
@@ -259,6 +275,8 @@ Resources:
       Runtime: python3.13
       Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
       Timeout: 900
+      Layers:
+        - !Ref UtilsLayer
       MemorySize: 2048
       Environment:
         Variables:

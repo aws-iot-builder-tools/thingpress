@@ -13,7 +13,7 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 def process(payload):
     """Annotate payload with environment-passed variants, later this function
        will evolve to allow importing types, groups, and policies"""
-    # queue url is 
+
     queue_url = os.environ.get('QUEUE_TARGET')
 
     # Policy is required.
@@ -34,14 +34,12 @@ def process(payload):
         payload['thing_type_name'] = os.environ.get('THING_TYPE_NAME')
 
     # Pass on to the queue for target processing.
-    print(json.dumps(payload))
-
     client = boto3.client("sqs")
     client.send_message( QueueUrl=queue_url,
                          MessageBody=json.dumps(payload))
     return payload
 
-def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict:
+def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """Lambda function main entry point"""
     # Get the payload coming in and process it.  There might be more than one.
     result = []

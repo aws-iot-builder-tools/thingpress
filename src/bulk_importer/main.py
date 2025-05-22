@@ -32,7 +32,7 @@ def get_certificate(certificate_id):
         return response["certificateDescription"].get("certificateId")
     except ClientError as error:
         assert error.response['Error']['Code'] == 'ResourceNotFoundException'
-        return None
+        raise error
 
 def get_certificate_arn(certificate_id):
     """Retrieve the certificate Arn."""
@@ -42,10 +42,11 @@ def get_certificate_arn(certificate_id):
         return response["certificateDescription"].get("certificateArn")
     except ClientError as error:
         error_code = error.response['Error']['Code']
-        error_message = error.response['Error']['Message']
+        error_message = error.response['Error']['Message'] # pylint: disable=unused-variable
         if error_code == 'ResourceNotFoundException':
             logger.error("get_certificate_arn failed: {error_message}")
-            raise error
+        # TODO: this should raise an exception
+        raise error
 
 def get_thing(thing_name):
     """Retrieve the Thing ARN"""
@@ -121,7 +122,7 @@ def process_thing(thing_name, certificate_id, thing_type_name):
         iot_client.describe_thing(thingName=thing_name)
         return None
     except ClientError as error:
-        error_code = error.response['Error']['Code']
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
         logger.info("Thing not found {error_code}. Creating.")
 
     # Create thing
@@ -172,15 +173,15 @@ def process_certificate(config, requeue_cb):
 
     fingerprint = get_certificate_fingerprint(certificate_obj)
 
-    if get_certificate(fingerprint):
-        try:
-            response = iot_client.describe_certificate(certificateId=fingerprint)
-            print("Certificate already found. Returning certificateId in case this "
-                  "is recovering from a broken load")
-            return response["certificateDescription"].get("certificateId")
-        except ClientError as error:
-            logger.info("Certificate [%s] not found in IoT Core (%s). Importing.",
-                        fingerprint, error.response['Error']['Code'])
+    try:
+        get_certificate(fingerprint)
+        response = iot_client.describe_certificate(certificateId=fingerprint)
+        print("Certificate already found. Returning certificateId in case this "
+                "is recovering from a broken load")
+        return response["certificateDescription"].get("certificateId")
+    except ClientError as error:
+        logger.info("Certificate [%s] not found in IoT Core (%s). Importing.",
+                    fingerprint, error.response['Error']['Code'])
 
     try:
         response = iot_client.register_certificate_without_ca(
@@ -195,7 +196,6 @@ def process_certificate(config, requeue_cb):
             print("ERROR: There is a deployment problem with the attached"
                   "Role. Unable to reach IoT Core object.")
         return None
-    return None
 
 def process_thing_group(thing_group_name, thing_name):
     """Attaches the configured thing group to the iot thing"""
@@ -209,9 +209,7 @@ def process_thing_group(thing_group_name, thing_name):
                                             thingArn=thing_arn,
                                             overrideDynamicGroups=False)
     except ClientError as error:
-        print(error)
-
-    return None
+        raise error
 
 def get_name_from_certificate(certificate_id):
     """Assume the certificate cn is the thing name.
@@ -247,7 +245,7 @@ def process_sqs(config):
     process_policy(policy_name, certificate_id)
     process_thing_group(thing_group_name, thing_name)
 
-def lambda_handler(event: SQSEvent, context: LambdaContext):
+def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """Lambda function main entry point"""
     if event.get('Records') is None:
         print("ERROR: Configuration incorrect: no event record on invoke")

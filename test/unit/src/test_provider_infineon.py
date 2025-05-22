@@ -18,7 +18,6 @@ from moto import mock_aws
 #from moto import mock_aws, settings
 #from unittest.mock import MagicMock, patch
 
-from src.provider_infineon.main import s3_object_stream, s3_filebuf_bytes
 from src.provider_infineon.main import lambda_handler, invoke_export
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
@@ -53,26 +52,6 @@ class TestProviderInfineon(TestCase):
         mocked_sqs_resource = { "resource" : resource('sqs'),
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
-
-    def test_pos_s3_object_resource(self):
-        """Basic pos test case for object resource"""
-        r = s3_object_stream("unit_test_s3_bucket", "manifest.csv")
-        assert isinstance(r, io.BytesIO)
-
-    def test_neg_s3_object_resource(self):
-        """Basic neg test case for object resource"""
-        with pytest.raises(botocore.exceptions.ClientError) as e:
-            # Although this returns a value, no need to define var for it
-            s3_object_stream("unit_test_s3_buckets", "manifest")
-        errstr = "An error occurred (NoSuchBucket) when calling the " \
-                 "HeadObject operation: The specified bucket does not exist"
-        assert str(e.value) == errstr
-
-    def test_pos_s3_filebuf_bytes(self):
-        """Basic pos test case for byte buffer handling"""
-        # The bytes should equal to the object in the bucket
-        v = s3_filebuf_bytes("unit_test_s3_bucket", "manifest.csv")
-        assert v == self.test_s3_object_content.read()
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

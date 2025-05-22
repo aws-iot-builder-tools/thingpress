@@ -6,18 +6,12 @@ Library to handle Microchip manifests
 """
 from base64 import b64decode, b64encode
 import json
-#import jmespath
-#import uuid
 import boto3
-#from base64 import b64decode, b64encode, b16encode
-#from argparse import ArgumentParser
-#from jose import jws
 import jose
 from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-#from cryptography.hazmat.primitives.asymmetric import ec
 
 verification_algorithms = [
     'RS256', 'RS384', 'RS512', 'ES256', 'ES384', 'ES512'
@@ -67,12 +61,15 @@ class ManifestItem:
         self.run()
 
     def get_identifier(self):
+        """Getter for private variable"""
         return self.identifier
 
     def get_certificate_chain(self):
+        """Getter for private variable"""
         return self.certificate_chain
-       
+
     def run(self):
+        """Main procedure for decomposing a single certificate stanza"""
         self.identifier = self.signed_se['header']['uniqueId']
 
         # Decode the protected header
@@ -114,6 +111,7 @@ class ManifestItem:
                 ).decode('ascii')
 
 def invoke_export(manifest_file, verify_cert, queue_url):
+    """Main procedure"""
     client = boto3.client("sqs")
 
     manifest_iterator = ManifestIterator( json.loads(manifest_file) )

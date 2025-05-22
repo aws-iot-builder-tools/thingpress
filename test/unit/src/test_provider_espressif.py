@@ -11,20 +11,15 @@ set to the environment.
 
 #import sys
 import os
-import io
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
-import pytest
-
-import botocore
 
 from boto3 import resource, client
 from moto import mock_aws, settings
-from aws_lambda_powertools.utilities.validation import validate
+#from aws_lambda_powertools.utilities.validation import validate
 
-from src.provider_espressif.main import lambda_handler, s3_filebuf_bytes, invoke_export  # pylint: disable=wrong-import-position
-from src.provider_espressif.main import s3_object_stream
-from .model_provider_espressif import LambdaS3Class, LambdaSQSClass   # pylint: disable=wrong-import-position
+from src.provider_espressif.main import lambda_handler, invoke_export
+from .model_provider_espressif import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={
     "core": {
@@ -56,23 +51,6 @@ class TestProviderEspressif(TestCase):
         mocked_sqs_resource = { "resource" : resource('sqs'),
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
-
-    def test_pos_s3_object_resource(self):
-        r = s3_object_stream("unit_test_s3_bucket", "manifest.csv")
-        assert isinstance(r, io.BytesIO)
-
-    def test_neg_s3_object_resource(self):
-        with pytest.raises(botocore.exceptions.ClientError) as e:
-            # Although this returns a value, no need to define var for it
-            r = s3_object_stream("unit_test_s3_buckets", "manifest")
-        assert str(e.value) == "An error occurred (NoSuchBucket) when calling " \
-                               "the HeadObject operation: The specified bucket " \
-                               "does not exist"
-
-    def test_pos_s3_filebuf_bytes(self):
-        """ The bytes should equal to the object in the bucket """
-        v = s3_filebuf_bytes("unit_test_s3_bucket", "manifest.csv")
-        assert v == self.test_s3_object_content.read()
 
     def test_pos_invoke_export(self):
         """ The number of items in the queue should be 7 since there are
