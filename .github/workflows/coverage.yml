@@ -43,6 +43,9 @@ jobs:
         runs-on: ubuntu-latest
         needs: Coverage
         steps:
+          - name: 'Set environment'
+            run: |
+                export PYTHONPATH=$(pwd)/src/layer_utils
           - uses: Silleellie/pylint-github-action@v2.1
             with:
               lint-path: src
