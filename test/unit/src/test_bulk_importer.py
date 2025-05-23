@@ -5,6 +5,7 @@
 Unit tests for bulk_importer
 """
 import base64
+import json
 from unittest import TestCase
 from pytest import raises
 from moto import mock_aws
@@ -14,9 +15,10 @@ from cryptography.hazmat.primitives import serialization
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
-from src.bulk_importer.main import get_certificate_arn
-#    from src.bulk_importer.main import lambda_handler, get_certificate, get_thing, get_policy
-#    from src.bulk_importer.main import get_certificate_arn, get_thing_group, get_thing_type
+from src.bulk_importer.main import get_certificate_arn, get_thing, get_policy, get_thing_group
+from src.bulk_importer.main import get_thing_type
+#    from src.bulk_importer.main import lambda_handler
+#    from src.bulk_importer.main import get_certificate_arn, get_thing_type
 #    from src.bulk_importer.main import process_policy, process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 from .model_bulk_importer import LambdaSQSClass
@@ -32,7 +34,7 @@ class TestBulkImporter(TestCase):
     """Test cases for bulk importer lambda function"""
     def setUp(self):
         self.test_sqs_queue_name = "provider"
-        sqs_client = client('sqs', region_name="us-east-1")
+        sqs_client = client('sqs')
         sqs_client.create_queue(QueueName=self.test_sqs_queue_name)
         mocked_sqs_resource = resource("sqs")
         mocked_sqs_resource = { "resource" : resource('sqs'),
@@ -69,6 +71,66 @@ class TestBulkImporter(TestCase):
             get_certificate_arn("9"*64)
         err = exc.value.response['Error']
         assert err['Code'] == 'ResourceNotFoundException'
+
+    def test_pos_get_thing(self):
+        """Positive test case to return thing arn"""
+        iot_client = client('iot')
+        n = "test_pos_get_thing"
+        r1 = iot_client.create_thing(thingName=n)
+        r2 = get_thing(n)
+        assert r1['thingArn'] == r2
+
+    def test_pos_get_policy(self):
+        """Positive test case to return policy arn"""
+        iot_client = client('iot')
+        n = "test_pos_get_policy"
+        pdoc = {
+            "Version": "2012-10-17",
+	        "Statement": [
+		        {
+			    "Effect": "Allow",
+			    "Action": [ "iot:Connect" ],
+			    "Resource": [
+				    "arn:aws:iot:us-east-1:123456789012:client/${iot:Connection.Thing.ThingName}"
+			    ],
+			    "Condition": {
+				    "Bool": { "iot:Connection.Thing.IsAttached": "true" }
+			    }
+                }
+            ]
+        }
+        p = json.dumps(pdoc)
+        r1 = iot_client.create_policy(policyName=n, policyDocument=p)
+        r2 = get_policy(n)
+        assert r1['policyArn'] == r2
+
+    def test_pos_get_thing_group(self):
+        """Positive test case to return thing group arn"""
+        iot_client = client('iot')
+        n = "test_pos_get_thing_group"
+        r1 = iot_client.create_thing_group(thingGroupName=n)
+        r2 = get_thing_group(thing_group_name=n)
+        assert r1['thingGroupArn'] == r2
+
+    def test_pos_get_thing_type(self):
+        """Positive test case to return thing type arn"""
+        n = "test_pos_get_thing_type"
+        iot_client = client('iot')
+        r1 = iot_client.create_thing_type(thingTypeName=n)
+        r2 = get_thing_type(type_name=n)
+        assert r1['thingTypeArn'] == r2
+
+    def test_pos_process_policy(self):
+        iot_client = client('iot')
+        pass
+    def test_pos_process_thing(self):
+        pass
+    def test_pos_requeue(self):
+        pass
+    def test_pos_get_certificate_fingerprint(self):
+        pass
+    def test_pos_process_thing_group(self):
+        pass
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")

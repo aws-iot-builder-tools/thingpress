@@ -47,8 +47,8 @@ def get_certificate_arn(certificate_id):
             logger.error("get_certificate_arn failed: {error_message}")
         # TODO: this should raise an exception
         raise error
-
-def get_thing(thing_name):
+#TODO: change this method to get_thing_arn
+def get_thing(thing_name: str) -> str:
     """Retrieve the Thing ARN"""
     iot_client = boto3client('iot')
     try:
@@ -58,7 +58,8 @@ def get_thing(thing_name):
         error_code = error.response['Error']['Code']
         assert error_code == 'ResourceNotFoundException'
         return None
-
+#TODO: change this method to get_policy_arn
+#TODO: move this to common module for providers to verify arn once
 def get_policy(policy_name):
     """Retrieve the IoT policy ARN"""
     iot_client = boto3client('iot')
@@ -74,7 +75,8 @@ def get_policy(policy_name):
             logger.error("There is a deployment problem with the attached Role."
                   "Unable to reach IoT Core object.")
         return None
-
+#TODO: change this method to get_thing_group_arn
+#TODO: move this to common module for providers to verify arn once
 def get_thing_group(thing_group_name):
     """Retrieves the thing group ARN"""
     iot_client = boto3client('iot')
@@ -91,12 +93,13 @@ def get_thing_group(thing_group_name):
             logger.error("There is a deployment problem with the attached Role. Unable"
                          "to reach IoT Core object.")
         return None
-
-def get_thing_type(type_name):
+#TODO: change this method to get_thing_type_arn
+#TODO: move this to common module for providers to verify arn once
+def get_thing_type(type_name: str) -> str:
     """Retrieves the thing type ARN"""
     iot_client = boto3client('iot')
     try:
-        response = iot_client.describeThingType(thingTypeName=type_name)
+        response = iot_client.describe_thing_type(thingTypeName=type_name)
         return response.get('thingTypeArn')
     except ClientError as error:
         error_code = error.response['Error']['Code']
@@ -156,6 +159,7 @@ def requeue(config):
     sqs_client.send_message( QueueUrl=os.environ.get('QUEUE_TARGET'),
                              MessageBody=json.dumps(config))
 
+# TODO: shift this to common fingerprint handling code
 def get_certificate_fingerprint(certificate: x509.Certificate):
     """Retrieve the certificate fingerprint"""
     return binascii.hexlify(certificate.fingerprint(hashes.SHA256())).decode('UTF-8')

@@ -12,7 +12,7 @@ import io
 from unittest import TestCase
 import pytest
 
-import botocore
+from botocore.exceptions import ClientError
 from boto3 import resource, client
 from moto import mock_aws
 #from moto import mock_aws, settings
