@@ -16,12 +16,28 @@ from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
 from src.bulk_importer.main import get_certificate_arn, get_thing, get_policy, get_thing_group
-from src.bulk_importer.main import get_thing_type
+from src.bulk_importer.main import get_thing_type, process_policy
 #    from src.bulk_importer.main import lambda_handler
 #    from src.bulk_importer.main import get_certificate_arn, get_thing_type
-#    from src.bulk_importer.main import process_policy, process_thing
+#    from src.bulk_importer.main import , process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 from .model_bulk_importer import LambdaSQSClass
+
+POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+        "Effect": "Allow",
+        "Action": [ "iot:Connect" ],
+        "Resource": [
+            "arn:aws:iot:us-east-1:123456789012:client/${iot:Connection.Thing.ThingName}"
+        ],
+        "Condition": {
+            "Bool": { "iot:Connection.Thing.IsAttached": "true" }
+        }
+        }
+    ]
+}
 
 @mock_aws(config={
     "core": {
@@ -84,22 +100,7 @@ class TestBulkImporter(TestCase):
         """Positive test case to return policy arn"""
         iot_client = client('iot')
         n = "test_pos_get_policy"
-        pdoc = {
-            "Version": "2012-10-17",
-	        "Statement": [
-		        {
-			    "Effect": "Allow",
-			    "Action": [ "iot:Connect" ],
-			    "Resource": [
-				    "arn:aws:iot:us-east-1:123456789012:client/${iot:Connection.Thing.ThingName}"
-			    ],
-			    "Condition": {
-				    "Bool": { "iot:Connection.Thing.IsAttached": "true" }
-			    }
-                }
-            ]
-        }
-        p = json.dumps(pdoc)
+        p = json.dumps(POLICY)
         r1 = iot_client.create_policy(policyName=n, policyDocument=p)
         r2 = get_policy(n)
         assert r1['policyArn'] == r2
@@ -121,8 +122,20 @@ class TestBulkImporter(TestCase):
         assert r1['thingTypeArn'] == r2
 
     def test_pos_process_policy(self):
+        """Positive test case for attaching policy to certificate"""
         iot_client = client('iot')
-        pass
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            cert = str(base64.b64encode(block.encode('ascii')))
+            c = {'certificate': cert}
+            cr = process_certificate(c, requeue)
+            n = "process_policy"
+            p = json.dumps(POLICY)
+            iot_client.create_policy(policyName=n, policyDocument=p)
+            process_policy(n, cr)
+
     def test_pos_process_thing(self):
         pass
     def test_pos_requeue(self):
