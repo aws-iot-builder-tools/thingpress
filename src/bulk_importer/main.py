@@ -117,7 +117,7 @@ def process_policy(policy_name, certificate_id):
     iot_client.attach_policy(policyName=policy_name,
                              target=get_certificate_arn(certificate_id))
 
-def process_thing(thing_name, certificate_id, thing_type_name):
+def process_thing(thing_name, certificate_id, thing_type_name=None):
     """Creates the IoT Thing if it does not already exist"""
     iot_client = boto3client('iot')
     certificate_arn = get_certificate_arn(certificate_id)
@@ -130,7 +130,7 @@ def process_thing(thing_name, certificate_id, thing_type_name):
 
     # Create thing
     try:
-        if thing_type_name == "":
+        if thing_type_name is None:
             iot_client.create_thing(thingName=thing_name)
         else:
             iot_client.create_thing(thingName=thing_name,

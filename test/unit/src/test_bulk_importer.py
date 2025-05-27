@@ -16,10 +16,9 @@ from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
 from src.bulk_importer.main import get_certificate_arn, get_thing, get_policy, get_thing_group
-from src.bulk_importer.main import get_thing_type, process_policy
+from src.bulk_importer.main import get_thing_type, process_policy, process_thing
 #    from src.bulk_importer.main import lambda_handler
 #    from src.bulk_importer.main import get_certificate_arn, get_thing_type
-#    from src.bulk_importer.main import , process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 from .model_bulk_importer import LambdaSQSClass
 
@@ -137,11 +136,27 @@ class TestBulkImporter(TestCase):
             process_policy(n, cr)
 
     def test_pos_process_thing(self):
-        pass
+        """Positive test case for attaching policy to certificate"""
+        iot_client = client('iot')
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            cert = str(base64.b64encode(block.encode('ascii')))
+            c = {'certificate': cert}
+            cr = process_certificate(c, requeue)
+            n = "process_thing"
+            iot_client.create_thing(thingName=n)
+            process_thing(n, cr)
+
     def test_pos_requeue(self):
         pass
     def test_pos_get_certificate_fingerprint(self):
-        pass
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            get_certificate_fingerprint(pem_obj)
+
     def test_pos_process_thing_group(self):
         pass
 
