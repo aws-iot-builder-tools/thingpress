@@ -125,9 +125,6 @@ def invoke_export(manifest_file, verify_cert, queue_url):
 
     manifest_iterator = ManifestIterator( json.loads(manifest_file) )
 
-    successes = 0
-    failures = 0
-
     while manifest_iterator.index != 0:
         manifest_item = ManifestItem( next( manifest_iterator ), verify_cert )
         block = manifest_item.get_certificate_chain()
