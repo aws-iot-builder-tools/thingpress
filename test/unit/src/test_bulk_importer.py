@@ -15,14 +15,13 @@ from cryptography.hazmat.primitives import serialization
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
-from src.bulk_importer.main import get_certificate_arn, get_thing, get_policy, get_thing_group
-from src.bulk_importer.main import get_thing_type, process_policy, process_thing
+
 #    from src.bulk_importer.main import lambda_handler
-#    from src.bulk_importer.main import get_certificate_arn, get_thing_type
+from src.bulk_importer.main import get_certificate_arn, get_thing, process_policy, process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 from .model_bulk_importer import LambdaSQSClass
 
-POLICY = {
+IOT_POLICY = {
     "Version": "2012-10-17",
     "Statement": [
         {
@@ -95,31 +94,6 @@ class TestBulkImporter(TestCase):
         r2 = get_thing(n)
         assert r1['thingArn'] == r2
 
-    def test_pos_get_policy(self):
-        """Positive test case to return policy arn"""
-        iot_client = client('iot')
-        n = "test_pos_get_policy"
-        p = json.dumps(POLICY)
-        r1 = iot_client.create_policy(policyName=n, policyDocument=p)
-        r2 = get_policy(n)
-        assert r1['policyArn'] == r2
-
-    def test_pos_get_thing_group(self):
-        """Positive test case to return thing group arn"""
-        iot_client = client('iot')
-        n = "test_pos_get_thing_group"
-        r1 = iot_client.create_thing_group(thingGroupName=n)
-        r2 = get_thing_group(thing_group_name=n)
-        assert r1['thingGroupArn'] == r2
-
-    def test_pos_get_thing_type(self):
-        """Positive test case to return thing type arn"""
-        n = "test_pos_get_thing_type"
-        iot_client = client('iot')
-        r1 = iot_client.create_thing_type(thingTypeName=n)
-        r2 = get_thing_type(type_name=n)
-        assert r1['thingTypeArn'] == r2
-
     def test_pos_process_policy(self):
         """Positive test case for attaching policy to certificate"""
         iot_client = client('iot')
@@ -131,7 +105,7 @@ class TestBulkImporter(TestCase):
             c = {'certificate': cert}
             cr = process_certificate(c, requeue)
             n = "process_policy"
-            p = json.dumps(POLICY)
+            p = json.dumps(IOT_POLICY)
             iot_client.create_policy(policyName=n, policyDocument=p)
             process_policy(n, cr)
 

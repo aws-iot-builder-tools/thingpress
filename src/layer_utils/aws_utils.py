@@ -5,6 +5,7 @@
 AWS related functions that multiple lambda functions use, here to reduce redundancy
 """
 import logging
+import inspect
 from io import BytesIO, StringIO
 from json import dumps
 from botocore.exceptions import ClientError
@@ -21,8 +22,12 @@ def s3_object(bucket_name: str, object_name: str, fs=BytesIO()):
     try:
         res.download_fileobj(fs)
         return fs
-    except ClientError as ce:
-        raise ce
+    except ClientError as error:
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} (bucket: {bucket_name}, object: {object_name}): {error_code} : {error_mesg}")
+        raise error
 
 def s3_object_bytes(bucket_name: str, object_name: str, getvalue: bool=False):
     """Download an S3 object as byte file-like object"""
@@ -32,22 +37,14 @@ def s3_object_bytes(bucket_name: str, object_name: str, getvalue: bool=False):
         return fs.getvalue()
     return BytesIO(fs.getvalue())
 
-def s3_object_str(bucket_name: str, object_name: str, getvalue: bool=False):
-    """Download an S3 object as string file-like object"""
-    fs = StringIO()
-    s3_object(bucket_name, object_name, fs)
-    if getvalue is True:
-        return fs.getvalue()
-    return fs
-
-# TODO: Deprecate, use s3_object_bytes or s3_object_str instead
-def s3_filebuf_bytes(bucket_name: str, object_name: str):
-    """Flush s3 object stream buffer to string object
-       Given a bucket name and object name, return bytes representing
-       the object content."""
-    object_stream = s3_object(bucket_name=bucket_name,
-                                     object_name=object_name)
-    return object_stream.getvalue()
+## TODO: Deprecate, use s3_object_bytes or s3_object_str instead
+#def s3_filebuf_bytes(bucket_name: str, object_name: str):
+#    """Flush s3 object stream buffer to string object
+#       Given a bucket name and object name, return bytes representing
+#       the object content."""
+#    object_stream = s3_object(bucket_name=bucket_name,
+#                                     object_name=object_name)
+#    return object_stream.getvalue()
 
 def queue_manifest_certificate(identity, certificate, queue_url):
     """Send the thing name and certificate to sqs queue"""
@@ -66,10 +63,49 @@ def verify_queue(queue_url: str) -> bool:
         s.get_queue_attributes(QueueUrl=queue_url,
                                AttributeNames=['CreatedTimestamp'])
     except ClientError as error:
-        error_code = error.response['Error']['Code']
-        if error_code == 'QueueDoesNotExist':
-            logger.error("Queue {queue_url} does not exist")
-        else:
-            logger.error("Unexpected exception {error_code}")
-        return False
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} ({queue_url}): {error_code} : {error_mesg}")
+        raise error
     return True
+
+def get_thing_type_arn(type_name: str) -> str:
+    """Retrieves the thing type ARN"""
+    iot_client = client('iot')
+    try:
+        response = iot_client.describe_thing_type(thingTypeName=type_name)
+        return response.get('thingTypeArn')
+    except ClientError as error:
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} ({thing_type_name}): {error_code} : {error_mesg}")
+        raise error
+
+def get_thing_group_arn(thing_group_name):
+    """Retrieves the thing group ARN"""
+    iot_client = client('iot')
+
+    try:
+        response = iot_client.describe_thing_group(thingGroupName=thing_group_name)
+        return response.get('thingGroupArn')
+    except ClientError as error:
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} ({thing_group_name}): {error_code} : {error_mesg}")
+        raise error
+
+def get_policy_arn(policy_name):
+    """Retrieve the IoT policy ARN"""
+    iot_client = client('iot')
+    try:
+        response = iot_client.get_policy(policyName=policy_name)
+        return response.get('policyArn')
+    except ClientError as error:
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} ({policy_name}): {error_code} : {error_mesg}")
+        raise error

@@ -19,7 +19,7 @@ from moto import mock_aws
 #from unittest.mock import MagicMock, patch
 
 from src.provider_microchip.main import lambda_handler, invoke_export
-from src.layer_utils.aws_utils import s3_filebuf_bytes
+from src.layer_utils.aws_utils import s3_object_bytes
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={
@@ -66,10 +66,10 @@ class TestProviderInfineon(TestCase):
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
     def test_pos_invoke_export(self):
-        invoke_export(s3_filebuf_bytes(self.test_s3_bucket_name,
-                                       self.o_manifest),
-                      s3_filebuf_bytes(self.test_s3_bucket_name,
-                                       self.o_validator),
+        invoke_export(s3_object_bytes(self.test_s3_bucket_name,
+                                       self.o_manifest, getvalue=True),
+                      s3_object_bytes(self.test_s3_bucket_name,
+                                       self.o_validator, getvalue=True),
                       self.test_sqs_queue_name)
 
     def tearDown(self):

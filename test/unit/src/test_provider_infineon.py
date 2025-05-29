@@ -19,7 +19,7 @@ from moto import mock_aws
 #from unittest.mock import MagicMock, patch
 from py7zr import FileInfo
 
-from src.layer_utils.aws_utils import s3_object_bytes, s3_object_str
+from src.layer_utils.aws_utils import s3_object_bytes
 from src.provider_infineon.main import lambda_handler
 from src.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass

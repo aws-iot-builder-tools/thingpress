@@ -9,7 +9,7 @@ import os
 import logging
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event
-from aws_utils import s3_filebuf_bytes, verify_queue
+from aws_utils import s3_object_bytes, verify_queue
 from .manifest_handler import invoke_export, verify_certtype
 
 logger = logging.getLogger()
@@ -32,6 +32,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     bucket = s3_event.bucket_name
     for record in s3_event.records:
         manifest = record.s3.get_object.key
-        manifest_content = s3_filebuf_bytes(bucket, manifest)
+        manifest_content = s3_object_bytes(bucket, manifest, getvalue=True)
         invoke_export(manifest_content, queue_url, cert_type)
     return event

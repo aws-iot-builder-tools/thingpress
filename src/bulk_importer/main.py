@@ -8,7 +8,7 @@ the Thing, Policy, Certificate, Thing Type, and Thing Group
 import ast
 import base64
 import json
-import binascii
+
 import os
 import logging
 import botocore
@@ -17,9 +17,10 @@ from boto3 import client as boto3client
 from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import hashes
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
+from aws_utils import get_thing_type_arn, get_thing_group_arn, get_policy_arn
+from cert_utils import get_certificate_fingerprint
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -57,58 +58,6 @@ def get_thing(thing_name: str) -> str:
     except ClientError as error:
         error_code = error.response['Error']['Code']
         assert error_code == 'ResourceNotFoundException'
-        return None
-#TODO: change this method to get_policy_arn
-#TODO: move this to common module for providers to verify arn once
-def get_policy(policy_name):
-    """Retrieve the IoT policy ARN"""
-    iot_client = boto3client('iot')
-    try:
-        response = iot_client.get_policy(policyName=policy_name)
-        return response.get('policyArn')
-    except ClientError as error:
-        error_code = error.response['Error']['Code']
-        if error_code == 'ResourceNotFoundException':
-            logger.error("ERROR: You need to configure the policy {policy_name} "
-                         "in your target region first.")
-        if error_code == 'UnauthorizedException':
-            logger.error("There is a deployment problem with the attached Role."
-                  "Unable to reach IoT Core object.")
-        return None
-#TODO: change this method to get_thing_group_arn
-#TODO: move this to common module for providers to verify arn once
-def get_thing_group(thing_group_name):
-    """Retrieves the thing group ARN"""
-    iot_client = boto3client('iot')
-
-    try:
-        response = iot_client.describe_thing_group(thingGroupName=thing_group_name)
-        return response.get('thingGroupArn')
-    except ClientError as error:
-        error_code = error.response['Error']['Code']
-        if 'ResourceNotFoundException' == error_code:
-            logger.error("You need to configure the Thing Group {thing_group_name} "
-                         "in your target region first.")
-        if 'UnauthorizedException' == error_code:
-            logger.error("There is a deployment problem with the attached Role. Unable"
-                         "to reach IoT Core object.")
-        return None
-#TODO: change this method to get_thing_type_arn
-#TODO: move this to common module for providers to verify arn once
-def get_thing_type(type_name: str) -> str:
-    """Retrieves the thing type ARN"""
-    iot_client = boto3client('iot')
-    try:
-        response = iot_client.describe_thing_type(thingTypeName=type_name)
-        return response.get('thingTypeArn')
-    except ClientError as error:
-        error_code = error.response['Error']['Code']
-        if 'ResourceNotFoundException' == error_code:
-            logger.error("You need to configure the Thing Type {type_name} "
-                         "in your target region first.")
-        if 'UnauthorizedException' == error_code:
-            logger.error("There is a deployment problem with the attached Role."
-                         "Unable to reach IoT Core object.")
         return None
 
 def process_policy(policy_name, certificate_id):
@@ -159,11 +108,6 @@ def requeue(config):
     sqs_client.send_message( QueueUrl=os.environ.get('QUEUE_TARGET'),
                              MessageBody=json.dumps(config))
 
-# TODO: shift this to common fingerprint handling code
-def get_certificate_fingerprint(certificate: x509.Certificate):
-    """Retrieve the certificate fingerprint"""
-    return binascii.hexlify(certificate.fingerprint(hashes.SHA256())).decode('UTF-8')
-
 def process_certificate(config, requeue_cb):
     """Imports the certificate to IoT Core
        TODO: This should be simplified"""
@@ -205,7 +149,7 @@ def process_thing_group(thing_group_name, thing_name):
     """Attaches the configured thing group to the iot thing"""
     iot_client = boto3client('iot')
     try:
-        thing_group_arn = get_thing_group(thing_group_name)
+        thing_group_arn = get_thing_group_arn(thing_group_name)
         thing_arn = get_thing(thing_name)
         iot_client.add_thing_to_thing_group(thingGroupName=thing_group_name,
                                             thingGroupArn=thing_group_arn,

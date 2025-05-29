@@ -10,11 +10,11 @@ import io
 import csv
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event
-from aws_utils import s3_filebuf_bytes, queue_manifest_certificate
+from aws_utils import s3_object_bytes, queue_manifest_certificate
 
 def invoke_export(bucket_name: str, object_name: str, queue_url: str):
     """Evaluate CSV based Espressif manifest"""
-    manifest_bytes = s3_filebuf_bytes(bucket_name, object_name)
+    manifest_bytes = s3_object_bytes(bucket_name, object_name, getvalue=True)
     reader_list = csv.DictReader(io.StringIO(manifest_bytes.decode()))
 
     for row in reader_list:

@@ -6,15 +6,35 @@ Utility lambda layer unit testing
 """
 import os
 import io
+import json
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
-import pytest
+
+from pytest import raises
+
 from moto import mock_aws, settings
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 
-from aws_utils import s3_object, s3_filebuf_bytes
+from aws_utils import s3_object, s3_object_bytes, verify_queue
+from aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
 from .model_provider_espressif import LambdaS3Class
+
+IOT_POLICY = {
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+        "Effect": "Allow",
+        "Action": [ "iot:Connect" ],
+        "Resource": [
+            "arn:aws:iot:us-east-1:123456789012:client/${iot:Connection.Thing.ThingName}"
+        ],
+        "Condition": {
+            "Bool": { "iot:Connection.Thing.IsAttached": "true" }
+        }
+        }
+    ]
+}
 
 @mock_aws(config={
     "core": {
@@ -23,8 +43,8 @@ from .model_provider_espressif import LambdaS3Class
         "service_whitelist": None,
     },
     'iot': {'use_valid_cert': True}})
-class TestProviderEspressif(TestCase):
-    """Unit tests for the espressif provider module"""
+class TestAwsUtils(TestCase):
+    """Unit tests for the aws_utils common function module"""
     def setUp(self):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
@@ -46,7 +66,7 @@ class TestProviderEspressif(TestCase):
 
     def test_neg_s3_object_resource(self):
         """Basic neg test case for object resource"""
-        with pytest.raises(ClientError) as e:
+        with raises(ClientError) as e:
             # Although this returns a value, no need to define var for it
             s3_object("unit_test_s3_buckets", "manifest")
         errstr = "An error occurred (NoSuchBucket) when calling the " \
@@ -56,5 +76,65 @@ class TestProviderEspressif(TestCase):
     def test_pos_s3_filebuf_bytes(self):
         """Basic pos test case for byte buffer handling"""
         # The bytes should equal to the object in the bucket
-        v = s3_filebuf_bytes("unit_test_s3_bucket", "manifest.csv")
+        v = s3_object_bytes("unit_test_s3_bucket", "manifest.csv", getvalue=True)
         assert v == self.test_s3_object_content.read()
+
+    def test_pos_get_policy_arn(self):
+        """Positive test case to return policy arn"""
+        iot_client = client('iot')
+        n = "test_pos_get_policy"
+        p = json.dumps(IOT_POLICY)
+        r1 = iot_client.create_policy(policyName=n, policyDocument=p)
+        r2 = get_policy_arn(n)
+        assert r1['policyArn'] == r2
+
+    def test_neg_get_policy_arn(self):
+        """Negative test for getting get_policy_arn"""
+        with raises(ClientError) as exc:
+            get_policy_arn("bad_policy")
+        err = exc.value.response['Error']
+        assert err['Code'] == 'ResourceNotFoundException'
+
+    def test_pos_get_thing_group_arn(self):
+        """Positive test case to return thing group arn"""
+        iot_client = client('iot')
+        n = "test_pos_get_thing_group"
+        r1 = iot_client.create_thing_group(thingGroupName=n)
+        r2 = get_thing_group_arn(thing_group_name=n)
+        assert r1['thingGroupArn'] == r2
+
+    def test_neg_get_thing_group_arn(self):
+        """Negative test for getting thing_group_arn"""
+        with raises(ClientError) as exc:
+            get_thing_group_arn("9"*64)
+        err = exc.value.response['Error']
+        assert err['Code'] == 'ResourceNotFoundException'
+
+    def test_pos_get_thing_type_arn(self):
+        """Positive test case to return thing type arn"""
+        n = "test_pos_get_thing_type"
+        iot_client = client('iot')
+        r1 = iot_client.create_thing_type(thingTypeName=n)
+        r2 = get_thing_type_arn(type_name=n)
+        assert r1['thingTypeArn'] == r2
+
+    def test_neg_get_thing_type_arn(self):
+        """Negative test for getting thing_type_arn"""
+        with raises(ClientError) as exc:
+            get_thing_type_arn("9"*64)
+        err = exc.value.response['Error']
+        assert err['Code'] == 'ResourceNotFoundException'
+
+    def test_neg_verify_queue(self):
+        """Negative test for verify_queue"""
+        with raises(ClientError) as exc:
+            verify_queue("bogus_queue")
+        err = exc.value.response['Error']
+        assert err['Code'] == 'AWS.SimpleQueueService.NonExistentQueue'
+
+    def tearDown(self):
+        s3_resource = resource("s3",region_name="us-east-1")
+        s3_bucket = s3_resource.Bucket( self.test_s3_bucket_name )
+        for key in s3_bucket.objects.all():
+            key.delete()
+        s3_bucket.delete()
