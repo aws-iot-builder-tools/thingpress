@@ -2,7 +2,7 @@ name: Thingpress Unit Test Code Coverage
 run-name: ${{ github.actor }} invoking coverage
 on: [push]
 jobs:
-    Coverage:
+    CoverageAndLinting:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
@@ -13,12 +13,15 @@ jobs:
               run: |
                 pip install -r ./requirements.txt
                 pip install fastjsonschema
+                pip install anybadge
             - name: 'Run coverage'
               run: |
                   export AWS_DEFAULT_REGION=us-east-1
                   export PYTHONPATH=$(pwd)/src/layer_utils
                   coverage run --source=src/bulk_importer,src/product_provider,src/provider_espressif,src/provider_infineon,src/provider_microchip -m pytest
                   coverage report -m
+                  lintscore=$(pylint -f json2 src/ | python3 -c "import sys, json; print(json.load(sys.stdin)['statistics']['score'])")
+                  anybadge -l pylint -v ${lintscore} -f pylint.svg 2=red 4=orange 8=yellow 10=green
             - name: Coverage Badge
               uses: tj-actions/coverage-badge-py@v2
             - name: Verify Changed files
@@ -32,28 +35,11 @@ jobs:
                 git config --local user.email "github-actions[bot]@users.noreply.github.com"
                 git config --local user.name "github-actions[bot]"
                 git add coverage.svg
-                git commit -m "Updated coverage.svg"
+                git add linting.svg
+                git commit -m "Updated coverage.svg" coverage.svg linting.svg
             - name: 'Push changes'
               if: steps.verify-changed-files.outputs.files_changed == 'true'
               uses: ad-m/github-push-action@master
               with:
                 github_token: ${{ secrets.github_token }}
                 branch: ${{ github.ref }}
-    Linting:
-        runs-on: ubuntu-latest
-        needs: Coverage
-        steps:
-          - name: 'Set environment'
-            run: |
-                export PYTHONPATH=$(pwd)/src/layer_utils
-          - uses: Silleellie/pylint-github-action@v2.1
-            with:
-              lint-path: src
-              python-version: 3.13
-              requirements-path: requirements.txt
-              readme-path: README.md
-              badge-text: PyLint
-              color-bad-score: red
-              color-ok-score: orange
-              color-good-score: yellow
-              color-perfect-score: brightgreen
