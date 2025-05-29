@@ -19,13 +19,14 @@ from moto import mock_aws
 #from unittest.mock import MagicMock, patch
 from py7zr import FileInfo
 
-from src.provider_infineon.main import lambda_handler, invoke_export
+from src.layer_utils.aws_utils import s3_object_bytes, s3_object_str
+from src.provider_infineon.main import lambda_handler
 from src.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
-def cr_fileinfo(fn:str):
+def cr_fileinfo(fn: str):
+    """Mock out FileInfo objects which are a result of 7z parsing"""
     return FileInfo(fn, None, None, None, None, None, None)
-    
 
 @mock_aws(config={
     "core": {
@@ -97,9 +98,26 @@ class TestProviderInfineon(TestCase):
         assert isinstance(x, io.BytesIO) is True
 
     def test_invoke_export(self):
-        x1 = select_certificate_set(io.BytesIO(self.test_s3_object_content.read()),
-                               "E0E0")
-        x2 = send_certificates(x1, self.test_sqs_queue_name)
+        o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False)
+        assert isinstance(o, io.BytesIO) is True
+        x1 = select_certificate_set(o, "E0E0")
+        send_certificates(x1, self.test_sqs_queue_name)
+
+    def test_pos_lambda_handler_1(self):
+        """Invoke the main handler with one file"""
+        e = { "Records": [
+                { "s3": {
+                    "bucket": { "name": self.test_s3_bucket_name },
+                    "object": { "key": self.artifact },
+
+            }}]}
+        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
+        os.environ['CERT_TYPE']="E0E0"
+        c = None
+        v = lambda_handler(e, c)
+        os.environ['QUEUE_TARGET']=""
+        os.environ['CERT_TYPE']=""
+        assert v == e
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

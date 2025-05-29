@@ -13,7 +13,7 @@ from moto import mock_aws, settings
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 
-from aws_utils import s3_object_stream, s3_filebuf_bytes
+from aws_utils import s3_object, s3_filebuf_bytes
 from .model_provider_espressif import LambdaS3Class
 
 @mock_aws(config={
@@ -41,14 +41,14 @@ class TestProviderEspressif(TestCase):
 
     def test_pos_s3_object_resource(self):
         """Basic pos test case for object resource"""
-        r = s3_object_stream("unit_test_s3_bucket", "manifest.csv")
+        r = s3_object("unit_test_s3_bucket", "manifest.csv")
         assert isinstance(r, io.BytesIO)
 
     def test_neg_s3_object_resource(self):
         """Basic neg test case for object resource"""
         with pytest.raises(ClientError) as e:
             # Although this returns a value, no need to define var for it
-            s3_object_stream("unit_test_s3_buckets", "manifest")
+            s3_object("unit_test_s3_buckets", "manifest")
         errstr = "An error occurred (NoSuchBucket) when calling the " \
                  "HeadObject operation: The specified bucket does not exist"
         assert str(e.value) == errstr

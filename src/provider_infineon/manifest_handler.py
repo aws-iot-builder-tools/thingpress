@@ -21,6 +21,7 @@ def verify_certtype(option: str) -> bool:
             return False
 
 def verify_certificate_set(files: list[py7zr.FileInfo], option: str) -> str:
+    """Ensure that the bundlke exists in the payload"""
     if verify_certtype(option) is False or files is None:
         return None
     p = f"_{option}_Certs.7z"
@@ -30,6 +31,7 @@ def verify_certificate_set(files: list[py7zr.FileInfo], option: str) -> str:
     return None
 
 def select_certificate_set(manifest_bundle: io.BytesIO, option: str) -> io.BytesIO:
+    """There are 3 bundles within the main payload, select which one of it exists."""
     szf = py7zr.SevenZipFile(manifest_bundle)
     f = verify_certificate_set(szf.list(), option)
     if f is None:
@@ -40,6 +42,7 @@ def select_certificate_set(manifest_bundle: io.BytesIO, option: str) -> io.Bytes
     return io.BytesIO(fcty.get(filename = f).read())
 
 def send_certificates(manifest_archive: io.BytesIO, queue_url: str):
+    "Routine to send data through queue for further processing."
     szf = py7zr.SevenZipFile(manifest_archive)
     fcty = py7io.BytesIOFactory(limit=10000)
     szf.extract(factory=fcty)
@@ -51,26 +54,9 @@ def send_certificates(manifest_archive: io.BytesIO, queue_url: str):
                                    certificate=k,
                                    queue_url=queue_url)
 
-def invoke_export(manifest_file, queue_url):
-    pass
-
-
-# There are 3 files of importance:
-# *_E0E0_Certs.7z
-# *_E0E1_Certs.7z
-# *_E0E2_Certs.7z
-#
-# any combination may be imported.
-# 
-# Certificate has filename format as:
-# <serial>_E0E0.pem
-#
-# By default, thing name will be serial number.
-# 
-# 1/ drop in full 7z which will have file format like:
-# 78211223032C7EFA_b41425b9-b42b-47fd-95c2-f981b4c61561_v1.0.7z
-#
-# 2/ extract file of type chosen (E0E0/E0E1/E0E2)
-#  # size ranges ~55kb - ~140kb
-# 
-# 3/ list files and perform extraction operation on each one.
+def invoke_export(manifest_file, queue_url, cert_type):
+    """The manifest_file must be a file-like object"""
+    """Main interface to invoke manifest processing routines"""
+    x = select_certificate_set(io.BytesIO(manifest_file), cert_type)
+    #x = select_certificate_set(io.BytesIO(manifest_file.read()), cert_type)
+    send_certificates(x, queue_url=queue_url)
