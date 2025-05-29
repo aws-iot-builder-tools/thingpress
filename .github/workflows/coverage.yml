@@ -28,7 +28,9 @@ jobs:
               uses: tj-actions/verify-changed-files@v17
               id: verify-changed-files
               with:
-                files: coverage.svg linting.svg
+                files: |
+                  coverage.svg
+                  linting.svg
             - name: 'Commit files'
               if: steps.verify-changed-files.outputs.files_changed == 'true'
               run: |
