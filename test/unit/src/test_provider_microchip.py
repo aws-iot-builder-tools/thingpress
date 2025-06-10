@@ -35,18 +35,27 @@ class TestProviderInfineon(TestCase):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
-        self.o_manifest = 'ECC608-TMNGTLSS-B.json'
-        f_manifest = './test/artifacts/' + self.o_manifest
+        self.o_manifest_tlss_b = 'ECC608-TMNGTLSS-B.json'
+        self.o_manifest_tlsu_b = 'ECC608C-TNGTLSU-B.json'
+        f_manifest_tlss_b = './test/artifacts/' + self.o_manifest_tlss_b
+        f_manifest_tlsu_b = './test/artifacts/' + self.o_manifest_tlsu_b
         self.o_validator = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
         f_validator = './test/artifacts/mchp_verifiers/' + self.o_validator
         
         s3_client = client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
-        with open(f_manifest, 'rb') as data:
+
+        with open(f_manifest_tlss_b, 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name,
-                                 Key=self.o_manifest, Body=data)
-            self.test_s3_manifest = s3_client.get_object(Bucket=self.test_s3_bucket_name,
-                                                         Key=self.o_manifest)['Body']
+                                 Key=self.o_manifest_tlss_b, Body=data)
+            self.test_s3_manifest_tlss_b = s3_client.get_object(Bucket=self.test_s3_bucket_name,
+                                                         Key=self.o_manifest_tlss_b)['Body']
+        with open(f_manifest_tlsu_b, 'rb') as data:
+            s3_client.put_object(Bucket=self.test_s3_bucket_name,
+                                 Key=self.o_manifest_tlsu_b, Body=data)
+            self.test_s3_manifest_tlsu_b = s3_client.get_object(Bucket=self.test_s3_bucket_name,
+                                                         Key=self.o_manifest_tlsu_b)['Body']
+
         with open(f_validator, 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name,
                                  Key=self.o_validator, Body=data)
@@ -65,9 +74,15 @@ class TestProviderInfineon(TestCase):
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
+    def test_neg_invoke_export(self):
+        invoke_export(s3_object_bytes(self.test_s3_bucket_name,
+                                       self.o_manifest_tlss_b, getvalue=True),
+                      s3_object_bytes(self.test_s3_bucket_name,
+                                       self.o_validator, getvalue=True),
+                      self.test_sqs_queue_name)
     def test_pos_invoke_export(self):
         invoke_export(s3_object_bytes(self.test_s3_bucket_name,
-                                       self.o_manifest, getvalue=True),
+                                       self.o_manifest_tlsu_b, getvalue=True),
                       s3_object_bytes(self.test_s3_bucket_name,
                                        self.o_validator, getvalue=True),
                       self.test_sqs_queue_name)
