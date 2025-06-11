@@ -97,8 +97,25 @@ def get_thing_group_arn(thing_group_name):
         logger.error("{this} ({thing_group_name}): {error_code} : {error_mesg}")
         raise error
 
-def get_policy_arn(policy_name):
+def get_thing_group_policy(thing_group_name: str) -> str:
+    """Retrieves the thing group ARN"""
+    iot_client = client('iot')
+
+    try:
+        response = iot_client.describe_thing_group(thingGroupName=thing_group_name)
+        return response.get('thingGroupArn')
+    except ClientError as error:
+        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
+        error_mesg = error.response['Error']['Message'] # pylint: disable=unused-variable
+        this = inspect.stack()[1][3] # pylint: disable=unused-variable
+        logger.error("{this} ({thing_group_name}): {error_code} : {error_mesg}")
+        raise error
+
+def get_policy_arn(policy_name: str) -> str:
     """Retrieve the IoT policy ARN"""
+    if policy_name is None:
+        return None
+
     iot_client = client('iot')
     try:
         response = iot_client.get_policy(policyName=policy_name)

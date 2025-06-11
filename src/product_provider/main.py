@@ -7,31 +7,18 @@ Lambda function provides data enrichment before passing along to the importer.
 import os
 import json
 import boto3
-from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
 
-def process(payload):
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import S3Event
+from aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
+
+espressif_bucket_prefix = "thingpress-espressif-"
+infineon_bucket_prefix = "thingpress-infineon-"
+microchip_bucket_prefix = "thingpress-microchip-"
+
+def process(payload: hash, queue_url: str) -> hash:
     """Annotate payload with environment-passed variants, later this function
        will evolve to allow importing types, groups, and policies"""
-
-    queue_url = os.environ.get('QUEUE_TARGET')
-
-    # Policy is required.
-    payload['policy_name'] = os.environ.get('POLICY_NAME')
-
-    # Thing group is desired, but optional.
-    # The reason why 'None' has to be set is an environment variable
-    # on a Lambda function cannot be set to empty
-    if os.environ.get('THING_GROUP_NAME') == "None":
-        payload['thing_group_name'] = None
-    else:
-        payload['thing_group_name'] = os.environ.get('THING_GROUP_NAME')
-
-    # Thing group is desired, but optional.
-    if os.environ.get('THING_TYPE_NAME') == "None":
-        payload['thing_type_name'] = None
-    else:
-        payload['thing_type_name'] = os.environ.get('THING_TYPE_NAME')
 
     # Pass on to the queue for target processing.
     client = boto3.client("sqs")
@@ -39,11 +26,57 @@ def process(payload):
                          MessageBody=json.dumps(payload))
     return payload
 
-def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
-    """Lambda function main entry point"""
+def get_provider_queue(bucket_name: str) -> str:
+    """
+    Returns the queue related to the prefix of a given bucket
+    The cfn stack prescribes the environment variable value.
+    See the cfn template for more detail.
+    """
+    if bucket_name.startswith(espressif_bucket_prefix):
+        return os.environ.get('QUEUE_TARGET_ESPRESSIF')
+    if bucket_name.startswith(infineon_bucket_prefix):
+        return os.environ.get('QUEUE_TARGET_INFINEON')
+    if bucket_name.startswith(microchip_bucket_prefix):
+        return os.environ.get('QUEUE_TARGET_MICROCHIP')
+    return None
+
+def lambda_handler(event: S3Event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+    """
+    Lambda function main entry point. Verifies the S3 object can be read and resolves
+    inputs prior to forwarding to vendor handler queue.
+
+    This lambda function expects invocation by S3 event. There should be only one
+    event, but is processed as if multiple events were found at once.
+    
+    Expects the following environment variables to be set:
+    QUEUE_TARGET_ESPRESSIF
+    QUEUE_TARGET_INFINEON
+    QUEUE_TARGET_MICROCHIP
+    
+    Expects at least one of the following environment variables to be set:
+    POLICY_NAME
+    THING_GROUP_NAME
+
+    May have the following environment variables set:
+    THING_TYPE_NAME
+    """
     # Get the payload coming in and process it.  There might be more than one.
-    result = []
-    for record in event['Records']:
-        r = process(json.loads(record["body"]))
-        result.append(r)
-    return result
+    v_thing_group = get_thing_group_arn(os.environ.get('THING_GROUP_NAME'))
+    v_thing_type = get_thing_type_arn(os.environ.get('THING_TYPE_NAME'))
+    v_policy = get_policy_arn(os.environ.get('POLICY_NAME'))
+
+    s3_event = S3Event(event)
+    queue_url = get_provider_queue(s3_event.bucket_name)
+    data = {
+        'policy_arn': v_policy,
+        'thing_group_arn': v_thing_group,
+        'thing_type_arn': v_thing_type,
+        'bucket': s3_event.bucket_name
+    }
+
+    for record in s3_event.records:
+        # TODO: verify s3 object, for now assume it is reachable
+        # v_object = verify_s3_object(bucket, record.s3.get_object.key)
+        data['key'] = record.s3.get_object.key
+        process(data, queue_url)
+    return event
