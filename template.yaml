@@ -1,8 +1,11 @@
+# Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
+# SPDX-License-Identifier: MIT-0
+#
+# Serverless Application Model (SAM) template for infra IAC
 AWSTemplateFormatVersion: '2010-09-09'
 Transform: AWS::Serverless-2016-10-31
-Description: >
-  ThingPress instance for importing certificates via Multi Account
-  Registration at scale.
+Description: |
+  ThingPress instance for importing certificates via Multi Account Registration at scale.
 
 Globals:
   Function:
@@ -11,428 +14,560 @@ Globals:
 Metadata:
   AWS::ServerlessRepo::Application:
     Name: ThingPress
-    Description: >-
-      An application that accelerates Multi-Account Registration
-      bulk certificate provisioning for the Internet of Things.
+    Description: An application that accelerates Multi-Account Registration bulk
+      certificate provisioning for the Internet of Things.
     Author: Richard Elberger (rpcme)
     SpdxLicense: MIT-0
     LicenseUrl: LICENSE
     ReadmeUrl: README.md
-    HomePageUrl: https://github.com/awslabs/thingpress
+    HomePageUrl: https://github.com/aws-iot-builder-tools/thingpress
     SemanticVersion: 0.0.1
-    SourceCodeUrl: https://github.com/awslabs/thingpress
+    SourceCodeUrl: https://github.com/aws-iot-builder-tools/thingpress
 
 Parameters:
 
   IamUserArn:
     Default: None
-    Description: >-
-      The ARN for the user having access to the S3 bucket for uploading manifests.
+    Description: The ARN for the user having access to the S3 bucket for uploading
+      manifests.
     Type: String
 
   IoTPolicy:
     Default: None
     Type: String
-    Description: >-
-      The AWS IoT Policy that you will apply to every certificate
-      being imported. Using best practice techniques, abstract the
-      Policy using Policy variables.
+    Description: The AWS IoT Policy that you will apply to every certificate being
+      imported. Using best practice techniques, abstract the Policy using Policy
+      variables.
 
   IoTThingGroup:
     Default: None
     Type: String
-    Description: >-
-      The AWS IoT Thing Group you apply to the Thing being
-      created. Put None if no Thing Group.
+    Description: The AWS IoT Thing Group you apply to the Thing being created. Put
+      None if no Thing Group.
 
   IoTThingType:
     Default: None
     Type: String
-    Description: >-
-      The AWS IoT Thing Type you apply to the Thing being created. Put
+    Description: The AWS IoT Thing Type you apply to the Thing being created. Put
       None if no Thing Type.
 
   MicrochipVerifyCertName:
     Default: verify-cert.cer
     Type: String
-    Description: >-
-      Microchip only: The verify certificate that is provided by
-      Microchip. This must not have a .json filename suffix.
+    Description: 'Microchip only: The verify certificate that is provided by
+      Microchip. This must not have a .json filename suffix.'
+
+  InfineonCertBundleType:
+    Default: E0E0
+    Type: String
+    Description: 'Infineon only: choose from bundle E0E0, E0E1, or E0E2'
 
   ConcurrentExecutions:
     Default: '10'
     Type: Number
-    Description: >-
-      By default the concurrent executions for the bulk importer is 10
+    Description: By default the concurrent executions for the bulk importer is 10
       since the IoT Limit TPS for most APIs is 10, and there is some
       balance.  In case of throttling failure, the payload will be requeued.
 
 Resources:
-  UtilsLayer:
+  ThingpressUtilsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
       ContentUri: src/layer_utils
       CompatibleRuntimes:
         - python3.13
+      LayerName: !Sub thingpress-utils-${AWS::StackName}
+      LicenseInfo: MIT-0
+      RetentionPolicy: Retain
     Metadata:
       BuildMethod: python3.13
 
-  BulkImporterQueue:
-    Type: AWS::SQS::Queue
+  # S3 Bucket to receive Microchip manifest payload which is a
+  # JSON file having a vendor defined structure.
+  ThingpressMicrochipManifestBucket:
+    Type: AWS::S3::Bucket
     Properties:
-      QueueName: !Sub "${AWS::StackName}-Bulk-Importer"
-      VisibilityTimeout: 300
-      SqsManagedSseEnabled: true
+      BucketName: !Sub thingpress-microchip-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
 
-  BulkImporterQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
+  # S3 Bucket to receive Infineon manifest payload which is a
+  # 7-Zip compressed file having embedded compressed files.
+  ThingpressInfineonManifestBucket:
+    Type: AWS::S3::Bucket
     Properties:
-      Queues:
-        - !Ref BulkImporterQueue
-      PolicyDocument:
-        Id: BulkImporterQueuePolicyId
-        Version: "2012-10-17"
+      BucketName: !Sub thingpress-infineon-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
+
+  # S3 Bucket to receive Espressif manifest payload which is an
+  # CSV file with vendor defined structure.
+  ThingpressEspressifManifestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub thingpress-espressif-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
+
+  # Allow Espressif bucket event to invoke the product provider function
+  ThingpressProductProviderInvokeFromEspressifPerm:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressEspressifManifestBucket.Arn
+
+  # Allow Infineon bucket event to invoke the product provider function
+  ThingpressProductProviderInvokeFromInfineonPerm:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressInfineonManifestBucket.Arn
+
+  # Allow Microchip bucket event to invoke the product provider function
+  ThingpressProductProviderInvokeFromMicrochipPerm:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: s3.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressMicrochipManifestBucket.Arn
+
+  # Invoked on S3 event, the product provider evaluates configuration
+  # prior to passing along normalized configuration (object ARN resolution,
+  # S3 object validation) to the supplier-specific queue.
+  ThingpressProductProviderFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub Thingpress-Product-Provider-Role-${AWS::StackName}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: aws-api-calls
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iot:DescribeThingGroup
+                  - iot:DescribeThingType
+                  - iot:GetPolicy
+                  - sqs:GetQueueUrl
+                  - sqs:SendMessage
+                Resource: '*'
+      AssumeRolePolicyDocument:
         Statement:
-          - Sid: BulkImporterQueuePolicySId
-            Action:
-              - sqs:SendMessage
-              - sqs:ReceiveMessage
-            Effect: Allow
-            Resource: !GetAtt BulkImporterQueue.Arn
+          - Effect: Allow
             Principal:
-              AWS:
-                - !GetAtt BulkImporterFunctionRole.Arn
-                - !GetAtt ProductProviderFunctionRole.Arn
-
-  BulkImporterFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/bulk_importer/
-      Handler: main.lambda_handler
-      Runtime: python3.13
-      Role: !GetAtt BulkImporterFunctionRole.Arn
-      ReservedConcurrentExecutions: !Ref ConcurrentExecutions
-      Timeout: 300
-      Layers:
-        - !Ref UtilsLayer
-      Environment:
-        Variables:
-          QUEUE_TARGET: !Ref BulkImporterQueue
-      Events:
-        QueueEvent:
-          Type: SQS
-          Properties:
-            BatchSize: 10
-            Enabled: true
-            Queue: !GetAtt BulkImporterQueue.Arn
-
-  ProductProviderQueue:
-    Type: AWS::SQS::Queue
-    Properties:
-      QueueName: !Sub "${AWS::StackName}-Product-Provider"
-      VisibilityTimeout: 300
-      SqsManagedSseEnabled: true
-
-  ProductProviderQueuePolicy:
-    Type: AWS::SQS::QueuePolicy
-    Properties:
-      Queues:
-        - !Ref ProductProviderQueue
-      PolicyDocument:
-        Id: ProductProviderQueuePolicyId
-        Version: "2012-10-17"
-        Statement:
-          - Sid: ProductProviderQueuePolicySId
+              Service: lambda.amazonaws.com
             Action:
-              - sqs:SendMessage
-              - sqs:ReceiveMessage
-            Effect: Allow
-            Resource: !GetAtt ProductProviderQueue.Arn
-            Principal:
-              AWS:
-                - !GetAtt MicrochipSupplierProviderFunctionRole.Arn
-                - !GetAtt ProductProviderFunctionRole.Arn
-                - !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
+              - sts:AssumeRole
 
-  ProductProviderFunction:
+  ThingpressProductProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/product_provider/
       Handler: main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ProductProviderFunctionRole.Arn
+      Role: !GetAtt ThingpressProductProviderFunctionRole.Arn
       Timeout: 300
       Layers:
-        - !Ref UtilsLayer
+        - !Ref ThingpressUtilsLayer
       Environment:
         Variables:
-          QUEUE_TARGET: !Ref BulkImporterQueue
+          QUEUE_TARGET_ESPRESSIF: !Ref ThingpressEspressifProviderQueue
+          QUEUE_TARGET_INFINEON: !Ref ThingpressInfineonProviderQueue
+          QUEUE_TARGET_MICROCHIP: !Ref ThingpressMicrochipProviderQueue
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType
       Events:
-        QueueEvent:
-          Type: SQS
-          Properties:
-            BatchSize: 10
-            Enabled: true
-            Queue: !GetAtt ProductProviderQueue.Arn
-
-
-  MicrochipSupplierProviderBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${AWS::StackName}-microchip"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: 'aws:kms'
-              KMSMasterKeyID: 'alias/aws/s3'
-      VersioningConfiguration:
-        Status: Enabled
-
-  InfineonSupplierProviderBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${AWS::StackName}-infineon"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: 'aws:kms'
-              KMSMasterKeyID: 'alias/aws/s3'
-      VersioningConfiguration:
-        Status: Enabled
-
-  ESP32S3SupplierProviderBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub "${AWS::StackName}-esp32s3"
-      BucketEncryption:
-        ServerSideEncryptionConfiguration:
-          - ServerSideEncryptionByDefault:
-              SSEAlgorithm: 'aws:kms'
-              KMSMasterKeyID: 'alias/aws/s3'
-      VersioningConfiguration:
-        Status: Enabled
-
-  MicrochipSupplierProviderFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/provider_microchip/
-      Handler: main.lambda_handler
-      Runtime: python3.13
-      Role: !GetAtt MicrochipSupplierProviderFunctionRole.Arn
-      Timeout: 900
-      Layers:
-        - !Ref UtilsLayer
-      MemorySize: 2048
-      Environment:
-        Variables:
-          QUEUE_TARGET: !Ref ProductProviderQueue
-          VERIFY_CERT: !Ref MicrochipVerifyCertName
-      Events:
-        S3Event:
+        EV1:
           Type: S3
           Properties:
-            Bucket: !Ref MicrochipSupplierProviderBucket
+            Bucket: !Ref ThingpressInfineonManifestBucket
             Events: s3:ObjectCreated:*
             Filter:
               S3Key:
                 Rules:
                   - Name: Suffix
-                    Value: .json
-  InfineonSupplierProviderFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/provider_infineon/
-      Handler: main.lambda_handler
-      Runtime: python3.13
-      Role: !GetAtt InfineonSupplierProviderFunctionRole.Arn
-      Timeout: 900
-      Layers:
-        - !Ref UtilsLayer
-      MemorySize: 2048
-      Environment:
-        Variables:
-          QUEUE_TARGET: !Ref ProductProviderQueue
-      Events:
-        S3Event:
+                    Value: .7z
+        EV2:
           Type: S3
           Properties:
-            Bucket: !Ref InfineonSupplierProviderBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: Suffix
-                    Value: .xml
-
-  ESP32S3SupplierProviderFunction:
-    Type: AWS::Serverless::Function
-    Properties:
-      CodeUri: src/provider_espressif/
-      Handler: main.lambda_handler
-      Runtime: python3.13
-      Role: !GetAtt ESP32S3SupplierProviderFunctionRole.Arn
-      Timeout: 900
-      Layers:
-        - !Ref UtilsLayer
-      MemorySize: 2048
-      Environment:
-        Variables:
-          QUEUE_TARGET: !Ref ProductProviderQueue
-      Events:
-        S3Event:
-          Type: S3
-          Properties:
-            Bucket: !Ref ESP32S3SupplierProviderBucket
+            Bucket: !Ref ThingpressEspressifManifestBucket
             Events: s3:ObjectCreated:*
             Filter:
               S3Key:
                 Rules:
                   - Name: Suffix
                     Value: .csv
+        EV3:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressMicrochipManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .json
 
-  MicrochipSupplierProviderFunctionRole:
+  # The product provider lambda function sends a message to this queue if the
+  # manifest source comes from the Espressif bucket.
+  ThingpressEspressifProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Espressif-Provider-${AWS::StackName}
+      VisibilityTimeout: 900
+      SqsManagedSseEnabled: true
+
+  ThingpressEspressifProviderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressEspressifProviderQueue
+      PolicyDocument:
+        Id: ProviderQueuePolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ProviderQueuePolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource:
+              - !GetAtt ThingpressEspressifProviderQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+
+  ThingpressInfineonProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Infineon-Provider-${AWS::StackName}
+      VisibilityTimeout: 900
+      SqsManagedSseEnabled: true
+
+  ThingpressInfineonProviderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressInfineonProviderQueue
+      PolicyDocument:
+        Id: ProviderQueuePolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ProviderQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource:
+              - !GetAtt ThingpressInfineonProviderQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+
+  ThingpressMicrochipProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Microchip-Provider-${AWS::StackName}
+      VisibilityTimeout: 900
+      SqsManagedSseEnabled: true
+
+  ThingpressSiliconProviderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressMicrochipProviderQueue
+      PolicyDocument:
+        Id: ProviderQueuePolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: ProviderQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource:
+              - !GetAtt ThingpressMicrochipProviderQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+
+  #--------------------------------------------------------------------------
+  # Espressif provider function configuration
+  #--------------------------------------------------------------------------
+  ThingpressEspressifProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressEspressifProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressEspressifProviderQueue.Arn
+  ThingpressEspressifProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub "${AWS::StackName}-MicrochipSupplierProviderFunctionRole"
+      RoleName: !Sub Thingpress-Espressif-Provider-Function-Role-${AWS::StackName}
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+#      Policies:
+#        - PolicyName: aws-api-calls
+#          PolicyDocument:
+#            Version: '2012-10-17'
+#            Statement:
+#              - Effect: Allow
+#                Action:
+#                  - logs:CreateLogGroups
+#                  - logs:CreateLogStream
+#                  - logs:PutLogEvents
+#                  - sqs:ChangeMessageVisibility
+#                  - sqs:DeleteMessage
+#                  - sqs:GetQueueAttributes
+#                  - sqs:ReceiveMessage
+#                  - sqs:SendMessage
+#                Resource: '*'
       AssumeRolePolicyDocument:
         Statement:
-          -
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
+  ThingpressEspressifProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/provider_espressif/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressEspressifProviderFunctionRole.Arn
+      Timeout: 900
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt ThingpressEspressifProviderQueue.Arn
 
-  InfineonSupplierProviderFunctionRole:
+  #--------------------------------------------------------------------------
+  # Infineon provider function configuration
+  #--------------------------------------------------------------------------
+  ThingpressInfineonProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressInfineonProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressInfineonProviderQueue.Arn
+  ThingpressInfineonProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub "${AWS::StackName}-InfineonSupplierProviderFunctionRole"
+      RoleName: !Sub Thingpress-Infineon-Provider-Function-Role-${AWS::StackName}
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
       AssumeRolePolicyDocument:
         Statement:
-          -
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
-  ESP32S3SupplierProviderFunctionRole:
+              - sts:AssumeRole
+  ThingpressInfineonProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/provider_infineon/
+      Handler: provider_infineon.main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressInfineonProviderFunctionRole.Arn
+      Timeout: 900
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          CERT_TYPE: !Ref InfineonCertBundleType
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt ThingpressInfineonProviderQueue.Arn
+  #--------------------------------------------------------------------------
+  # Microchip provider function configuration
+  #--------------------------------------------------------------------------
+  ThingpressMicrochipProviderInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressMicrochipProviderFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressMicrochipProviderQueue.Arn
+  ThingpressMicrochipProviderFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub "${AWS::StackName}-ESP32S3SupplierProviderFunctionRole"
+      RoleName: !Sub Thingpress-Microchip-Provider-Function-Role-${AWS::StackName}
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess'
-        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
       AssumeRolePolicyDocument:
         Statement:
-          -
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
+              - sts:AssumeRole
+  ThingpressMicrochipProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/provider_microchip/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressMicrochipProviderFunctionRole.Arn
+      Timeout: 900
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      MemorySize: 2048
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          VERIFY_CERT: !Ref MicrochipVerifyCertName
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt ThingpressMicrochipProviderQueue.Arn
 
-  BulkImporterFunctionRole:
+  #--------------------------------------------------------------------------
+  # Bulk importer queue configuration
+  #--------------------------------------------------------------------------
+  ThingpressBulkImporterQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Bulk-Importer-${AWS::StackName}
+      VisibilityTimeout: 900
+      SqsManagedSseEnabled: true
+
+  ThingpressBulkImporterQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressBulkImporterQueue
+      PolicyDocument:
+        Id: BulkImporterQueuePolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BulkImporterQueuePolicySId
+            Action:
+              - sqs:SendMessage
+              - sqs:ReceiveMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressBulkImporterQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt ThingpressBulkImporterFunctionRole.Arn
+                - !GetAtt ThingpressEspressifProviderFunctionRole.Arn
+                - !GetAtt ThingpressInfineonProviderFunctionRole.Arn
+                - !GetAtt ThingpressMicrochipProviderFunctionRole.Arn
+  #--------------------------------------------------------------------------
+  # Bulk importer function configuration
+  #--------------------------------------------------------------------------
+  ThingpressBulkImporterInvokePermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !GetAtt ThingpressBulkImporterFunction.Arn
+      Action: lambda:InvokeFunction
+      Principal: sqs.amazonaws.com
+      SourceAccount: !Ref AWS::AccountId
+      SourceArn: !GetAtt ThingpressBulkImporterQueue.Arn
+  ThingpressBulkImporterFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub "${AWS::StackName}-BulkImporterFunctionRole"
+      RoleName: !Sub Thingpress-Bulk-Importer-Function-Role-${AWS::StackName}
       ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
-        - 'arn:aws:iam::aws:policy/AWSIoTFullAccess'
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+        - arn:aws:iam::aws:policy/AWSIoTFullAccess
       AssumeRolePolicyDocument:
         Statement:
-          -
-            Effect: Allow
+          - Effect: Allow
             Principal:
               Service: lambda.amazonaws.com
             Action:
-              - 'sts:AssumeRole'
-
-  ProductProviderFunctionRole:
-    Type: AWS::IAM::Role
+              - sts:AssumeRole
+  ThingpressBulkImporterFunction:
+    Type: AWS::Serverless::Function
     Properties:
-      Path: /
-      RoleName: !Sub "${AWS::StackName}-ProductProviderFunctionRole"
-      ManagedPolicyArns:
-        - 'arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole'
-        - 'arn:aws:iam::aws:policy/AmazonSQSFullAccess'
-
-      AssumeRolePolicyDocument:
-        Statement:
-          -
-            Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action:
-              - 'sts:AssumeRole'
-
-  MicrochipSupplierProviderInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt MicrochipSupplierProviderFunction.Arn
-      Action: 'lambda:InvokeFunction'
-      Principal: 's3.amazonaws.com'
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !GetAtt MicrochipSupplierProviderBucket.Arn
-
-  InfineonSupplierProviderInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt InfineonSupplierProviderFunction.Arn
-      Action: 'lambda:InvokeFunction'
-      Principal: 's3.amazonaws.com'
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !GetAtt InfineonSupplierProviderBucket.Arn
-
-  ESP32S3SupplierProviderInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt ESP32S3SupplierProviderFunction.Arn
-      Action: 'lambda:InvokeFunction'
-      Principal: 's3.amazonaws.com'
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !GetAtt ESP32S3SupplierProviderBucket.Arn
-
-  ProductProviderInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt ProductProviderFunction.Arn
-      Action: 'lambda:InvokeFunction'
-      Principal: 'sqs.amazonaws.com'
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !GetAtt ProductProviderQueue.Arn
-
-  BulkImporterInvokePermission:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt BulkImporterFunction.Arn
-      Action: 'lambda:InvokeFunction'
-      Principal: 'sqs.amazonaws.com'
-      SourceAccount: !Ref 'AWS::AccountId'
-      SourceArn: !GetAtt BulkImporterQueue.Arn
+      CodeUri: src/bulk_importer/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressBulkImporterFunctionRole.Arn
+      ReservedConcurrentExecutions: !Ref ConcurrentExecutions
+      Timeout: 300
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+      Events:
+        QueueEvent:
+          Type: SQS
+          Properties:
+            BatchSize: 10
+            Enabled: true
+            Queue: !GetAtt ThingpressBulkImporterQueue.Arn
 
 Outputs:
+  EspressifIngestPoint:
+    Description: The Amazon S3 bucket for uploading Espressif manifests (CSV)
+    Value: !Ref ThingpressEspressifManifestBucket
   InfineonIngestPoint:
-    Description: >-
-      The Amazon S3 bucket for uploading Infineon manifests (XML)
-    Value: !Ref InfineonSupplierProviderBucket
+    Description: The Amazon S3 bucket for uploading Infineon manifests (7z)
+    Value: !Ref ThingpressInfineonManifestBucket
   MicrochipIngestPoint:
-    Description: >-
-      The Amazon S3 bucket for uploading Microchip manifests (JSON)
-    Value: !Ref MicrochipSupplierProviderBucket
+    Description: The Amazon S3 bucket for uploading Microchip manifests (JSON)
+    Value: !Ref ThingpressMicrochipManifestBucket

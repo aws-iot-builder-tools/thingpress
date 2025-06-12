@@ -16,9 +16,9 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from boto3 import resource, client
-from src.product_provider.main import lambda_handler, process
+from src.product_provider.main import lambda_handler, process, get_provider_queue
 
-from .model_bulk_importer import LambdaSQSClass
+from .model_product_provider import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={
     "core": {
@@ -30,6 +30,56 @@ from .model_bulk_importer import LambdaSQSClass
 class TestBulkImporter(TestCase):
     """Test cases for bulk importer lambda function"""
     def setUp(self):
+        self.obj_dir = "./test/artifacts/"
+        self.obj_espressif = "manifest-espressif.csv"
+        self.obj_infineon = "manifest-infineon.7z"
+        self.obj_microchip = "ECC608C-TNGTLSU-B.json"
+        self.bucket_espressif_pos = "thingpress-espressif-stackname"
+        self.bucket_espressif_neg = "thingpress-espressi-stackname"
+        self.bucket_infineon_pos = "thingpress-infineon-stackname"
+        self.bucket_infineon_neg = "thingpress-infineo-stackname"
+        self.bucket_microchip_pos = "thingpress-microchip-stackname"
+        self.bucket_microchip_neg = "thingpress-microchi-stackname"
+
+        self.obj_espressif_local = self.obj_dir + self.obj_espressif
+        self.obj_infineon_local = self.obj_dir + self.obj_infineon
+        self.obj_microchip_local = self.obj_dir + self.obj_microchip
+
+        # QUEUE_TARGET_ESPRESSIF
+        self.env_queue_target_espressif = "Thingpress-Espressif-Provider-stackname"
+        # QUEUE_TARGET_INFINEON
+        self.env_queue_target_infineon = "Thingpress-Infineon-Provider-stackname"
+        # QUEUE_TARGET_MICROCHIP
+        self.env_queue_target_microchip = "Thingpress-Microchip-Provider-stackname"
+        # env: POLICY_NAME
+        self.env_policy_name_pos = "myPolicy"
+        self.env_policy_name_neg = "myBadPolicy"
+        # env: THING_GROUP_NAME
+        self.env_thing_group_name_pos = "myThingGroup"
+        self.env_thing_group_name_neg = "myBadThingGroup"
+        # env: THING_TYPE_NAME
+        self.env_thing_type_name_pos = "myThingType"
+        self.env_thing_type_name_neg = "myBadThingType"
+
+        s3_client = client('s3', region_name="us-east-1")
+
+        s3_client.create_bucket(Bucket = self.bucket_espressif_pos )
+        s3_client.create_bucket(Bucket = self.bucket_espressif_neg )
+        s3_client.create_bucket(Bucket = self.bucket_infineon_pos )
+        s3_client.create_bucket(Bucket = self.bucket_infineon_neg )
+        s3_client.create_bucket(Bucket = self.bucket_microchip_pos )
+        s3_client.create_bucket(Bucket = self.bucket_microchip_neg )
+
+        self.mocked_s3_espressif_pos = LambdaS3Class({
+            "resource" : resource('s3'),
+            "bucket_name" : self.bucket_espressif_pos })
+
+        with open(self.obj_espressif_local, 'rb') as data:
+            s3_client.put_object(Bucket=self.bucket_espressif_pos,
+                                 Key=self.obj_espressif,
+                                 Body=data)
+
+
         self.test_sqs_queue_name = "provider"
         sqs_client = client('sqs', region_name="us-east-1")
         sqs_client.create_queue(QueueName=self.test_sqs_queue_name)
@@ -38,21 +88,29 @@ class TestBulkImporter(TestCase):
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
-#    def test_pos_process_1(self):
-#        """Must have either a policy and/or group defined"""
-#        #bucket = "b"
-#        #object = "o"
-#        #os.environ['POLICY_NAME'] = ""
-#        #os.environ['THING_GROUP_NAME'] = ""
-#        #os.environ['THING_TYPE_NAME'] = ""
-#        #os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-#
-#        errstr = "At least one of Policy or Group with a Policy must be defined."
-#        with raises(Exception) as e:
-#            verify_policy(None, None)
-#
-#        assert str(e.value) == errstr
-#
+    def test_gpq_espressif_pos(self):
+        os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
+        assert get_provider_queue(self.bucket_espressif_pos) == self.env_queue_target_espressif
+    def test_gpq_infineon_pos(self):
+        os.environ['QUEUE_TARGET_INFINEON'] = self.env_queue_target_infineon
+        assert get_provider_queue(self.bucket_infineon_pos) == self.env_queue_target_infineon
+    def test_gpq_microchip_pos(self):
+        os.environ['QUEUE_TARGET_MICROCHIP'] = self.env_queue_target_microchip
+        assert get_provider_queue(self.bucket_microchip_pos) == self.env_queue_target_microchip
+
+    def test_gpq_espressif_neg(self):
+        os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
+        assert get_provider_queue(self.bucket_espressif_neg) is None
+    def test_gpq_infineon_neg(self):
+        os.environ['QUEUE_TARGET_INFINEON'] = self.env_queue_target_infineon
+        assert get_provider_queue(self.bucket_infineon_neg) is None
+    def test_gpq_microchip_neg(self):
+        os.environ['QUEUE_TARGET_MICROCHIP'] = self.env_queue_target_microchip
+        assert get_provider_queue(self.bucket_microchip_neg) is None
+
+
+
+
 #    def test_pos_process_2(self):
 #        """Bucket and object must be accessible"""
 

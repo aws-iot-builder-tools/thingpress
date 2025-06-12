@@ -28,6 +28,8 @@ def cr_fileinfo(fn: str):
     """Mock out FileInfo objects which are a result of 7z parsing"""
     return FileInfo(fn, None, None, None, None, None, None)
 
+
+
 @mock_aws(config={
     "core": {
         "mock_credentials": True,
@@ -38,7 +40,10 @@ def cr_fileinfo(fn: str):
 class TestProviderInfineon(TestCase):
     """Infineon test cases"""
     def setUp(self):
+        # Objects that will give events
+
         self.artifact = "manifest-infineon.7z"
+
         self.artifact_local = "./test/artifacts/manifest-infineon.7z"
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None

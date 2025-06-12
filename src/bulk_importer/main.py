@@ -19,7 +19,6 @@ from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
-from aws_utils import get_thing_type_arn, get_thing_group_arn, get_policy_arn
 from cert_utils import get_certificate_fingerprint
 
 logger = logging.getLogger()
@@ -62,6 +61,8 @@ def get_thing(thing_name: str) -> str:
 
 def process_policy(policy_name, certificate_id):
     """Attaches the IoT policy to the certificate"""
+    if policy_name is None:
+        return
     iot_client = boto3client('iot')
     iot_client.attach_policy(policyName=policy_name,
                              target=get_certificate_arn(certificate_id))
@@ -145,15 +146,13 @@ def process_certificate(config, requeue_cb):
                   "Role. Unable to reach IoT Core object.")
         return None
 
-def process_thing_group(thing_group_name, thing_name):
+def process_thing_group(thing_group_arn, thing_arn):
     """Attaches the configured thing group to the iot thing"""
+    if thing_group_arn is None:
+        return
     iot_client = boto3client('iot')
     try:
-        thing_group_arn = get_thing_group_arn(thing_group_name)
-        thing_arn = get_thing(thing_name)
-        iot_client.add_thing_to_thing_group(thingGroupName=thing_group_name,
-                                            thingGroupArn=thing_group_arn,
-                                            thingName=thing_name,
+        iot_client.add_thing_to_thing_group(thingGroupArn=thing_group_arn,
                                             thingArn=thing_arn,
                                             overrideDynamicGroups=False)
     except ClientError as error:
@@ -178,32 +177,18 @@ def get_name_from_certificate(certificate_id):
 
 def process_sqs(config):
     """Main processing function to procedurally run through processing steps."""
-    policy_name = config.get('policy_name')
-    thing_group_name = config.get('thing_group_name')
-    thing_type_name = config.get('thing_type_name')
-
     certificate_id = process_certificate(config, requeue)
+    process_thing(config.get('thing'),
+                  certificate_id,
+                  config.get('thing_type_arn'))
+    process_policy(config.get('policy_arn'),
+                   certificate_id)
+    process_thing_group(config.get('thing_group_arn'),
+                        config.get('thing'))
 
-    if certificate_id is None:
-        thing_name = config['thing']
-    else:
-        thing_name = get_name_from_certificate(certificate_id)
-
-    process_thing(thing_name, certificate_id, thing_type_name)
-    process_policy(policy_name, certificate_id)
-    process_thing_group(thing_group_name, thing_name)
-
-def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event: SQSEvent,
+                   context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """Lambda function main entry point"""
-    if event.get('Records') is None:
-        print("ERROR: Configuration incorrect: no event record on invoke")
-        return {
-            "statusCode": 400,
-            "body": json.dumps({
-                "message": "No SQS event records available for processing."
-            })
-        }
-
     for record in event['Records']:
         if record.get('eventSource') == 'aws:sqs':
             config = json.loads(record["body"])
