@@ -6,7 +6,7 @@ import io
 import py7zr
 import py7zr.io as py7io
 from cert_utils import format_certificate, get_cn
-from aws_utils import queue_manifest_certificate
+from aws_utils import s3_object_bytes, send_sqs_message
 
 def verify_certtype(option: str) -> bool:
     """ Check type selection for import """
@@ -50,13 +50,21 @@ def send_certificates(manifest_archive: io.BytesIO, queue_url: str):
         j = fcty.get(filename = x.filename).read().decode('ascii')
         k = format_certificate(j)
         l = get_cn(j)
-        queue_manifest_certificate(identity=l,
-                                   certificate=k,
-                                   queue_url=queue_url)
+        config = {
+            'thing': l,
+            'certificate': k
+        }
+        send_sqs_message(config=config,
+                         queue_url=queue_url)
 
-def invoke_export(manifest_file, queue_url, cert_type):
-    """The manifest_file must be a file-like object"""
-    """Main interface to invoke manifest processing routines"""
-    x = select_certificate_set(io.BytesIO(manifest_file), cert_type)
+def invoke_export(config, queue_url, cert_type):
+    """
+    The manifest_file must be a file-like object
+    Main interface to invoke manifest processing routines
+    """
+    manifest_bytes = s3_object_bytes(config['bucket'],
+                                    config['key'],
+                                    getvalue=True)
+    x = select_certificate_set(io.BytesIO(manifest_bytes.decode()), cert_type)
     #x = select_certificate_set(io.BytesIO(manifest_file.read()), cert_type)
     send_certificates(x, queue_url=queue_url)
