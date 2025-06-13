@@ -20,8 +20,8 @@ from moto import mock_aws
 from py7zr import FileInfo
 
 from src.layer_utils.aws_utils import s3_object_bytes
-from src.provider_infineon.main import lambda_handler
-from src.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
+from src.provider_infineon.provider_infineon.main import lambda_handler
+from src.provider_infineon.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
 def cr_fileinfo(fn: str):
@@ -106,7 +106,11 @@ class TestProviderInfineon(TestCase):
         o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False)
         assert isinstance(o, io.BytesIO) is True
         x1 = select_certificate_set(o, "E0E0")
-        send_certificates(x1, self.test_sqs_queue_name)
+        config = {
+            'bucket': self.test_s3_bucket_name,
+            'key': self.artifact
+        }
+        send_certificates(x1, config, self.test_sqs_queue_name)
 
     def test_pos_lambda_handler_1(self):
         """Invoke the main handler with one file"""

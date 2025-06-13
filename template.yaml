@@ -462,7 +462,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_microchip/
-      Handler: main.lambda_handler
+      Handler: provider_microchip.main.lambda_handler
       Runtime: python3.13
       Role: !GetAtt ThingpressMicrochipProviderFunctionRole.Arn
       Timeout: 900

@@ -18,7 +18,7 @@ from moto import mock_aws
 #from moto import mock_aws, settings
 #from unittest.mock import MagicMock, patch
 
-from src.provider_microchip.main import lambda_handler, invoke_export
+from src.provider_microchip.provider_microchip.main import lambda_handler, invoke_export
 from src.layer_utils.aws_utils import s3_object_bytes
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
