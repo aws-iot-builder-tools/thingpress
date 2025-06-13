@@ -6,10 +6,11 @@ Lambda function to decompose Infineon based certificate manifest(s) and begin
 the import processing pipeline
 """
 import os
+import json
 import logging
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.utilities.data_classes import S3Event
-from aws_utils import s3_object_bytes, verify_queue
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
+from aws_utils import verify_queue
 from .manifest_handler import invoke_export, verify_certtype
 
 logger = logging.getLogger()
@@ -28,10 +29,14 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
         logger.error("Certificate type not valid. Must be E0E0, E0E1, or E0E2.")
         return None
 
-    s3_event = S3Event(event)
-    bucket = s3_event.bucket_name
-    for record in s3_event.records:
-        manifest = record.s3.get_object.key
-        manifest_content = s3_object_bytes(bucket, manifest, getvalue=True)
-        invoke_export(manifest_content, queue_url, cert_type)
+    sqs_event = SQSEvent(event)
+    queue_url = os.environ['QUEUE_TARGET']
+    if event.get('Records') is None:
+        #TODO throw an exception here
+        return None
+    for record in event['Records']:
+        if record.get('eventSource') == 'aws:sqs':
+            config = json.loads(record["body"])
+            invoke_export(config, queue_url, cert_type)
+
     return event

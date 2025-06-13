@@ -46,15 +46,11 @@ def s3_object_bytes(bucket_name: str, object_name: str, getvalue: bool=False):
 #                                     object_name=object_name)
 #    return object_stream.getvalue()
 
-def queue_manifest_certificate(identity, certificate, queue_url):
+def send_sqs_message(config, queue_url):
     """Send the thing name and certificate to sqs queue"""
     sqs_client = client("sqs")
-    payload = {
-        'thing': identity,
-        'certificate': certificate
-    }
     sqs_client.send_message( QueueUrl=queue_url,
-                             MessageBody=dumps(payload) )
+                             MessageBody=dumps(config) )
 
 def verify_queue(queue_url: str) -> bool:
     """Verify the queue exists by attempting to fetch its attributes"""
@@ -72,6 +68,8 @@ def verify_queue(queue_url: str) -> bool:
 
 def get_thing_type_arn(type_name: str) -> str:
     """Retrieves the thing type ARN"""
+    if type_name in ("None", ""):
+        return None
     iot_client = client('iot')
     try:
         response = iot_client.describe_thing_type(thingTypeName=type_name)
@@ -83,8 +81,10 @@ def get_thing_type_arn(type_name: str) -> str:
         logger.error("{this} ({thing_type_name}): {error_code} : {error_mesg}")
         raise error
 
-def get_thing_group_arn(thing_group_name):
+def get_thing_group_arn(thing_group_name: str) -> str:
     """Retrieves the thing group ARN"""
+    if thing_group_name in ("None", ""):
+        return None
     iot_client = client('iot')
 
     try:
@@ -97,8 +97,11 @@ def get_thing_group_arn(thing_group_name):
         logger.error("{this} ({thing_group_name}): {error_code} : {error_mesg}")
         raise error
 
-def get_policy_arn(policy_name):
+def get_policy_arn(policy_name: str) -> str:
     """Retrieve the IoT policy ARN"""
+    if policy_name is None:
+        return None
+
     iot_client = client('iot')
     try:
         response = iot_client.get_policy(policyName=policy_name)

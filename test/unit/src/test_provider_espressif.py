@@ -55,7 +55,11 @@ class TestProviderEspressif(TestCase):
     def test_pos_invoke_export(self):
         """ The number of items in the queue should be 7 since there are
             seven certificates in the test file """
-        invoke_export("unit_test_s3_bucket", "manifest.csv", "provider")
+        config = {
+            'bucket': "unit_test_s3_bucket",
+            'key': "manifest.csv"
+        }
+        invoke_export(config, "provider")
         sqs_client = client("sqs", "us-east-1")
         sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
