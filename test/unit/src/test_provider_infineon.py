@@ -9,6 +9,7 @@ set to the environment.
 """
 import os
 import io
+import json
 from unittest import TestCase
 import pytest
 
@@ -114,12 +115,17 @@ class TestProviderInfineon(TestCase):
 
     def test_pos_lambda_handler_1(self):
         """Invoke the main handler with one file"""
-        e = { "Records": [
-                { "s3": {
-                    "bucket": { "name": self.test_s3_bucket_name },
-                    "object": { "key": self.artifact },
+        r1 = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.artifact
+        }
 
-            }}]}
+        e = { "Records": [{
+                    'eventSource': 'aws:sqs',
+                    'body': json.dumps(r1)
+                }]
+            }
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
         os.environ['CERT_TYPE']="E0E0"
         c = None

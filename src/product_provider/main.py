@@ -11,7 +11,7 @@ import logging
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event
-from aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
+from aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, send_sqs_message
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -19,17 +19,6 @@ logger.setLevel("INFO")
 ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
 INFINEON_BUCKET_PREFIX = "thingpress-infineon-"
 MICROCHIP_BUCKET_PREFIX = "thingpress-microchip-"
-
-def process(payload: hash, queue_url: str) -> hash:
-    """Annotate payload with environment-passed variants, later this function
-       will evolve to allow importing types, groups, and policies"""
-
-    # Pass on to the queue for target processing.
-    client = boto3.client("sqs")
-    logger.info("Sending payload to queue {queue_url}")
-    client.send_message( QueueUrl=queue_url,
-                         MessageBody=json.dumps(payload))
-    return payload
 
 def get_provider_queue(bucket_name: str) -> str:
     """
@@ -77,7 +66,7 @@ def lambda_handler(event: S3Event,
         logger.error("Queue URL could not be resolved. Exiting.")
         return None
 
-    data = {
+    config = {
         'policy_arn': os.environ.get('POLICY_NAME'),
         'thing_group_arn': v_thing_group,
         'thing_type_arn': v_thing_type,
@@ -87,7 +76,7 @@ def lambda_handler(event: S3Event,
     for record in s3_event.records:
         # TODO: verify s3 object, for now assume it is reachable
         # v_object = verify_s3_object(bucket, record.s3.get_object.key)
-        data['key'] = record.s3.get_object.key
+        config['key'] = record.s3.get_object.key
+        send_sqs_message(config, queue_url)
         logger.info("Processing data for object {record.s3.get_object.key}")
-        process(data, queue_url)
     return event

@@ -42,9 +42,9 @@ def get_certificate_arn(certificate_id):
         return response["certificateDescription"].get("certificateArn")
     except ClientError as error:
         error_code = error.response['Error']['Code']
-        error_message = error.response['Error']['Message'] # pylint: disable=unused-variable
+        error_message = error.response['Error']['Message']
         if error_code == 'ResourceNotFoundException':
-            logger.error("get_certificate_arn failed: {error_message}")
+            logger.error("get_certificate_arn failed: %s", error_message)
         # TODO: this should raise an exception
         raise error
 #TODO: change this method to get_thing_arn
@@ -157,23 +157,6 @@ def process_thing_group(thing_group_arn, thing_arn):
                                             overrideDynamicGroups=False)
     except ClientError as error:
         raise error
-
-def get_name_from_certificate(certificate_id):
-    """Assume the certificate cn is the thing name.
-       TODO: Evaluate for deprecation, thing name identifier better
-             evaluated in the vendor specific provider.
-    """
-    iot_client = boto3client('iot')
-    response = iot_client.describe_certificate(certificateId=certificate_id)
-    certificate_text = response["certificateDescription"].get("certificatePem")
-    certificate_obj = x509.load_pem_x509_certificate(data=certificate_text.encode('ascii'),
-                                                     backend=default_backend())
-    cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
-    cn.replace(" ", "")
-    # TODO: This must be really old because thing name is prescribed to the
-    #       sqs message from the beginning, this might be eliminated
-    logger.info("Certificate common name [%s] to be IoT Thing name", cn)
-    return cn
 
 def process_sqs(config):
     """Main processing function to procedurally run through processing steps."""

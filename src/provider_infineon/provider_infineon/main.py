@@ -31,9 +31,16 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
 
     sqs_event = SQSEvent(event)
     queue_url = os.environ['QUEUE_TARGET']
+
+    # ensure this entry was invoked by event
     if event.get('Records') is None:
-        #TODO throw an exception here
         return None
+
+    # ensure all records are sqs type
+    for record in event['Records']:
+        if record.get('eventSource') != 'aws:sqs':
+            return None
+
     for record in event['Records']:
         if record.get('eventSource') == 'aws:sqs':
             config = json.loads(record["body"])

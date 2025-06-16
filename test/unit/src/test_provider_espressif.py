@@ -9,8 +9,8 @@ set to the environment.
 """
 
 
-#import sys
 import os
+import json
 from unittest import TestCase
 from unittest.mock import MagicMock, patch
 
@@ -32,13 +32,14 @@ class TestProviderEspressif(TestCase):
     """Unit tests for the espressif provider module"""
     def setUp(self):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
+        self.test_s3_key_name = "manifest.csv"
         self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
         s3_client = client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
         with open('./test/artifacts/manifest-espressif.csv', 'rb') as data:
-            s3_client.put_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv", Body=data)
-            self.test_s3_object_content = s3_client.get_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv")['Body']
+            s3_client.put_object(Bucket=self.test_s3_bucket_name, Key=self.test_s3_key_name, Body=data)
+            self.test_s3_object_content = s3_client.get_object(Bucket=self.test_s3_bucket_name, Key=self.test_s3_key_name)['Body']
         mocked_s3_resource = resource("s3")
         mocked_s3_resource = { "resource" : resource('s3'),
                                "bucket_name" : self.test_s3_bucket_name }
@@ -69,17 +70,23 @@ class TestProviderEspressif(TestCase):
 
     def test_pos_lambda_handler_1(self):
         """Invoke the main handler with one file"""
-        e = { "Records": [
-                { "s3": {
-                    "bucket": { "name": "unit_test_s3_bucket" },
-                    "object": { "key": "manifest.csv" },
+        r1 = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.test_s3_key_name
+        }
 
-            }}]}
+        e = { "Records": [{
+                    'eventSource': 'aws:sqs',
+                    'body': json.dumps(r1)
+                }]
+            }
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
         c = None
         v = lambda_handler(e, c)
         os.environ['QUEUE_TARGET']=""
         assert v == e
+
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

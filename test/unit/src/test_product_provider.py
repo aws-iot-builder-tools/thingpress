@@ -5,18 +5,11 @@
 Unit tests for bulk_importer
 """
 import os
-import base64
-import copy
 import json
 from unittest import TestCase
-from pytest import raises
 from moto import mock_aws
-
-from cryptography import x509
-from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization
 from boto3 import resource, client
-from src.product_provider.main import lambda_handler, process, get_provider_queue
+from src.product_provider.main import lambda_handler, get_provider_queue
 
 from .model_product_provider import LambdaS3Class, LambdaSQSClass
 
@@ -80,12 +73,12 @@ class TestBulkImporter(TestCase):
                                  Body=data)
 
 
-        self.test_sqs_queue_name = "provider"
+
         sqs_client = client('sqs', region_name="us-east-1")
-        sqs_client.create_queue(QueueName=self.test_sqs_queue_name)
+        sqs_client.create_queue(QueueName=self.env_queue_target_espressif)
         mocked_sqs_resource = resource("sqs")
         mocked_sqs_resource = { "resource" : resource('sqs'),
-                                "queue_name" : self.test_sqs_queue_name }
+                                "queue_name" : self.env_queue_target_espressif }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
     def test_gpq_espressif_pos(self):
@@ -109,97 +102,119 @@ class TestBulkImporter(TestCase):
         assert get_provider_queue(self.bucket_microchip_neg) is None
 
 
+    def test_pos_invoke_export(self):
+        """ The number of items in the queue should be 7 since there are
+            seven certificates in the test file """
+
+        os.environ['POLICY_NAME'] = 'dev_policy'
+        os.environ['THING_GROUP_NAME'] = "None"
+        os.environ['THING_TYPE_NAME'] = "None"
+        os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
 
 
-#    def test_pos_process_2(self):
-#        """Bucket and object must be accessible"""
+        policy_document = {
+	        "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "iot:Connect"
+                    ],
+                    "Resource": "arn:aws:iot:us-east-1:123456789012:client/client1",
+                    "Condition": {
+                        "ForAllValues:StringEquals": {
+                            "iot:ConnectAttributes": [
+                                "PersistentConnect",
+                                "LastWill"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
+
+        s3_event = {
+            'Records': [
+                {
+                    'eventSource': 'aws:s3',
+                    's3': {
+                        'bucket': {
+                            'name': self.bucket_espressif_pos,
+                        },
+                        'object': {
+                            'key': self.obj_espressif,
+                        }
+                    }
+                }
+            ]
+        }
+        iotc = client('iot')
+        iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
+
+        lambda_handler(s3_event, None)
+        sqs_client = client("sqs", "us-east-1")
+        sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.env_queue_target_espressif)
+        sqs_queue_url = sqs_queue_url_r['QueueUrl']
+        p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url,
+                                            AttributeNames=['ApproximateNumberOfMessages'])
+        assert p['Attributes']['ApproximateNumberOfMessages'] == '1'
 
 
+    def test_neg_invoke_export(self):
+        """ The number of items in the queue should be 7 since there are
+            seven certificates in the test file """
 
-#        with open('./test/artifacts/single.pem', 'rb') as data:
-#            pem_obj = x509.load_pem_x509_certificate(data.read(),
-#                                                     backend=default_backend())
-#            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-#            cert = str(base64.b64encode(block.encode('ascii')))
-#            c = {'certificate': cert}
-#            d = copy.deepcopy(c)
-#            d['policy_name'] = "my_policy"
-#            d['thing_group_name'] = "my_thing_group"
-#            d['thing_type_name'] = "my_thing_type"
-#
-#            os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-#            os.environ['POLICY_NAME'] = d['policy_name']
-#            os.environ['THING_GROUP_NAME'] = d['thing_group_name']
-#            os.environ['THING_TYPE_NAME'] = d['thing_type_name']
-#            r = process(c)
-#            assert r == d
+        os.environ['POLICY_NAME'] = 'dev_policy'
+        os.environ['THING_GROUP_NAME'] = "None"
+        os.environ['THING_TYPE_NAME'] = "None"
+        os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
 
-#    def test_pos_process_2(self):
-#        """Positive test case for processing certificate"""
-#        with open('./test/artifacts/single.pem', 'rb') as data:
-#            pem_obj = x509.load_pem_x509_certificate(data.read(),
-#                                                     backend=default_backend())
-#            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-#            cert = str(base64.b64encode(block.encode('ascii')))
-#            c = {'certificate': cert}
-#            d = copy.deepcopy(c)
-#            d['policy_name'] = "my_policy"
-#            d['thing_group_name'] = None
-#            d['thing_type_name'] = None
-#
-#            os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-#            os.environ['POLICY_NAME'] = d['policy_name']
-#            os.environ['THING_GROUP_NAME'] = "None"
-#            os.environ['THING_TYPE_NAME'] = "None"
-#            r = process(c)
-#            assert r == d
+        policy_document = {
+	        "Version": "2012-10-17",
+            "Statement": [
+                {
+                    "Effect": "Allow",
+                    "Action": [
+                        "iot:Connect"
+                    ],
+                    "Resource": "arn:aws:iot:us-east-1:123456789012:client/client1",
+                    "Condition": {
+                        "ForAllValues:StringEquals": {
+                            "iot:ConnectAttributes": [
+                                "PersistentConnect",
+                                "LastWill"
+                            ]
+                        }
+                    }
+                }
+            ]
+        }
 
-#    def test_pos_lambda_handler(self):
-#        """Invoke with an sqs event"""
-#        rcd = { "Records": [
-#                {
-#                "messageId": "059f36b4-87a3-44ab-83d2-661975830a7d",
-#                "receiptHandle": "AQEBwJnKyrHigUMZj6rYigCgxlaS3SLy0a...",
-#                "body": "Test message.",
-#                "attributes": {
-#                "ApproximateReceiveCount": "1",
-#                "SentTimestamp": "1545082649183",
-#                "SenderId": "AIDAIENQZJOLO23YVJ4VO",
-#                "ApproximateFirstReceiveTimestamp": "1545082649185"
-#                },
-#                "messageAttributes": {},
-#                "md5OfBody": "e4e68fb7bd0e697a0ae8f1bb342846b3",
-#                "eventSource": "aws:sqs",
-#                "eventSourceARN": "arn:aws:sqs:us-east-2:123456789012:my-queue",
-#                "awsRegion": "us-east-2"
-#                },
-#            ]
-#        }
-#
-#        with open('./test/artifacts/single.pem', 'rb') as data:
-#            pem_obj = x509.load_pem_x509_certificate(data.read(),
-#                                                     backend=default_backend())
-#            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-#            cert = str(base64.b64encode(block.encode('ascii')))
-#            c = {'certificate': cert}
-#            rcd['Records'][0]['body'] = json.dumps(c)
-#            d = copy.deepcopy(c)
-#            d['policy_name'] = "my_policy"
-#            d['thing_group_name'] = "my_thing_group"
-#            d['thing_type_name'] = "my_thing_type"
-#            os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-#            os.environ['POLICY_NAME'] = d['policy_name']
-#            os.environ['THING_GROUP_NAME'] = d['thing_group_name']
-#            os.environ['THING_TYPE_NAME'] = d['thing_type_name']
-#            r = lambda_handler(rcd, None)
-#            # The result is an array of processed records, so our fabricated certificate
-#            # needs to be in array context
-#            assert r == [d]
+        s3_event = {
+            'Records': [
+                {
+                    'eventSource': 'aws:s3',
+                    's3': {
+                        'bucket': {
+                            'name': self.bucket_espressif_neg,
+                        },
+                        'object': {
+                            'key': self.obj_espressif,
+                        }
+                    }
+                }
+            ]
+        }
+        iotc = client('iot')
+        iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
+
+        r = lambda_handler(s3_event, None)
+        assert r is None
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")
         sqs_client = client("sqs", "us-east-1")
-        sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)
+        sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.env_queue_target_espressif)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         sqs_resource = sqs_resource.Queue(url=sqs_queue_url)
         sqs_resource.delete()
