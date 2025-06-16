@@ -75,17 +75,22 @@ class TestProviderInfineon(TestCase):
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
     def test_neg_invoke_export(self):
-        invoke_export(s3_object_bytes(self.test_s3_bucket_name,
-                                       self.o_manifest_tlss_b, getvalue=True),
-                      s3_object_bytes(self.test_s3_bucket_name,
-                                       self.o_validator, getvalue=True),
-                      self.test_sqs_queue_name)
+        os.environ['VERIFY_CERT'] = self.o_validator
+        config = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.o_manifest_tlss_b
+        }
+        invoke_export(config, self.test_sqs_queue_name)
+
     def test_pos_invoke_export(self):
-        invoke_export(s3_object_bytes(self.test_s3_bucket_name,
-                                       self.o_manifest_tlsu_b, getvalue=True),
-                      s3_object_bytes(self.test_s3_bucket_name,
-                                       self.o_validator, getvalue=True),
-                      self.test_sqs_queue_name)
+        os.environ['VERIFY_CERT'] = self.o_validator
+        config = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.o_manifest_tlsu_b
+        }
+        invoke_export(config, self.test_sqs_queue_name)
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

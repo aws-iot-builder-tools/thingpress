@@ -11,8 +11,8 @@ import os
 import io
 import json
 from unittest import TestCase
+#from pytest import raises, xfail
 import pytest
-
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 from moto import mock_aws
@@ -102,6 +102,14 @@ class TestProviderInfineon(TestCase):
         x = select_certificate_set(io.BytesIO(self.test_s3_object_content.read()),
                                "E0E0")
         assert isinstance(x, io.BytesIO) is True
+
+    @pytest.mark.xfail(raises=FileNotFoundError)
+    def test_select_certificate_bundle_bad_bundle_name(self):
+        """ Test file selection of single bundle """
+        select_certificate_set(io.BytesIO(self.test_s3_object_content.read()),
+                               "E0E5")
+        #err = exc.value.errno
+        #assert err == 'FileNotFoundError'
 
     def test_invoke_export(self):
         o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False)

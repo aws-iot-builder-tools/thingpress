@@ -18,7 +18,7 @@ logger.setLevel("INFO")
 
 def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """Lambda function main entry point"""
-
+    sqs_event = SQSEvent(event)
     queue_url = os.environ['QUEUE_TARGET']
     if not verify_queue(queue_url=queue_url):
         logger.error("Queue {queue_url} is not available. ")
@@ -29,21 +29,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
         logger.error("Certificate type not valid. Must be E0E0, E0E1, or E0E2.")
         return None
 
-    sqs_event = SQSEvent(event)
+
     queue_url = os.environ['QUEUE_TARGET']
 
-    # ensure this entry was invoked by event
-    if event.get('Records') is None:
-        return None
-
-    # ensure all records are sqs type
-    for record in event['Records']:
-        if record.get('eventSource') != 'aws:sqs':
-            return None
-
-    for record in event['Records']:
-        if record.get('eventSource') == 'aws:sqs':
-            config = json.loads(record["body"])
-            invoke_export(config, queue_url, cert_type)
+    for record in sqs_event.records:
+        config = json.loads(record["body"])
+        invoke_export(config, queue_url, cert_type)
 
     return event

@@ -95,6 +95,10 @@ class TestAwsUtils(TestCase):
         err = exc.value.response['Error']
         assert err['Code'] == 'ResourceNotFoundException'
 
+    def test_neg_get_policy_arn2(self):
+        """Negative test for getting get_policy_arn"""
+        assert get_policy_arn(None) is None
+
     def test_pos_get_thing_group_arn(self):
         """Positive test case to return thing group arn"""
         iot_client = client('iot')

@@ -5,25 +5,18 @@
 Lambda function to import Microchip manifest
 """
 import os
+import json
 from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.utilities.data_classes import S3Event
-from aws_utils import s3_object_bytes
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from .manifest_handler import invoke_export
 
-def lambda_handler(event: S3Event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """Lambda function main entry point"""
     queue_url = os.environ['QUEUE_TARGET']
-    verify_certname = os.environ['VERIFY_CERT']
 
-    # there can be only one manifest file per event?  Need to verify
-    # this
+    sqs_event = SQSEvent(event)
+    for record in sqs_event.records:
+        config = json.loads(record["body"])
+        invoke_export(config, queue_url)
 
-    bucket_name = event['Records'][0]['s3']['bucket']['name']
-    manifest_filename = event['Records'][0]['s3']['object']['key']
-
-    # Get the manifest file and the integrity verification certificate from S3.
-
-    manifest_content = s3_object_bytes(bucket_name, manifest_filename, getvalue=True)
-    verifycert_content = s3_object_bytes(bucket_name, verify_certname, getvalue=True)
-
-    invoke_export(manifest_content, verifycert_content, queue_url)
+    return event

@@ -34,12 +34,9 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     """Lambda function main entry point"""
     sqs_event = SQSEvent(event)
     queue_url = os.environ['QUEUE_TARGET']
-    if event.get('Records') is None:
-        #TODO throw an exception here
-        return None
-    for record in event['Records']:
-        if record.get('eventSource') == 'aws:sqs':
-            config = json.loads(record["body"])
-            invoke_export(config, queue_url)
+
+    for record in sqs_event.records:
+        config = json.loads(record["body"])
+        invoke_export(config, queue_url)
 
     return event

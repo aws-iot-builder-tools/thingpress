@@ -5,6 +5,7 @@
 Library to handle Microchip manifests
 """
 from base64 import b64decode, b64encode
+import os
 import json
 import logging
 import boto3
@@ -13,6 +14,7 @@ from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
+from aws_utils import s3_object_bytes, send_sqs_message
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -117,18 +119,24 @@ class ManifestItem:
                     encoding=serialization.Encoding.PEM
                 ).decode('ascii')
 
-def invoke_export(manifest_file, verify_cert, queue_url):
+#def invoke_export(manifest_file, verify_cert, queue_url):
+def invoke_export(config, queue_url):
     """Main procedure"""
-    client = boto3.client("sqs")
+    verify_certname = os.environ['VERIFY_CERT']
+    manifest_file = s3_object_bytes(config['bucket'],
+                                    config['key'],
+                                    getvalue=True)
+    verify_file = s3_object_bytes(config['bucket'],
+                                         verify_certname,
+                                         getvalue=True)
 
     manifest_iterator = ManifestIterator( json.loads(manifest_file) )
 
     while manifest_iterator.index != 0:
-        manifest_item = ManifestItem( next( manifest_iterator ), verify_cert )
+        manifest_item = ManifestItem( next( manifest_iterator ), verify_file )
         block = manifest_item.get_certificate_chain()
         if len(block) == 0:
             logger.error("Certificate %s could not be extracted", manifest_item.identifier)
             continue
-        payload = {'certificate': str(b64encode(block.encode('ascii')))}
-        client.send_message(QueueUrl=queue_url,
-                            MessageBody=json.dumps(payload))
+        config['certificate'] = str(b64encode(block.encode('ascii')))
+        send_sqs_message(config, queue_url)
