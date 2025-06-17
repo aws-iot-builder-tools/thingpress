@@ -5,11 +5,7 @@
 ![samlint](samlint.svg)
 ![sambuild](sambuild.svg)
 
-Thingpress is an AWS IoT administration tool. It provides customers who
-design-in to their IoT devices a secure element or trusted platform module
-that has pre-provisioned certificates. The tool imports certificates
-from vendor manifest files that vendors provide alongside the reels of
-physical components that manufacturers build into IoT products.
+Thingpress is an AWS IoT administration tool. Customers often choose to design IoT devices that have pre-provisioned x.509 certificates. Secure element and trusted platform module manufacturers inject x.509 certificates to these chips in secure manufacturing facilities. Thingpress imports these certificates to AWS IoT in a scalable way such that you can import hundreds of thousands, if not millions, of certificates per day.
 
 Thingpress does more than simply import certificates. It automatically creates an AWS IoT Thing based on the certificate CN value (common practice) and optionally attaches AWS IoT Policy, Thing Type, and Thing Group. The objects you associate reflect application design and device lifecycle goals. There is more information in the Getting Started section to help guide you.
 
@@ -32,11 +28,11 @@ devices), adjustments to object attachments (i.e. Thing Group and
 Thing Type) can be a daunting task.
 
 1. Familiarize yourself with the following topics:
-   IoT Certificate,
-   IoT Policy,
-   IoT Thing, 
-   IoT Thing Type, and
-   IoT Thing Group.
+   [x.509 client certificates](https://docs.aws.amazon.com/iot/latest/developerguide/x509-client-certs.html),
+   [AWS IoT Core policies](https://docs.aws.amazon.com/iot/latest/developerguide/iot-policies.html),
+   [AWS IoT Things (device registry)](https://docs.aws.amazon.com/iot/latest/developerguide/thing-registry.html), 
+   [IoT Thing Types](https://docs.aws.amazon.com/iot/latest/developerguide/thing-types.html), and
+   [IoT Thing Group](https://docs.aws.amazon.com/iot/latest/developerguide/thing-groups.html).
 2. Become familiar with any planning activity for your chosen vendor: [Espressif](doc/espressif.md), [Infineon](doc/infineon.md), or [Microchip](doc/microchip.md).
 3. Evaluate service API call limits. Although Thingpress recovers from
    API throttling to not lose data, avoid API throttling in the
