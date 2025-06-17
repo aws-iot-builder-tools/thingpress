@@ -17,7 +17,7 @@ parts, and Thingpress  documentation for each vendor.
 | --------- | ---------- | ---------------------------- |
 | [Espressif Systems](https://www.espressif.com/) | [ESP32-S3](https://www.espressif.com/en/products/socs/esp32-s3) | [Thingpress for Espressif](doc/espressif.md) |
 | [Infineon Technologies SA](https://www.infineon.com/) | [Optiga Trust M Express](https://www.infineon.com/cms/en/product/security-smart-card-solutions/optiga-embedded-security-solutions/optiga-trust/optiga-trust-m-express/)| [Thingpress for Infineon](doc/infineon.md) |
-| [Microchip Technology Inc.](https://www.microchip.com/) | ]Trust&Go ATECC608B with TLS](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls) | [Thingpress for Microchip](doc/microchip.md) |
+| [Microchip Technology Inc.](https://www.microchip.com/) | [Trust&Go ATECC608B with TLS](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls) | [Thingpress for Microchip](doc/microchip.md) |
 
 # Getting started
 
