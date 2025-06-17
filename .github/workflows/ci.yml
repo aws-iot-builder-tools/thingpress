@@ -26,4 +26,4 @@ jobs:
               run: sam validate --lint
 
             - name: Run sam build
-              run: sam build --use-container --cached --parallel
+              run: sam build --parallel
