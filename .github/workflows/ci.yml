@@ -29,11 +29,11 @@ jobs:
       - name: Pass badge
         if: steps.samlint.outcome == 'success'
         run: |
-          anybadge --label "SAM Lint" --value "Passing" --file samlint.svg Passing=green
+          anybadge --overwrite --label "SAM Lint" --value "Passing" --file samlint.svg Passing=green
       - name: Fail badge
         if: steps.samlint.outcome == 'failure'
         run: |
-          anybadge --label "SAM Lint" --value "Failure" --file samlint.svg Failure=red
+          anybadge --overwrite --label "SAM Lint" --value "Failure" --file samlint.svg Failure=red
       - name: Run sam build
         id: sambuild
         run: sam build --parallel
@@ -41,11 +41,11 @@ jobs:
       - name: Pass badge
         if: steps.sambuild.outcome == 'success'
         run: |
-          anybadge --label "SAM Build" --value "Passing" --file sambuild.svg Passing=green
+          anybadge --overwrite --label "SAM Build" --value "Passing" --file sambuild.svg Passing=green
       - name: Fail badge
         if: steps.sambuild.outcome == 'failure'
         run: |
-          anybadge --label "SAM Build" --value "Failure" --file sambuild.svg Failure=red
+          anybadge --overwrite --label "SAM Build" --value "Failure" --file sambuild.svg Failure=red
       - name: Verify Changed files
         uses: tj-actions/verify-changed-files@v20
         id: verify-changed-files
