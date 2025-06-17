@@ -5,9 +5,9 @@
 ![samlint](samlint.svg)
 ![sambuild](sambuild.svg)
 
-Thingpress is an AWS IoT administration tool. Customers often choose to design IoT devices that have pre-provisioned x.509 certificates. Secure element and trusted platform module manufacturers inject x.509 certificates to these chips in secure manufacturing facilities. Thingpress imports these certificates to AWS IoT in a scalable way such that you can import hundreds of thousands, if not millions, of certificates per day.
+Thingpress is an AWS IoT administration tool. Customers often choose to design IoT devices that have pre-provisioned x.509 certificates. Secure element and trusted platform module manufacturers inject x.509 certificates to these chips in secure manufacturing facilities. The same x.509 certificates must be registered to AWS IoT for devices to authenticate. Thingpress imports these certificates to AWS IoT in a scalable way such that you can import hundreds of thousands, if not millions, of certificates per day.
 
-Thingpress does more than simply import certificates. It automatically creates an AWS IoT Thing based on the certificate CN value (common practice) and optionally attaches AWS IoT Policy, Thing Type, and Thing Group. The objects you associate reflect application design and device lifecycle goals. There is more information in the Getting Started section to help guide you.
+Thingpress does more than simply import certificates. Devices must be authorized for actions and ideally participate in IoT fleet management. Thingpress automatically creates an AWS IoT Thing in the AWS IoT Registry based on the certificate CN value (common practice). Thingpress optionally attaches AWS IoT Policy (authorization), Thing Type (fleet management), and Thing Group (fleet management). The objects you associate reflect application design and device lifecycle goals. There is more information in the Getting Started section to help guide you.
 
 Thingpress supports manifests from three vendors. The following is the list
 of vendors in alphabetical order, associated pre-provisioned certificate
