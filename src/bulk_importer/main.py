@@ -15,7 +15,6 @@ import botocore
 from botocore.exceptions import ClientError
 from boto3 import client as boto3client
 from cryptography import x509
-from cryptography.x509.oid import NameOID
 from cryptography.hazmat.backends import default_backend
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent

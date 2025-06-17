@@ -1,7 +1,9 @@
-# ThingPress: AWS IoT Certificate Multi-Account Registration Bulk Import
+# Thingpress
 
 ![Coverage](coverage.svg)
 ![pylint](linting.svg)
+![samlint](samlint.svg)
+![sambuild](sambuild.svg)
 
 Thingpress is an AWS IoT administration tool. It provides customers who
 design-in to their IoT devices a secure element or trusted platform module
