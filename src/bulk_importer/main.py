@@ -47,17 +47,6 @@ def get_certificate_arn(certificate_id):
             logger.error("get_certificate_arn failed: %s", error_message)
         # TODO: this should raise an exception
         raise error
-#TODO: change this method to get_thing_arn
-def get_thing(thing_name: str) -> str:
-    """Retrieve the Thing ARN"""
-    iot_client = boto3client('iot')
-    try:
-        response = iot_client.describe_thing(thingName=thing_name)
-        return response.get("thingArn")
-    except ClientError as error:
-        error_code = error.response['Error']['Code']
-        assert error_code == 'ResourceNotFoundException'
-        return None
 
 def process_policy(policy_name, certificate_id):
     """Attaches the IoT policy to the certificate"""
