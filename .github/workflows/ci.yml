@@ -1,0 +1,23 @@
+name: Thingpress Continuous Integration
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+jobs:
+    CI:
+        runs-on: ubuntu-24.04-arm
+        steps:
+            - name: Checkout code
+              uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+
+            - name: Setup AWS SAM
+              uses: aws-actions/setup-sam@819220f63fb333a9a394dd0a5cab2d8303fd17e2
+
+            - name: Validate template
+              run: sam validate --lint
+
+            - name: Run sam build
+              run: sam build --use-container --cached --parallel
