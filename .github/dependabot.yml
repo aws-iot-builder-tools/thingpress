@@ -1,0 +1,19 @@
+version: 2
+updates:
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  - package-ecosystem: "pip"
+    directories:
+      - "/"
+      - "/src/bulk_importer/"
+      - "/src/layer_utils/"
+      - "/src/product_provider/"
+      - "/src/provider_espressif/"
+      - "/src/provider_infineon/"
+      - "/src/provider_microchip/"
+      - "/test/unit/src/"
+    schedule:
+      interval: "weekly"
