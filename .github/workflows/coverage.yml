@@ -1,6 +1,11 @@
 name: Thingpress Unit Test Code Coverage
 run-name: ${{ github.actor }} invoking coverage
-on: [push]
+
+on:
+  push:
+    branches:
+      - main
+
 jobs:
     CoverageAndLinting:
         runs-on: ubuntu-latest
