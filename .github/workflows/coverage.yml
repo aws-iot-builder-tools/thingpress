@@ -4,7 +4,7 @@ run-name: ${{ github.actor }} invoking coverage
 on:
   push:
     branches:
-      - main
+      - master
 
 jobs:
     CoverageAndLinting:
