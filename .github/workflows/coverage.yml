@@ -6,7 +6,7 @@ jobs:
         runs-on: ubuntu-latest
         steps:
             - uses: actions/checkout@v4
-            - uses: actions/setup-python@v4
+            - uses: actions/setup-python@v5
               with:
                 python-version: 3.13
             - name: 'Install dependencies'
@@ -25,7 +25,7 @@ jobs:
             - name: Coverage Badge
               uses: tj-actions/coverage-badge-py@v2
             - name: Verify Changed files
-              uses: tj-actions/verify-changed-files@v17
+              uses: tj-actions/verify-changed-files@v20
               id: verify-changed-files
               with:
                 files: |
