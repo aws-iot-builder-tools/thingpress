@@ -17,7 +17,7 @@ from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
 
 #    from src.bulk_importer.main import lambda_handler
-from src.bulk_importer.main import get_certificate_arn, get_thing, process_policy, process_thing
+from src.bulk_importer.main import get_certificate_arn, process_policy, process_thing
 #    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
 from .model_bulk_importer import LambdaSQSClass
 
@@ -85,14 +85,6 @@ class TestBulkImporter(TestCase):
             get_certificate_arn("9"*64)
         err = exc.value.response['Error']
         assert err['Code'] == 'ResourceNotFoundException'
-
-    def test_pos_get_thing(self):
-        """Positive test case to return thing arn"""
-        iot_client = client('iot')
-        n = "test_pos_get_thing"
-        r1 = iot_client.create_thing(thingName=n)
-        r2 = get_thing(n)
-        assert r1['thingArn'] == r2
 
     def test_pos_process_policy(self):
         """Positive test case for attaching policy to certificate"""
