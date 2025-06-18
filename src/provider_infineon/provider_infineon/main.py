@@ -8,6 +8,7 @@ the import processing pipeline
 import os
 import json
 import logging
+from botocore.exceptions import ClientError
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_utils import verify_queue
@@ -20,17 +21,21 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     """Lambda function main entry point"""
     sqs_event = SQSEvent(event)
     queue_url = os.environ['QUEUE_TARGET']
-    if not verify_queue(queue_url=queue_url):
-        logger.error("Queue {queue_url} is not available. ")
-        return None
-
     cert_type = os.environ['CERT_TYPE']
-    if not verify_certtype(cert_type):
-        logger.error("Certificate type not valid. Must be E0E0, E0E1, or E0E2.")
+
+    try:
+        verify_queue(queue_url=queue_url)
+    except ClientError as error:
+        error_code = error.response['Error']['Code']
+        error_message = error.response['Error']['Message']
+        logger.error("Queue %s is not available. %s: %s", queue_url, error_code, error_message)
         return None
 
-
-    queue_url = os.environ['QUEUE_TARGET']
+    try:
+        verify_certtype(cert_type)
+    except ValueError as error:
+        logger.error("Certificate type %s did not verify: %s", queue_url, str(error))
+        return None
 
     for record in sqs_event.records:
         config = json.loads(record["body"])

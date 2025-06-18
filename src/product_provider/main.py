@@ -67,9 +67,9 @@ def lambda_handler(event: S3Event,
         return None
 
     config = {
-        'policy_arn': os.environ.get('POLICY_NAME'),
+        'policy_name': os.environ.get('POLICY_NAME'),
         'thing_group_arn': v_thing_group,
-        'thing_type_arn': v_thing_type,
+        'thing_type_name': os.environ.get('THING_TYPE_NAME'),
         'bucket': s3_event.bucket_name
     }
 

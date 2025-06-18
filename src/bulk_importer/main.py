@@ -57,35 +57,43 @@ def process_policy(policy_name, certificate_id):
 
 def process_thing(thing_name, certificate_id, thing_type_name=None):
     """Creates the IoT Thing if it does not already exist"""
+    logger.info("Processing thing %s.", thing_name)
     iot_client = boto3client('iot')
     certificate_arn = get_certificate_arn(certificate_id)
     try:
         iot_client.describe_thing(thingName=thing_name)
-        return None
-    except ClientError as error:
-        error_code = error.response['Error']['Code'] # pylint: disable=unused-variable
-        logger.info("Thing not found {error_code}. Creating.")
-
-    # Create thing
-    try:
-        if thing_type_name is None:
+        return True
+    except ClientError as err_describe:
+        error_code = err_describe.response['Error']['Code']
+        logger.info("Thing not found: %s. Creating.", error_code)
+        try:
             iot_client.create_thing(thingName=thing_name)
-        else:
-            iot_client.create_thing(thingName=thing_name,
-                                    thingTypeName=thing_type_name)
-
-    except ClientError as error:
-        error_code = error.response['Error']['Code']
-        logger.error("ERROR Thing creation failed: {error_code}")
-        return None
+        except ClientError as err_create:
+            error_code = err_create.response['Error']['Code']
+            error_message = err_create.response['Error']['Message']
+            logger.error("ERROR Thing creation failed: %s: %s", error_code, error_message)
+            return False
 
     try:
         iot_client.attach_thing_principal(thingName=thing_name,
                                           principal=certificate_arn)
     except ClientError as error:
-        print("ERROR Certificate attachment failed.")
-        print(error)
-    return None
+        error_code = error.response['Error']['Code']
+        error_message = error.response['Error']['Message']
+        logger.error("Certificate attachment failed: %s: %s", error_code, error_message)
+
+    if thing_type_name is not None:
+        try:
+            logger.info("Upating thing %s to apply thing type %s.", thing_name, thing_type_name)
+            iot_client.update_thing(thingName=thing_name,
+                                    thingTypeName=thing_type_name,
+                                    removeThingType=False)
+        except ClientError as error:
+            error_code = error.response['Error']['Code']
+            error_message = error.response['Error']['Message']
+            logger.error("Thing type not found: %s: %s.", error_code, error_message)
+            return False
+    return True
 
 def requeue(config):
     """
@@ -151,8 +159,8 @@ def process_sqs(config):
     certificate_id = process_certificate(config, requeue)
     process_thing(config.get('thing'),
                   certificate_id,
-                  config.get('thing_type_arn'))
-    process_policy(config.get('policy_arn'),
+                  config.get('thing_type_name'))
+    process_policy(config.get('policy_name'),
                    certificate_id)
     process_thing_group(config.get('thing_group_arn'),
                         config.get('thing'))

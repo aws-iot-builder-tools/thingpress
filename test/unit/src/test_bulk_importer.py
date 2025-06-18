@@ -55,6 +55,13 @@ class TestBulkImporter(TestCase):
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
+        iot_client = client('iot')
+        self.thing_group_arn_solo = (iot_client.create_thing_group(thingGroupName="Thing Group Solo"))['thingGroupArn']
+        self.thing_group_arn_parent = (iot_client.create_thing_group(thingGroupName="Thing Group Parent"))['thingGroupArn']
+        self.thing_group_arn_child = (iot_client.create_thing_group(thingGroupName="Thing Group Child", parentGroupName="Thing Group Parent"))['thingGroupArn']
+        self.thing_type_name = "Thingpress Thing Type"
+        self.thing_type_arn = (iot_client.create_thing_type(thingTypeName=self.thing_type_name))['thingTypeArn']
+
     def test_pos_process_certificate(self):
         """Positive test case for processing certificate"""
         with open('./test/artifacts/single.pem', 'rb') as data:
@@ -113,7 +120,53 @@ class TestBulkImporter(TestCase):
             cr = process_certificate(c, requeue)
             n = "process_thing"
             iot_client.create_thing(thingName=n)
-            process_thing(n, cr)
+            x = process_thing(n, cr)
+            assert x is True
+
+    def test_pos_process_thing_with_type(self):
+        """Positive test case for attaching policy to certificate"""
+        iot_client = client('iot')
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            cert = str(base64.b64encode(block.encode('ascii')))
+            c = {'certificate': cert}
+            cr = process_certificate(c, requeue)
+            n = "process_thing"
+            iot_client.create_thing(thingName=n)
+            x = process_thing(n, cr, self.thing_type_name)
+            assert x is True
+
+    def test_pos_process_thing_no_prev_thing(self):
+        """Positive test case for attaching policy to certificate"""
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            cert = str(base64.b64encode(block.encode('ascii')))
+            c = {'certificate': cert}
+            cr = process_certificate(c, requeue)
+            n = "process_thing"
+            x = process_thing(n, cr)
+            assert x is True
+
+    def test_pos_process_thing_with_type_no_prev_thing(self):
+        """Positive test case for attaching policy to certificate"""
+        iot_client = client('iot')
+        ttn = "ThingpressThingType2"
+        tta = (iot_client.create_thing_type(thingTypeName=ttn))['thingTypeArn']
+
+        with open('./test/artifacts/single.pem', 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            cert = str(base64.b64encode(block.encode('ascii')))
+            c = {'certificate': cert}
+            cr = process_certificate(c, requeue)
+            n = "process_thing"
+            x = process_thing(n, cr, ttn)
+            assert x is True
 
     def test_pos_requeue(self):
         pass

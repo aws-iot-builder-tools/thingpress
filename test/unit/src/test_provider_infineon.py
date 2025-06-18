@@ -19,7 +19,7 @@ from moto import mock_aws
 #from moto import mock_aws, settings
 #from unittest.mock import MagicMock, patch
 from py7zr import FileInfo
-
+from pytest import raises
 from src.layer_utils.aws_utils import s3_object_bytes
 from src.provider_infineon.provider_infineon.main import lambda_handler
 from src.provider_infineon.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
@@ -75,7 +75,8 @@ class TestProviderInfineon(TestCase):
         assert verify_certtype("E0E0") is True
         assert verify_certtype("E0E1") is True
         assert verify_certtype("E0E2") is True
-        assert verify_certtype("XXXX") is False
+        with raises(ValueError) as exc:
+            verify_certtype("XXXX")
 
 
     def test_verify_certificate_set(self):
@@ -91,11 +92,17 @@ class TestProviderInfineon(TestCase):
         assert verify_certificate_set(l1, v2) == "xxx_E0E1_Certs.7z"
         assert verify_certificate_set(l1, v3) == "xxx_E0E2_Certs.7z"
         assert verify_certificate_set(l2, v1) == "xxx_E0E0_Certs.7z"
-        assert verify_certificate_set(l2, v4) is None
-        assert verify_certificate_set(l2, v5) is None
+        with raises(ValueError) as exc:
+            verify_certificate_set(l2, v4)
+        with raises(ValueError) as exc:
+            verify_certificate_set(l2, v5)
+        with raises(ValueError) as exc:
+            verify_certificate_set(l2, v4)
         assert verify_certificate_set(l3, v1) is None
-        assert verify_certificate_set(l3, v4) is None
-        assert verify_certificate_set(l3, v5) is None
+        with raises(ValueError) as exc:
+            verify_certificate_set(l3, v4)
+        with raises(ValueError) as exc:
+            verify_certificate_set(l3, v5)
 
     def test_select_certificate_bundle(self):
         """ Test file selection of single bundle """
@@ -106,10 +113,9 @@ class TestProviderInfineon(TestCase):
     @pytest.mark.xfail(raises=FileNotFoundError)
     def test_select_certificate_bundle_bad_bundle_name(self):
         """ Test file selection of single bundle """
-        select_certificate_set(io.BytesIO(self.test_s3_object_content.read()),
-                               "E0E5")
-        #err = exc.value.errno
-        #assert err == 'FileNotFoundError'
+        with raises(ValueError) as exc:
+            select_certificate_set(io.BytesIO(self.test_s3_object_content.read()),
+                                   "E0E5")
 
     def test_invoke_export(self):
         o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False)
@@ -141,6 +147,47 @@ class TestProviderInfineon(TestCase):
         os.environ['QUEUE_TARGET']=""
         os.environ['CERT_TYPE']=""
         assert v == e
+
+
+    def test_pos_lambda_handler_2(self):
+        """Invoke the main handler with one file"""
+        r1 = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.artifact
+        }
+
+        e = { "Records": [{
+                    'eventSource': 'aws:sqs',
+                    'body': json.dumps(r1)
+                }]
+            }
+        os.environ['CERT_TYPE']="E0E0"
+        c = None
+        v = lambda_handler(e, c)
+        os.environ['QUEUE_TARGET']=""
+        os.environ['CERT_TYPE']=""
+        assert v is None
+
+    def test_pos_lambda_handler_3(self):
+        """Invoke the main handler with one file"""
+        r1 = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.artifact
+        }
+
+        e = { "Records": [{
+                    'eventSource': 'aws:sqs',
+                    'body': json.dumps(r1)
+                }]
+            }
+        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
+        c = None
+        v = lambda_handler(e, c)
+        os.environ['QUEUE_TARGET']=""
+        os.environ['CERT_TYPE']=""
+        assert v is None
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")
