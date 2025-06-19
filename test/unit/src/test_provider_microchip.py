@@ -8,17 +8,13 @@ If run local with no local aws credentials, AWS_DEFAULT_REGION must be
 set to the environment.
 """
 import os
-import io
+import json
 from unittest import TestCase
-import pytest
-
-from botocore.exceptions import ClientError
 from boto3 import resource, client
 from moto import mock_aws
-#from moto import mock_aws, settings
-#from unittest.mock import MagicMock, patch
 
 from src.provider_microchip.provider_microchip.main import lambda_handler, invoke_export
+from src.provider_microchip.provider_microchip.manifest_handler import get_iterator
 from src.layer_utils.aws_utils import s3_object_bytes
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
@@ -91,6 +87,31 @@ class TestProviderInfineon(TestCase):
             'key': self.o_manifest_tlsu_b
         }
         invoke_export(config, self.test_sqs_queue_name)
+
+    def test_iter(self):
+        o = s3_object_bytes(self.test_s3_bucket_name, self.o_manifest_tlsu_b, True)
+        x = get_iterator(o)
+        assert x == x.__iter__()
+
+    def test_pos_lambda_handler_1(self):
+        """Invoke the main handler with one file"""
+        r1 = {
+            'policy_arn': 'dev_policy',
+            'bucket': self.test_s3_bucket_name,
+            'key': self.o_manifest_tlsu_b
+        }
+
+        e = { "Records": [{
+                    'eventSource': 'aws:sqs',
+                    'body': json.dumps(r1)
+                }]
+            }
+        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
+        os.environ['VERIFY_CERT'] = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
+        c = None
+        v = lambda_handler(e, c)
+        os.environ['QUEUE_TARGET']=""
+        assert v == e
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

@@ -38,6 +38,9 @@ class ManifestIterator:
         self.index = self.index - 1
         return self.manifest[self.index]
 
+def get_iterator(manifest_file):
+    return ManifestIterator( json.loads(manifest_file) )
+
 class ManifestItem:
     """Represents a single 'certificate' in the manifest"""
     def __init__(self, signed_se, verification_cert_raw):

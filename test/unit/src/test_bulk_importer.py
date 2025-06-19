@@ -4,6 +4,7 @@
 
 Unit tests for bulk_importer
 """
+import os
 import base64
 import json
 from unittest import TestCase
@@ -15,10 +16,7 @@ from cryptography.hazmat.primitives import serialization
 from botocore.exceptions import ClientError
 from boto3 import resource, client
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
-
-#    from src.bulk_importer.main import lambda_handler
-from src.bulk_importer.main import get_certificate_arn, process_policy, process_thing
-#    from src.bulk_importer.main import process_thing_group, get_name_from_certificate, process_sqs
+from src.bulk_importer.main import get_certificate_arn, process_policy, process_thing, lambda_handler
 from .model_bulk_importer import LambdaSQSClass
 
 IOT_POLICY = {
@@ -56,11 +54,20 @@ class TestBulkImporter(TestCase):
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
         iot_client = client('iot')
-        self.thing_group_arn_solo = (iot_client.create_thing_group(thingGroupName="Thing Group Solo"))['thingGroupArn']
-        self.thing_group_arn_parent = (iot_client.create_thing_group(thingGroupName="Thing Group Parent"))['thingGroupArn']
-        self.thing_group_arn_child = (iot_client.create_thing_group(thingGroupName="Thing Group Child", parentGroupName="Thing Group Parent"))['thingGroupArn']
-        self.thing_type_name = "Thingpress Thing Type"
+        self.thing_group_arn_solo = (iot_client.create_thing_group(thingGroupName="Thing-Group-Solo"))['thingGroupArn']
+        self.thing_group_arn_parent = (iot_client.create_thing_group(thingGroupName="Thing-Group-Parent"))['thingGroupArn']
+        # BUG: Moto has problem with parent/child at the moment
+        #self.thing_group_arn_child = (iot_client.create_thing_group(thingGroupName="Thing-Group-Child", parentGroupName="Thing Group Parent"))['thingGroupArn']
+        self.thing_type_name = "Thingpress-Thing-Type"
         self.thing_type_arn = (iot_client.create_thing_type(thingTypeName=self.thing_type_name))['thingTypeArn']
+
+        self.local_cert = './test/artifacts/single.pem'
+        self.local_cert_loaded = None
+        with open(self.local_cert, 'rb') as data:
+            pem_obj = x509.load_pem_x509_certificate(data.read(),
+                                                     backend=default_backend())
+            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
+            self.local_cert_loaded = str(base64.b64encode(block.encode('ascii')))
 
     def test_pos_process_certificate(self):
         """Positive test case for processing certificate"""
@@ -126,47 +133,28 @@ class TestBulkImporter(TestCase):
     def test_pos_process_thing_with_type(self):
         """Positive test case for attaching policy to certificate"""
         iot_client = client('iot')
-        with open('./test/artifacts/single.pem', 'rb') as data:
-            pem_obj = x509.load_pem_x509_certificate(data.read(),
-                                                     backend=default_backend())
-            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-            cert = str(base64.b64encode(block.encode('ascii')))
-            c = {'certificate': cert}
-            cr = process_certificate(c, requeue)
-            n = "process_thing"
-            iot_client.create_thing(thingName=n)
-            x = process_thing(n, cr, self.thing_type_name)
-            assert x is True
+        c = { 'certificate': self.local_cert_loaded}
+        cr = process_certificate(c, requeue)
+        n = "process_thing"
+        iot_client.create_thing(thingName=n)
+        x = process_thing(n, cr, self.thing_type_name)
+        assert x is True
 
     def test_pos_process_thing_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
-        with open('./test/artifacts/single.pem', 'rb') as data:
-            pem_obj = x509.load_pem_x509_certificate(data.read(),
-                                                     backend=default_backend())
-            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-            cert = str(base64.b64encode(block.encode('ascii')))
-            c = {'certificate': cert}
-            cr = process_certificate(c, requeue)
-            n = "process_thing"
-            x = process_thing(n, cr)
-            assert x is True
+        c = {'certificate': self.local_cert_loaded}
+        cr = process_certificate(c, requeue)
+        n = "process_thing"
+        x = process_thing(n, cr)
+        assert x is True
 
     def test_pos_process_thing_with_type_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
-        iot_client = client('iot')
-        ttn = "ThingpressThingType2"
-        tta = (iot_client.create_thing_type(thingTypeName=ttn))['thingTypeArn']
-
-        with open('./test/artifacts/single.pem', 'rb') as data:
-            pem_obj = x509.load_pem_x509_certificate(data.read(),
-                                                     backend=default_backend())
-            block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
-            cert = str(base64.b64encode(block.encode('ascii')))
-            c = {'certificate': cert}
-            cr = process_certificate(c, requeue)
-            n = "process_thing"
-            x = process_thing(n, cr, ttn)
-            assert x is True
+        c = {'certificate': self.local_cert_loaded}
+        cr = process_certificate(c, requeue)
+        n = "process_thing"
+        x = process_thing(n, cr, self.thing_type_name)
+        assert x is True
 
     def test_pos_requeue(self):
         pass
@@ -178,6 +166,19 @@ class TestBulkImporter(TestCase):
 
     def test_pos_process_thing_group(self):
         pass
+
+    def test_pos_main(self):
+        config = {'certificate': self.local_cert_loaded,
+                  'thing': 'foo'}
+        e = { "Records": [{
+                'eventSource': 'aws:sqs',
+                'body': json.dumps(config)
+            }
+            ]}
+        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
+        c = None
+        v = lambda_handler(e, c)
+        assert v == e
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")

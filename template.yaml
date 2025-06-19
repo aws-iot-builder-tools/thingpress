@@ -337,22 +337,6 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonSQSFullAccess
-#      Policies:
-#        - PolicyName: aws-api-calls
-#          PolicyDocument:
-#            Version: '2012-10-17'
-#            Statement:
-#              - Effect: Allow
-#                Action:
-#                  - logs:CreateLogGroups
-#                  - logs:CreateLogStream
-#                  - logs:PutLogEvents
-#                  - sqs:ChangeMessageVisibility
-#                  - sqs:DeleteMessage
-#                  - sqs:GetQueueAttributes
-#                  - sqs:ReceiveMessage
-#                  - sqs:SendMessage
-#                Resource: '*'
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
