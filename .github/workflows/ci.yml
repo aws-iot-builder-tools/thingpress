@@ -29,11 +29,11 @@ jobs:
       - name: Pass badge
         if: steps.samlint.outcome == 'success'
         run: |
-          anybadge --overwrite --label "SAM Lint" --value "Passing" --file samlint.svg Passing=green
+          anybadge --overwrite --label "SAM Lint" --value "Passing" --file .github/samlint.svg Passing=green
       - name: Fail badge
         if: steps.samlint.outcome == 'failure'
         run: |
-          anybadge --overwrite --label "SAM Lint" --value "Failure" --file samlint.svg Failure=red
+          anybadge --overwrite --label "SAM Lint" --value "Failure" --file .github/samlint.svg Failure=red
       - name: Run sam build
         id: sambuild
         run: sam build --parallel
@@ -41,25 +41,25 @@ jobs:
       - name: Pass badge
         if: steps.sambuild.outcome == 'success'
         run: |
-          anybadge --overwrite --label "SAM Build" --value "Passing" --file sambuild.svg Passing=green
+          anybadge --overwrite --label "SAM Build" --value "Passing" --file .github/sambuild.svg Passing=green
       - name: Fail badge
         if: steps.sambuild.outcome == 'failure'
         run: |
-          anybadge --overwrite --label "SAM Build" --value "Failure" --file sambuild.svg Failure=red
+          anybadge --overwrite --label "SAM Build" --value "Failure" --file .github/sambuild.svg Failure=red
       - name: Verify Changed files
         uses: tj-actions/verify-changed-files@v20
         id: verify-changed-files
         with:
           files: |
-            samlint.svg
-            sambuild.svg
+            .github/samlint.svg
+            .github/sambuild.svg
       - name: 'Commit files'
         if: steps.verify-changed-files.outputs.files_changed == 'true'
         run: |
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
           git config --local user.name "github-actions[bot]"
-          git add samlint.svg sambuild.svg
-          git commit -m "Updated CI badges" samlint.svg sambuild.svg
+          git add .github/samlint.svg .github/sambuild.svg
+          git commit -m "Updated CI badges" .github/samlint.svg .github/sambuild.svg
       - name: 'Push changes'
         if: steps.verify-changed-files.outputs.files_changed == 'true'
         uses: ad-m/github-push-action@master

@@ -1,9 +1,9 @@
 # Thingpress
 
-![Coverage](coverage.svg)
-![pylint](linting.svg)
-![samlint](samlint.svg)
-![sambuild](sambuild.svg)
+![Coverage](.github/coverage.svg)
+![pylint](.github/linting.svg)
+![samlint](.github/samlint.svg)
+![sambuild](.github/sambuild.svg)
 
 Thingpress is an AWS IoT administration tool. Customers often choose to design IoT devices that have pre-provisioned x.509 certificates. Secure element and trusted platform module manufacturers inject x.509 certificates to these chips in secure manufacturing facilities. The same x.509 certificates must be registered to AWS IoT for devices to authenticate. Thingpress imports these certificates to AWS IoT in a scalable way such that you can import hundreds of thousands, if not millions, of certificates per day.
 

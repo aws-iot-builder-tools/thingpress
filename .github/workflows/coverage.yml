@@ -26,24 +26,26 @@ jobs:
                   coverage run --source=src/bulk_importer,src/product_provider,src/provider_espressif,src/provider_infineon,src/provider_microchip,src/layer_utils -m pytest
                   coverage report -m
                   lintscore=$(pylint -f json2 src/ | python3 -c "import sys, json; print(json.load(sys.stdin)['statistics']['score'])")
-                  anybadge -l pylint -v ${lintscore} -o -f linting.svg 2=red 4=orange 8=yellow 10=green
+                  anybadge -l pylint -v ${lintscore} -o -f .github/linting.svg 2=red 4=orange 8=yellow 10=green
             - name: Coverage Badge
               uses: tj-actions/coverage-badge-py@v2
+              with:
+                output: ".github/coverage.svg"
             - name: Verify Changed files
               uses: tj-actions/verify-changed-files@v20
               id: verify-changed-files
               with:
                 files: |
-                  coverage.svg
-                  linting.svg
+                  .github/coverage.svg
+                  .github/linting.svg
             - name: 'Commit files'
               if: steps.verify-changed-files.outputs.files_changed == 'true'
               run: |
                 git config --local user.email "github-actions[bot]@users.noreply.github.com"
                 git config --local user.name "github-actions[bot]"
-                git add coverage.svg
-                git add linting.svg
-                git commit -m "Updated coverage.svg" coverage.svg linting.svg
+                git add .github/coverage.svg
+                git add .github/linting.svg
+                git commit -m "Updated coverage.svg" .github/coverage.svg .github/linting.svg
             - name: 'Push changes'
               if: steps.verify-changed-files.outputs.files_changed == 'true'
               uses: ad-m/github-push-action@master
