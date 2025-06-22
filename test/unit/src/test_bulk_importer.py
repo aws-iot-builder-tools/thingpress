@@ -56,8 +56,8 @@ class TestBulkImporter(TestCase):
         iot_client = client('iot')
         self.thing_group_arn_solo = (iot_client.create_thing_group(thingGroupName="Thing-Group-Solo"))['thingGroupArn']
         self.thing_group_arn_parent = (iot_client.create_thing_group(thingGroupName="Thing-Group-Parent"))['thingGroupArn']
-        # BUG: Moto has problem with parent/child at the moment
-        #self.thing_group_arn_child = (iot_client.create_thing_group(thingGroupName="Thing-Group-Child", parentGroupName="Thing Group Parent"))['thingGroupArn']
+        self.thing_group_arn_child = (iot_client.create_thing_group(thingGroupName="Thing-Group-Child",
+                                                                    parentGroupName="Thing-Group-Parent"))['thingGroupArn']
         self.thing_type_name = "Thingpress-Thing-Type"
         self.thing_type_arn = (iot_client.create_thing_type(thingTypeName=self.thing_type_name))['thingTypeArn']
 
