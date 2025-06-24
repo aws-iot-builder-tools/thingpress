@@ -8,6 +8,10 @@ on:
     branches:
       - master
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
   SAMLint:
     runs-on: ubuntu-latest
