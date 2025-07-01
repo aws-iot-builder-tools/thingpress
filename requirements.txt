@@ -1,4 +1,5 @@
 -r src/bulk_importer/requirements.txt
+-r src/layer_utils/requirements.txt
 -r src/product_provider/requirements.txt
 -r src/provider_espressif/requirements.txt
 -r src/provider_infineon/requirements.txt
