@@ -122,7 +122,6 @@ class ManifestItem:
                     encoding=serialization.Encoding.PEM
                 ).decode('ascii')
 
-#def invoke_export(manifest_file, verify_cert, queue_url):
 def invoke_export(config, queue_url):
     """Main procedure"""
     verify_certname = os.environ['VERIFY_CERT']

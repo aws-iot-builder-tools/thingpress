@@ -15,6 +15,8 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from botocore.exceptions import ClientError
 from boto3 import resource, client
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from src.bulk_importer.main import get_certificate_fingerprint, requeue, process_certificate
 from src.bulk_importer.main import get_certificate_arn, process_policy, process_thing, lambda_handler
 from .model_bulk_importer import LambdaSQSClass
@@ -176,8 +178,7 @@ class TestBulkImporter(TestCase):
             }
             ]}
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
-        c = None
-        v = lambda_handler(e, c)
+        v = lambda_handler(SQSEvent(e), LambdaContext())
         assert v == e
 
     def tearDown(self):

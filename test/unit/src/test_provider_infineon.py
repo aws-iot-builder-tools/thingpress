@@ -15,6 +15,8 @@ from unittest import TestCase
 import pytest
 from botocore.exceptions import ClientError
 from boto3 import resource, client
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from moto import mock_aws
 #from moto import mock_aws, settings
 #from unittest.mock import MagicMock, patch
@@ -142,14 +144,14 @@ class TestProviderInfineon(TestCase):
             }
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
         os.environ['CERT_TYPE']="E0E0"
-        c = None
-        v = lambda_handler(e, c)
+
+        v = lambda_handler(SQSEvent(e), LambdaContext())
         os.environ['QUEUE_TARGET']=""
         os.environ['CERT_TYPE']=""
         assert v == e
 
 
-    def test_pos_lambda_handler_2(self):
+    def test_neg_lambda_handler_no_queue(self):
         """Invoke the main handler with one file"""
         r1 = {
             'policy_arn': 'dev_policy',
@@ -163,13 +165,12 @@ class TestProviderInfineon(TestCase):
                 }]
             }
         os.environ['CERT_TYPE']="E0E0"
-        c = None
-        v = lambda_handler(e, c)
-        os.environ['QUEUE_TARGET']=""
-        os.environ['CERT_TYPE']=""
-        assert v is None
 
-    def test_pos_lambda_handler_3(self):
+        with raises(ClientError) as exc:
+            v = lambda_handler(SQSEvent(e), LambdaContext())
+        assert exc.typename == 'QueueDoesNotExist'
+
+    def test_neg_lambda_handler_no_cert_type(self):
         """Invoke the main handler with one file"""
         r1 = {
             'policy_arn': 'dev_policy',
@@ -183,11 +184,10 @@ class TestProviderInfineon(TestCase):
                 }]
             }
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
-        c = None
-        v = lambda_handler(e, c)
-        os.environ['QUEUE_TARGET']=""
-        os.environ['CERT_TYPE']=""
-        assert v is None
+
+        with raises(ValueError) as exc:
+            v = lambda_handler(SQSEvent(e), LambdaContext())
+        assert exc.typename == 'ValueError'
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")
@@ -202,3 +202,5 @@ class TestProviderInfineon(TestCase):
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         sqs_resource = sqs_resource.Queue(url=sqs_queue_url)
         sqs_resource.delete()
+        os.environ['QUEUE_TARGET']=""
+        os.environ['CERT_TYPE']=""

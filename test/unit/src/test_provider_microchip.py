@@ -9,9 +9,13 @@ set to the environment.
 """
 import os
 import json
+from collections.abc import Iterator
 from unittest import TestCase
 from boto3 import resource, client
 from moto import mock_aws
+#from types_boto3_s3.service_resource import S3ServiceResource
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
+from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from src.provider_microchip.provider_microchip.main import lambda_handler, invoke_export
 from src.provider_microchip.provider_microchip.manifest_handler import get_iterator
@@ -37,7 +41,7 @@ class TestProviderInfineon(TestCase):
         f_manifest_tlsu_b = './test/artifacts/' + self.o_manifest_tlsu_b
         self.o_validator = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
         f_validator = './test/artifacts/mchp_verifiers/' + self.o_validator
-        
+
         s3_client = client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
 
@@ -89,29 +93,32 @@ class TestProviderInfineon(TestCase):
         invoke_export(config, self.test_sqs_queue_name)
 
     def test_iter(self):
+        """ Ensure that the class can effectively return an iterator """
         o = s3_object_bytes(self.test_s3_bucket_name, self.o_manifest_tlsu_b, True)
         x = get_iterator(o)
-        assert x == x.__iter__()
+        assert isinstance(x, Iterator) is True
 
     def test_pos_lambda_handler_1(self):
         """Invoke the main handler with one file"""
+        os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
+        os.environ['VERIFY_CERT'] = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
+
         r1 = {
             'policy_arn': 'dev_policy',
             'bucket': self.test_s3_bucket_name,
             'key': self.o_manifest_tlsu_b
         }
+        h = { "Records": [{
+                        'eventSource': 'aws:sqs',
+                        'body': json.dumps(r1)
+                        }]
+                       }
+        e : SQSEvent = SQSEvent(h)
+        c : LambdaContext = LambdaContext()
 
-        e = { "Records": [{
-                    'eventSource': 'aws:sqs',
-                    'body': json.dumps(r1)
-                }]
-            }
-        os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
-        os.environ['VERIFY_CERT'] = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
-        c = None
         v = lambda_handler(e, c)
         os.environ['QUEUE_TARGET']=""
-        assert v == e
+        assert v == h
 
     def tearDown(self):
         s3_resource = resource("s3",region_name="us-east-1")

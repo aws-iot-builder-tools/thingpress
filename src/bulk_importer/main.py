@@ -11,7 +11,6 @@ import json
 
 import os
 import logging
-import botocore
 from botocore.exceptions import ClientError
 from boto3 import client as boto3client
 from cryptography import x509
@@ -19,6 +18,7 @@ from cryptography.hazmat.backends import default_backend
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from cert_utils import get_certificate_fingerprint
+from aws_utils import boto_errorcode, boto_errormessage
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -30,7 +30,7 @@ def get_certificate(certificate_id):
         response = iot_client.describe_certificate(certificateId=certificate_id)
         return response["certificateDescription"].get("certificateId")
     except ClientError as error:
-        assert error.response['Error']['Code'] == 'ResourceNotFoundException'
+        assert boto_errorcode(error) == 'ResourceNotFoundException'
         raise error
 
 def get_certificate_arn(certificate_id):
@@ -40,11 +40,10 @@ def get_certificate_arn(certificate_id):
         response = iot_client.describe_certificate(certificateId=certificate_id)
         return response["certificateDescription"].get("certificateArn")
     except ClientError as error:
-        error_code = error.response['Error']['Code']
-        error_message = error.response['Error']['Message']
+        error_code = boto_errorcode(error)
+        error_message = boto_errormessage(error)
         if error_code == 'ResourceNotFoundException':
             logger.error("get_certificate_arn failed: %s", error_message)
-        # TODO: this should raise an exception
         raise error
 
 def process_policy(policy_name, certificate_id):
@@ -64,13 +63,13 @@ def process_thing(thing_name, certificate_id, thing_type_name=None):
         iot_client.describe_thing(thingName=thing_name)
         return True
     except ClientError as err_describe:
-        error_code = err_describe.response['Error']['Code']
+        error_code = boto_errorcode(err_describe)
         logger.info("Thing not found: %s. Creating.", error_code)
         try:
             iot_client.create_thing(thingName=thing_name)
         except ClientError as err_create:
-            error_code = err_create.response['Error']['Code']
-            error_message = err_create.response['Error']['Message']
+            error_code = boto_errorcode(err_create)
+            error_message = boto_errormessage(err_create)
             logger.error("ERROR Thing creation failed: %s: %s", error_code, error_message)
             return False
 
@@ -78,8 +77,8 @@ def process_thing(thing_name, certificate_id, thing_type_name=None):
         iot_client.attach_thing_principal(thingName=thing_name,
                                           principal=certificate_arn)
     except ClientError as error:
-        error_code = error.response['Error']['Code']
-        error_message = error.response['Error']['Message']
+        error_code = boto_errorcode(error)
+        error_message = boto_errormessage(error)
         logger.error("Certificate attachment failed: %s: %s", error_code, error_message)
 
     if thing_type_name is not None:
@@ -89,8 +88,8 @@ def process_thing(thing_name, certificate_id, thing_type_name=None):
                                     thingTypeName=thing_type_name,
                                     removeThingType=False)
         except ClientError as error:
-            error_code = error.response['Error']['Code']
-            error_message = error.response['Error']['Message']
+            error_code = boto_errorcode(error)
+            error_message = boto_errormessage(error)
             logger.error("Thing type not found: %s: %s.", error_code, error_message)
             return False
     return True
@@ -126,18 +125,18 @@ def process_certificate(config, requeue_cb):
         return response["certificateDescription"].get("certificateId")
     except ClientError as error:
         logger.info("Certificate [%s] not found in IoT Core (%s). Importing.",
-                    fingerprint, error.response['Error']['Code'])
+                    fingerprint, boto_errorcode(error))
 
     try:
         response = iot_client.register_certificate_without_ca(
             certificatePem=certificate_text.decode('ascii'),
             status='ACTIVE')
         return response.get("certificateId")
-    except botocore.exceptions.ClientError as e:
-        if e.response['Error']['Code'] == 'ThrottlingException':
+    except ClientError as e:
+        if boto_errorcode(e) == 'ThrottlingException':
             print("ERROR: ThrottlingException. Requeue for processing.")
             requeue_cb(config)
-        if e.response['Error']['Code'] == 'UnauthorizedException':
+        if boto_errorcode(e) == 'UnauthorizedException':
             print("ERROR: There is a deployment problem with the attached"
                   "Role. Unable to reach IoT Core object.")
         return None
@@ -173,4 +172,4 @@ def lambda_handler(event: SQSEvent,
             config = json.loads(record["body"])
             process_sqs(config)
 
-    return event
+    return event.raw_event

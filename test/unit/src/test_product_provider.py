@@ -7,10 +7,13 @@ Unit tests for bulk_importer
 import os
 import json
 from unittest import TestCase
+from pytest import raises
 from moto import mock_aws
 from boto3 import resource, client
+from aws_lambda_powertools.utilities.data_classes import S3Event
+from aws_lambda_powertools.utilities.typing import LambdaContext
 from src.product_provider.main import lambda_handler, get_provider_queue
-
+from src.layer_utils.circuit_state import reset_circuit
 from .model_product_provider import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={
@@ -20,7 +23,7 @@ from .model_product_provider import LambdaS3Class, LambdaSQSClass
         "service_whitelist": None,
     },
     'iot': {'use_valid_cert': True}})
-class TestBulkImporter(TestCase):
+class TestProductProvider(TestCase):
     """Test cases for bulk importer lambda function"""
     def setUp(self):
         self.obj_dir = "./test/artifacts/"
@@ -54,7 +57,7 @@ class TestBulkImporter(TestCase):
         self.env_thing_type_name_pos = "myThingType"
         self.env_thing_type_name_neg = "myBadThingType"
 
-        s3_client = client('s3', region_name="us-east-1")
+        s3_client = client('s3', region_name='us-east-1')
 
         s3_client.create_bucket(Bucket = self.bucket_espressif_pos )
         s3_client.create_bucket(Bucket = self.bucket_espressif_neg )
@@ -92,15 +95,28 @@ class TestBulkImporter(TestCase):
         assert get_provider_queue(self.bucket_microchip_pos) == self.env_queue_target_microchip
 
     def test_gpq_espressif_neg(self):
-        os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
-        assert get_provider_queue(self.bucket_espressif_neg) is None
-    def test_gpq_infineon_neg(self):
-        os.environ['QUEUE_TARGET_INFINEON'] = self.env_queue_target_infineon
-        assert get_provider_queue(self.bucket_infineon_neg) is None
-    def test_gpq_microchip_neg(self):
-        os.environ['QUEUE_TARGET_MICROCHIP'] = self.env_queue_target_microchip
-        assert get_provider_queue(self.bucket_microchip_neg) is None
+        """ Tests espressif bucket pattern """
+        os.environ['QUEUE_TARGET_ESPRESSIF'] = "Thingpress-Espressif-Provider-stackname"
+        bucket = "thingpress-espressi-stackname"
+        with raises(ValueError) as e:
+            get_provider_queue(bucket)
+        assert e.typename == 'ValueError'
 
+    def test_gpq_infineon_neg(self):
+        """ Tests infineon bucket pattern """
+        os.environ['QUEUE_TARGET_INFINEON'] = "Thingpress-Infineon-Provider-stackname"
+        bucket = "thingpress-infineo-stackname"
+        with raises(ValueError) as e:
+            get_provider_queue(bucket)
+        assert e.typename == 'ValueError'
+
+    def test_gpq_microchip_neg(self):
+        """ Tests microchip bucket pattern """
+        os.environ['QUEUE_TARGET_MICROCHIP'] = "Thingpress-Microchip-Provider-stackname"
+        bucket = "thingpress-microchi-stackname"
+        with raises(ValueError) as e:
+            get_provider_queue(bucket)
+        assert e.typename == 'ValueError'
 
     def test_pos_invoke_export(self):
         """ The number of items in the queue should be 7 since there are
@@ -151,7 +167,7 @@ class TestBulkImporter(TestCase):
         iotc = client('iot')
         iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
 
-        lambda_handler(s3_event, None)
+        lambda_handler(S3Event(s3_event), LambdaContext())
         sqs_client = client("sqs", "us-east-1")
         sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.env_queue_target_espressif)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
@@ -168,6 +184,7 @@ class TestBulkImporter(TestCase):
         os.environ['THING_GROUP_NAME'] = "None"
         os.environ['THING_TYPE_NAME'] = "None"
         os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
+        reset_circuit('iot_get_policy')
 
         policy_document = {
 	        "Version": "2012-10-17",
@@ -208,8 +225,10 @@ class TestBulkImporter(TestCase):
         iotc = client('iot')
         iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
 
-        r = lambda_handler(s3_event, None)
-        assert r is None
+        with raises(ValueError) as e:
+            r = lambda_handler(S3Event(s3_event), LambdaContext())
+            assert r == s3_event
+        assert e.typename == 'ValueError'
 
     def tearDown(self):
         sqs_resource = resource("sqs", region_name="us-east-1")
