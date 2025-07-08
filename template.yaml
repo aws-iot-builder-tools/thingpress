@@ -235,6 +235,14 @@ Resources:
                   - Name: Suffix
                     Value: .json
 
+  # Dead letter queue for Espressif provider
+  ThingpressEspressifProviderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Espressif-Provider-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600  # 14 days
+
   # The product provider lambda function sends a message to this queue if the
   # manifest source comes from the Espressif bucket.
   ThingpressEspressifProviderQueue:
@@ -243,6 +251,9 @@ Resources:
       QueueName: !Sub Thingpress-Espressif-Provider-${AWS::StackName}
       VisibilityTimeout: 900
       SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressEspressifProviderDLQ.Arn
+        maxReceiveCount: 5
 
   ThingpressEspressifProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -263,12 +274,23 @@ Resources:
               AWS:
                 - !GetAtt ThingpressProductProviderFunctionRole.Arn
 
+  # Dead letter queue for Infineon provider
+  ThingpressInfineonProviderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Infineon-Provider-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600  # 14 days
+
   ThingpressInfineonProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Infineon-Provider-${AWS::StackName}
       VisibilityTimeout: 900
       SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressInfineonProviderDLQ.Arn
+        maxReceiveCount: 5
 
   ThingpressInfineonProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -290,12 +312,23 @@ Resources:
               AWS:
                 - !GetAtt ThingpressProductProviderFunctionRole.Arn
 
+  # Dead letter queue for Microchip provider
+  ThingpressMicrochipProviderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Microchip-Provider-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600  # 14 days
+
   ThingpressMicrochipProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Microchip-Provider-${AWS::StackName}
       VisibilityTimeout: 900
       SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressMicrochipProviderDLQ.Arn
+        maxReceiveCount: 5
 
   ThingpressSiliconProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -468,12 +501,23 @@ Resources:
   #--------------------------------------------------------------------------
   # Bulk importer queue configuration
   #--------------------------------------------------------------------------
+  # Dead letter queue for Bulk Importer
+  ThingpressBulkImporterDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Bulk-Importer-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600  # 14 days
+
   ThingpressBulkImporterQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Bulk-Importer-${AWS::StackName}
       VisibilityTimeout: 900
       SqsManagedSseEnabled: true
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressBulkImporterDLQ.Arn
+        maxReceiveCount: 5
 
   ThingpressBulkImporterQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -545,6 +589,87 @@ Resources:
             Enabled: true
             Queue: !GetAtt ThingpressBulkImporterQueue.Arn
 
+  ThingpressEspressifProviderDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressEspressifProviderDLQ
+      PolicyDocument:
+        Id: EspressifProviderDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: EspressifProviderDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressEspressifProviderDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressEspressifProviderQueue.Arn
+
+  ThingpressInfineonProviderDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressInfineonProviderDLQ
+      PolicyDocument:
+        Id: InfineonProviderDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: InfineonProviderDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressInfineonProviderDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressInfineonProviderQueue.Arn
+
+  ThingpressMicrochipProviderDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressMicrochipProviderDLQ
+      PolicyDocument:
+        Id: MicrochipProviderDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MicrochipProviderDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressMicrochipProviderDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressMicrochipProviderQueue.Arn
+
+  ThingpressBulkImporterDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressBulkImporterDLQ
+      PolicyDocument:
+        Id: BulkImporterDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: BulkImporterDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressBulkImporterDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressBulkImporterQueue.Arn
+
+
 Outputs:
   EspressifIngestPoint:
     Description: The Amazon S3 bucket for uploading Espressif manifests (CSV)
@@ -555,3 +680,4 @@ Outputs:
   MicrochipIngestPoint:
     Description: The Amazon S3 bucket for uploading Microchip manifests (JSON)
     Value: !Ref ThingpressMicrochipManifestBucket
+  # DLQ policies
