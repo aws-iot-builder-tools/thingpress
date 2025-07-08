@@ -5,8 +5,6 @@
 Lambda function provides data enrichment before passing along to the importer.
 """
 import os
-import json
-import boto3
 import logging
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
