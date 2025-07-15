@@ -6,6 +6,8 @@ Certificate/manifest related functions that multiple lambda functions use,
 here to reduce redundancy
 """
 import binascii
+from ast import literal_eval
+from base64 import b64decode
 from base64 import b64encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
@@ -29,6 +31,17 @@ def get_cn(cert_string):
     cn.replace(" ", "")
     return cn
 
-def get_certificate_fingerprint(certificate: x509.Certificate):
+def decode_certificate(b64_encoded_cert: str) -> bytes:
+    return b64decode(literal_eval(b64_encoded_cert))
+
+def load_certificate(certificate_text: bytes) -> x509.Certificate:
+    # See if the certificate has already been registered.  If so, bail.
+    return x509.load_pem_x509_certificate(data=certificate_text,
+                                          backend=default_backend())
+
+    #return get_certificate_fingerprint(certificate_obj)
+
+def get_certificate_fingerprint(certificate: x509.Certificate) -> str:
     """Retrieve the certificate fingerprint"""
     return binascii.hexlify(certificate.fingerprint(hashes.SHA256())).decode('UTF-8')
+

@@ -9,14 +9,16 @@ import os
 import json
 import logging
 from botocore.exceptions import ClientError
+from boto3 import Session
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_utils import verify_queue
-from aws_utils import boto_errorcode, boto_errormessage
+from aws_utils import boto_exception
 from .manifest_handler import invoke_export, verify_certtype
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
+default_session: Session = Session()
 
 def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
@@ -46,21 +48,20 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
     cert_type = os.environ['CERT_TYPE']
 
     try:
-        verify_queue(queue_url=queue_url)
-    except ClientError as error:
-        error_code = boto_errorcode(error)
-        error_message = boto_errormessage(error)
-        logger.error("Queue %s is not available. %s: %s", queue_url, error_code, error_message)
-        raise error
+        verify_queue(queue_url=queue_url, session=default_session)
+    except ClientError as exc:
+        boto_exception(exc, f"Queue {queue_url} is not available")
+        raise exc
 
     try:
         verify_certtype(cert_type)
     except ValueError as error:
+        # TODO write a general exception logging mechanism for not boto calls, and have the boto exception code call that
         logger.error("Certificate type %s did not verify: %s", queue_url, str(error))
         raise error
 
     for record in event.records:
         config = json.loads(record["body"])
-        invoke_export(config, queue_url, cert_type)
+        invoke_export(config, queue_url, cert_type, default_session)
 
     return event.raw_event

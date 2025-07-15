@@ -3,6 +3,8 @@
 # SPDX-License-Identifier: MIT-0
 
 Circuit breaker pattern implementation for AWS API calls
+Please see the following url for conceptual overview
+https://martinfowler.com/bliki/CircuitBreaker.html
 """
 import time
 import logging
@@ -137,25 +139,6 @@ def with_circuit_breaker(operation_name, fallback_function=None):
         return wrapper
     return decorator
 
-def add_circuit(name: str) -> CircuitState:
-    """ Create an arbitrary circuit """
-    _circuit_states[name] = CircuitState()
-    return _circuit_states[name]
-
-def remove_circuit(name: str):
-    """ Remove an arbitrary circuit """
-    del _circuit_states[name]
-
 def clear_circuits():
     """ Clears all circuits """
     _circuit_states.clear()
-
-def has_circuit(name: str) -> bool:
-    if name in _circuit_states:
-        return True
-    return False
-
-def get_circuit(name: str) -> CircuitState:
-    if has_circuit(name):
-        return _circuit_states[name]
-    return add_circuit(name)

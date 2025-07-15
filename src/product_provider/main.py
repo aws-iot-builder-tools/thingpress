@@ -7,6 +7,7 @@ Lambda function provides data enrichment before passing along to the importer.
 import os
 import logging
 
+from boto3 import Session
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event
 from aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, send_sqs_message
@@ -14,6 +15,8 @@ from aws_utils import check_cfn_prop_valid
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
+
+default_session: Session = Session()
 
 ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
 INFINEON_BUCKET_PREFIX = "thingpress-infineon-"
@@ -65,14 +68,14 @@ def lambda_handler(event: S3Event,
     config['bucket'] = event.bucket_name
 
     if check_cfn_prop_valid(e_thing_group):
-        config['thing_group_arn'] = get_thing_group_arn(e_thing_group)
+        config['thing_group_arn'] = get_thing_group_arn(e_thing_group, default_session)
 
     if check_cfn_prop_valid(e_thing_type):
-        get_thing_type_arn(e_thing_type)
+        get_thing_type_arn(e_thing_type, default_session)
         config['thing_type_name'] = e_thing_type
 
     if check_cfn_prop_valid(e_policy):
-        get_policy_arn(e_policy)
+        get_policy_arn(e_policy, default_session)
         config['policy_name'] = e_policy
 
     try:
@@ -85,7 +88,7 @@ def lambda_handler(event: S3Event,
         # TODO: verify s3 object, for now assume it is reachable
         # v_object = verify_s3_object(bucket, record.s3.get_object.key)
         config['key'] = record.s3.get_object.key
-        send_sqs_message(config, queue_url)
+        send_sqs_message(config, queue_url, default_session)
         logger.info("Processing data for object {record.s3.get_object.key}")
 
     return event.raw_event

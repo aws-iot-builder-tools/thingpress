@@ -9,12 +9,14 @@ import json
 from unittest import TestCase
 from pytest import raises
 from moto import mock_aws
-from boto3 import resource, client
+from boto3 import resource, client, _get_default_session
 from aws_lambda_powertools.utilities.data_classes import S3Event
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from src.product_provider.main import lambda_handler, get_provider_queue
 from src.layer_utils.circuit_state import reset_circuit
 from .model_product_provider import LambdaS3Class, LambdaSQSClass
+
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
 
 @mock_aws(config={
     "core": {
@@ -24,7 +26,17 @@ from .model_product_provider import LambdaS3Class, LambdaSQSClass
     },
     'iot': {'use_valid_cert': True}})
 class TestProductProvider(TestCase):
-    """Test cases for bulk importer lambda function"""
+    """Test cases for product provider lambda function"""
+    def __init__(self, x):
+        super().__init__(x)
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        os.environ["AWS_REGION"] = "us-east-1"
+        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+        os.environ["AWS_SECURITY_TOKEN"] = "testing"
+        os.environ["AWS_SESSION_TOKEN"] = "testing"
+        self.session = _get_default_session()
+
     def setUp(self):
         self.obj_dir = "./test/artifacts/"
         self.obj_espressif = "manifest-espressif.csv"
@@ -165,10 +177,11 @@ class TestProductProvider(TestCase):
             ]
         }
         iotc = client('iot')
-        iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
+        iotc.create_policy(policyName='dev_policy',
+                           policyDocument=json.dumps(policy_document))
 
         lambda_handler(S3Event(s3_event), LambdaContext())
-        sqs_client = client("sqs", "us-east-1")
+        sqs_client = self.session.client("sqs")
         sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.env_queue_target_espressif)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         p = sqs_client.get_queue_attributes(QueueUrl=sqs_queue_url,
@@ -222,7 +235,7 @@ class TestProductProvider(TestCase):
                 }
             ]
         }
-        iotc = client('iot')
+        iotc = self.session.client('iot')
         iotc.create_policy( policyName='dev_policy', policyDocument=json.dumps(policy_document) )
 
         with raises(ValueError) as e:

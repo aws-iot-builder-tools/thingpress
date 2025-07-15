@@ -7,6 +7,9 @@ import py7zr
 import py7zr.io as py7io
 from cert_utils import format_certificate, get_cn
 from aws_utils import s3_object_bytes, send_sqs_message
+import boto3
+from boto3 import Session
+default_session: Session = Session()
 
 def verify_certtype(option: str) -> bool:
     """ Check type selection for import """
@@ -41,7 +44,10 @@ def select_certificate_set(manifest_bundle: io.BytesIO, option: str) -> io.Bytes
     szf.extract(factory=fcty)
     return io.BytesIO(fcty.get(filename = f).read())
 
-def send_certificates(manifest_archive: io.BytesIO, config: hash, queue_url: str):
+def send_certificates(manifest_archive: io.BytesIO,
+                      config: dict,
+                      queue_url: str,
+                      session: Session):
     "Routine to send data through queue for further processing."
     szf = py7zr.SevenZipFile(manifest_archive)
     fcty = py7io.BytesIOFactory(limit=10000)
@@ -53,15 +59,17 @@ def send_certificates(manifest_archive: io.BytesIO, config: hash, queue_url: str
         config['thing'] = l
         config['certificate'] = k
         send_sqs_message(config=config,
-                         queue_url=queue_url)
+                         queue_url=queue_url,
+                         session=session)
 
-def invoke_export(config, queue_url, cert_type):
+def invoke_export(config, queue_url, cert_type, session: Session=default_session):
     """
     The manifest_file must be a file-like object
     Main interface to invoke manifest processing routines
     """
     manifest_bytes = s3_object_bytes(config['bucket'],
                                     config['key'],
-                                    getvalue=False)
+                                    getvalue=False,
+                                    session=session)
     x = select_certificate_set(manifest_bytes, cert_type)
-    send_certificates(x, config, queue_url=queue_url)
+    send_certificates(x, config, queue_url=queue_url, session=session)

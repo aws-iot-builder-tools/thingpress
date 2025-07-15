@@ -8,7 +8,7 @@ from base64 import b64decode, b64encode
 import os
 import json
 import logging
-import boto3
+from boto3 import Session
 from jose import jws
 from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
@@ -122,15 +122,17 @@ class ManifestItem:
                     encoding=serialization.Encoding.PEM
                 ).decode('ascii')
 
-def invoke_export(config, queue_url):
+def invoke_export(config, queue_url, session: Session):
     """Main procedure"""
     verify_certname = os.environ['VERIFY_CERT']
     manifest_file = s3_object_bytes(config['bucket'],
                                     config['key'],
-                                    getvalue=True)
+                                    getvalue=True,
+                                    session=session)
     verify_file = s3_object_bytes(config['bucket'],
                                          verify_certname,
-                                         getvalue=True)
+                                         getvalue=True,
+                                         session=session)
 
     manifest_iterator = ManifestIterator( json.loads(manifest_file) )
 
@@ -141,4 +143,4 @@ def invoke_export(config, queue_url):
             logger.error("Certificate %s could not be extracted", manifest_item.identifier)
             continue
         config['certificate'] = str(b64encode(block.encode('ascii')))
-        send_sqs_message(config, queue_url)
+        send_sqs_message(config, queue_url, session=session)

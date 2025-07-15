@@ -14,12 +14,10 @@ from unittest import TestCase
 #from pytest import raises, xfail
 import pytest
 from botocore.exceptions import ClientError
-from boto3 import resource, client
+from boto3 import _get_default_session
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from moto import mock_aws
-#from moto import mock_aws, settings
-#from unittest.mock import MagicMock, patch
 from py7zr import FileInfo
 from pytest import raises
 from src.layer_utils.aws_utils import s3_object_bytes
@@ -31,8 +29,6 @@ def cr_fileinfo(fn: str):
     """Mock out FileInfo objects which are a result of 7z parsing"""
     return FileInfo(fn, None, None, None, None, None, None)
 
-
-
 @mock_aws(config={
     "core": {
         "mock_credentials": True,
@@ -41,17 +37,25 @@ def cr_fileinfo(fn: str):
     },
     'iot': {'use_valid_cert': True}})
 class TestProviderInfineon(TestCase):
-    """Infineon test cases"""
+    """Infineon provider test cases"""
+    def __init__(self, x):
+        super().__init__(x)
+        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+        os.environ["AWS_REGION"] = "us-east-1"
+        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+        os.environ["AWS_SECURITY_TOKEN"] = "testing"
+        os.environ["AWS_SESSION_TOKEN"] = "testing"
+        self.session = _get_default_session()
+
     def setUp(self):
-        # Objects that will give events
 
         self.artifact = "manifest-infineon.7z"
-
         self.artifact_local = "./test/artifacts/manifest-infineon.7z"
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
-        s3_client = client('s3', region_name="us-east-1")
+        s3_client = _get_default_session().client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
         with open(self.artifact_local, 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name,
@@ -59,16 +63,16 @@ class TestProviderInfineon(TestCase):
                                  Body=data)
             self.test_s3_object_content = s3_client.get_object(Bucket=self.test_s3_bucket_name,
                                                                Key=self.artifact)['Body']
-        mocked_s3_resource = resource("s3")
-        mocked_s3_resource = { "resource" : resource('s3'),
+        mocked_s3_resource = _get_default_session().resource("s3")
+        mocked_s3_resource = { "resource" : _get_default_session().resource('s3'),
                                "bucket_name" : self.test_s3_bucket_name }
         self.mocked_s3_class = LambdaS3Class(mocked_s3_resource)
 
         self.test_sqs_queue_name = "provider"
-        sqs_client = client('sqs', region_name="us-east-1")
+        sqs_client = _get_default_session().client('sqs', region_name="us-east-1")
         sqs_client.create_queue(QueueName=self.test_sqs_queue_name)
-        mocked_sqs_resource = resource("sqs")
-        mocked_sqs_resource = { "resource" : resource('sqs'),
+        mocked_sqs_resource = _get_default_session().resource("sqs")
+        mocked_sqs_resource = { "resource" : mocked_sqs_resource,
                                 "queue_name" : self.test_sqs_queue_name }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
 
@@ -120,14 +124,14 @@ class TestProviderInfineon(TestCase):
                                    "E0E5")
 
     def test_invoke_export(self):
-        o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False)
+        o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False, self.session)
         assert isinstance(o, io.BytesIO) is True
         x1 = select_certificate_set(o, "E0E0")
         config = {
             'bucket': self.test_s3_bucket_name,
             'key': self.artifact
         }
-        send_certificates(x1, config, self.test_sqs_queue_name)
+        send_certificates(x1, config, self.test_sqs_queue_name, self.session)
 
     def test_pos_lambda_handler_1(self):
         """Invoke the main handler with one file"""
@@ -167,7 +171,7 @@ class TestProviderInfineon(TestCase):
         os.environ['CERT_TYPE']="E0E0"
 
         with raises(ClientError) as exc:
-            v = lambda_handler(SQSEvent(e), LambdaContext())
+            lambda_handler(SQSEvent(e), LambdaContext())
         assert exc.typename == 'QueueDoesNotExist'
 
     def test_neg_lambda_handler_no_cert_type(self):
@@ -186,18 +190,18 @@ class TestProviderInfineon(TestCase):
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
 
         with raises(ValueError) as exc:
-            v = lambda_handler(SQSEvent(e), LambdaContext())
+            lambda_handler(SQSEvent(e), LambdaContext())
         assert exc.typename == 'ValueError'
 
     def tearDown(self):
-        s3_resource = resource("s3",region_name="us-east-1")
+        s3_resource = _get_default_session().resource("s3",region_name="us-east-1")
         s3_bucket = s3_resource.Bucket( self.test_s3_bucket_name )
         for key in s3_bucket.objects.all():
             key.delete()
         s3_bucket.delete()
 
-        sqs_resource = resource("sqs", region_name="us-east-1")
-        sqs_client = client("sqs", "us-east-1")
+        sqs_resource = _get_default_session().resource("sqs", region_name="us-east-1")
+        sqs_client = _get_default_session().client("sqs", "us-east-1")
         sqs_queue_url_r = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         sqs_resource = sqs_resource.Queue(url=sqs_queue_url)

@@ -6,9 +6,12 @@ Lambda function to import Microchip manifest
 """
 import os
 import json
+from boto3 import Session
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from .manifest_handler import invoke_export
+
+default_session: Session = Session()
 
 def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
@@ -36,6 +39,6 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
 
     for record in event.records:
         config = json.loads(record["body"])
-        invoke_export(config, queue_url)
+        invoke_export(config, queue_url, default_session)
 
     return event.raw_event
