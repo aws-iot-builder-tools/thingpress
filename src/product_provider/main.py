@@ -21,6 +21,7 @@ default_session: Session = Session()
 ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
 INFINEON_BUCKET_PREFIX = "thingpress-infineon-"
 MICROCHIP_BUCKET_PREFIX = "thingpress-microchip-"
+GENERATED_BUCKET_PREFIX = "thingpress-generated-"
 
 def get_provider_queue(bucket_name: str) -> str:
     """
@@ -34,7 +35,9 @@ def get_provider_queue(bucket_name: str) -> str:
         return os.environ['QUEUE_TARGET_INFINEON']
     if bucket_name.startswith(MICROCHIP_BUCKET_PREFIX):
         return os.environ['QUEUE_TARGET_MICROCHIP']
-    raise ValueError("Bucket name prefix unidentifiable")
+    if bucket_name.startswith(GENERATED_BUCKET_PREFIX):
+        return os.environ['QUEUE_TARGET_GENERATED']
+    raise ValueError(f"Bucket name prefix unidentifiable: {bucket_name}")
 
 def lambda_handler(event: S3Event,
                    context: LambdaContext) -> dict: # pylint: disable=unused-argument
@@ -49,6 +52,7 @@ def lambda_handler(event: S3Event,
     QUEUE_TARGET_ESPRESSIF
     QUEUE_TARGET_INFINEON
     QUEUE_TARGET_MICROCHIP
+    QUEUE_TARGET_GENERATED
     
     Expects at least one of the following environment variables to be set:
     POLICY_NAME
@@ -81,14 +85,20 @@ def lambda_handler(event: S3Event,
     try:
         queue_url = get_provider_queue(config['bucket'])
     except ValueError as e:
-        logger.error("Queue URL could not be resolved. Exiting.")
+        logger.error(f"Queue URL could not be resolved for bucket {config['bucket']}. Exiting.")
         raise e
 
     for record in event.records:
         # TODO: verify s3 object, for now assume it is reachable
         # v_object = verify_s3_object(bucket, record.s3.get_object.key)
         config['key'] = record.s3.get_object.key
+        
+        # Log the provider type based on the bucket name
+        if config['bucket'].startswith(GENERATED_BUCKET_PREFIX):
+            logger.info(f"Processing generated certificate file: {record.s3.get_object.key}")
+        else:
+            logger.info(f"Processing vendor certificate manifest: {record.s3.get_object.key}")
+            
         send_sqs_message(config, queue_url, default_session)
-        logger.info("Processing data for object {record.s3.get_object.key}")
 
     return event.raw_event

@@ -9,15 +9,16 @@ Thingpress is an AWS IoT administration tool. Customers often choose to design I
 
 Thingpress does more than simply import certificates. Devices must be authorized for actions and ideally participate in IoT fleet management. Thingpress automatically creates an AWS IoT Thing in the AWS IoT Registry based on the certificate CN value (common practice). Thingpress optionally attaches AWS IoT Policy (authorization), Thing Type (fleet management), and Thing Group (fleet management). The objects you associate reflect application design and device lifecycle goals. There is more information in the Getting Started section to help guide you.
 
-Thingpress supports manifests from three vendors. The following is the list
+Thingpress supports manifests from three vendors and programmatically generated certificates. The following is the list
 of vendors in alphabetical order, associated pre-provisioned certificate
-parts, and Thingpress  documentation for each vendor.
+parts, and Thingpress documentation for each vendor.
 
 | Vendor    | Components | Thingpress<br/>Documentation | 
 | --------- | ---------- | ---------------------------- |
 | [Espressif Systems](https://www.espressif.com/) | [ESP32-S3](https://www.espressif.com/en/products/socs/esp32-s3) | [Thingpress for Espressif](doc/espressif.md) |
 | [Infineon Technologies SA](https://www.infineon.com/) | [Optiga Trust M Express](https://www.infineon.com/cms/en/product/security-smart-card-solutions/optiga-embedded-security-solutions/optiga-trust/optiga-trust-m-express/)| [Thingpress for Infineon](doc/infineon.md) |
 | [Microchip Technology Inc.](https://www.microchip.com/) | [Trust&Go ATECC608B with TLS](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls) | [Thingpress for Microchip](doc/microchip.md) |
+| Generated Certificates | Programmatically generated certificates | [Thingpress for Generated Certificates](doc/generated.md) |
 
 # Getting started
 
@@ -33,7 +34,7 @@ Thing Type) can be a daunting task.
    [AWS IoT Things (device registry)](https://docs.aws.amazon.com/iot/latest/developerguide/thing-registry.html), 
    [IoT Thing Types](https://docs.aws.amazon.com/iot/latest/developerguide/thing-types.html), and
    [IoT Thing Group](https://docs.aws.amazon.com/iot/latest/developerguide/thing-groups.html).
-2. Become familiar with any planning activity for your chosen vendor: [Espressif](doc/espressif.md), [Infineon](doc/infineon.md), or [Microchip](doc/microchip.md).
+2. Become familiar with any planning activity for your chosen vendor: [Espressif](doc/espressif.md), [Infineon](doc/infineon.md), [Microchip](doc/microchip.md), or [Generated Certificates](doc/generated.md).
 3. Evaluate service API call limits. Although Thingpress recovers from
    API throttling to not lose data, avoid API throttling in the
    first place to optimize processing time.

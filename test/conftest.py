@@ -21,8 +21,10 @@ module_paths = [
     os.path.join(project_root, "src", "bulk_importer"),
     os.path.join(project_root, "src", "product_provider"),
     os.path.join(project_root, "src", "provider_espressif"),
+    os.path.join(project_root, "src", "provider_generated", "provider_generated"),
     os.path.join(project_root, "src", "provider_infineon", "provider_infineon"),
     os.path.join(project_root, "src", "provider_microchip", "provider_microchip"),
+    os.path.join(project_root, "src", "certificate_generator"),
 ]
 
 # Add each module path to sys.path

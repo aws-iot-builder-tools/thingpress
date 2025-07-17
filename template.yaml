@@ -82,12 +82,12 @@ Resources:
     Metadata:
       BuildMethod: python3.13
 
-  # S3 Bucket to receive Microchip manifest payload which is a
-  # JSON file having a vendor defined structure.
-  ThingpressMicrochipManifestBucket:
+  # S3 Bucket to receive Espressif manifest payload which is an
+  # CSV file with vendor defined structure.
+  ThingpressEspressifManifestBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub thingpress-microchip-${AWS::StackName}
+      BucketName: !Sub thingpress-espressif-${AWS::StackName}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -95,6 +95,29 @@ Resources:
               KMSMasterKeyID: alias/aws/s3
       VersioningConfiguration:
         Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  # S3 bucket for generated certificates
+  ThingpressGeneratedManifestBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub thingpress-generated-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   # S3 Bucket to receive Infineon manifest payload which is a
   # 7-Zip compressed file having embedded compressed files.
@@ -109,13 +132,18 @@ Resources:
               KMSMasterKeyID: alias/aws/s3
       VersioningConfiguration:
         Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
-  # S3 Bucket to receive Espressif manifest payload which is an
-  # CSV file with vendor defined structure.
-  ThingpressEspressifManifestBucket:
+  # S3 Bucket to receive Microchip manifest payload which is a
+  # JSON file having a vendor defined structure.
+  ThingpressMicrochipManifestBucket:
     Type: AWS::S3::Bucket
     Properties:
-      BucketName: !Sub thingpress-espressif-${AWS::StackName}
+      BucketName: !Sub thingpress-microchip-${AWS::StackName}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -123,6 +151,11 @@ Resources:
               KMSMasterKeyID: alias/aws/s3
       VersioningConfiguration:
         Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   # Allow Espressif bucket event to invoke the product provider function
   ThingpressProductProviderInvokeFromEspressifPerm:
@@ -200,6 +233,7 @@ Resources:
           QUEUE_TARGET_ESPRESSIF: !Ref ThingpressEspressifProviderQueue
           QUEUE_TARGET_INFINEON: !Ref ThingpressInfineonProviderQueue
           QUEUE_TARGET_MICROCHIP: !Ref ThingpressMicrochipProviderQueue
+          QUEUE_TARGET_GENERATED: !Ref ThingpressGeneratedProviderQueue
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType
@@ -234,17 +268,68 @@ Resources:
                 Rules:
                   - Name: Suffix
                     Value: .json
+        EV4:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressGeneratedManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .txt
 
-  # Dead letter queue for Espressif provider
+  # Dead letter queue for Generated provider
+  ThingpressGeneratedProviderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Generated-Provider-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: 1209600 # 14 days
+
+  # The product provider lambda function sends a message to this queue if the
+  # manifest source comes from the Generated certificates bucket.
+  ThingpressGeneratedProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Generated-Provider-Queue-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: 900
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressGeneratedProviderDLQ.Arn
+        maxReceiveCount: 3
+
+  # Lambda function for processing generated certificates
+  ThingpressGeneratedProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/provider_generated/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      MemorySize: 256
+      Timeout: 300
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressGeneratedManifestBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ThingpressGeneratedProviderQueue.Arn
+            BatchSize: 10
+
   ThingpressEspressifProviderDLQ:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Espressif-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600  # 14 days
+      MessageRetentionPeriod: 1209600 # 14 days
 
-  # The product provider lambda function sends a message to this queue if the
-  # manifest source comes from the Espressif bucket.
   ThingpressEspressifProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
@@ -280,7 +365,7 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Infineon-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600  # 14 days
+      MessageRetentionPeriod: 1209600 # 14 days
 
   ThingpressInfineonProviderQueue:
     Type: AWS::SQS::Queue
@@ -318,7 +403,7 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Microchip-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600  # 14 days
+      MessageRetentionPeriod: 1209600 # 14 days
 
   ThingpressMicrochipProviderQueue:
     Type: AWS::SQS::Queue
@@ -507,7 +592,7 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Bulk-Importer-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600  # 14 days
+      MessageRetentionPeriod: 1209600 # 14 days
 
   ThingpressBulkImporterQueue:
     Type: AWS::SQS::Queue
@@ -669,6 +754,25 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !GetAtt ThingpressBulkImporterQueue.Arn
 
+  ThingpressGeneratedProviderDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressGeneratedProviderDLQ
+      PolicyDocument:
+        Id: GeneratedProviderDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: GeneratedProviderDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressGeneratedProviderDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressGeneratedProviderQueue.Arn
 
 Outputs:
   EspressifIngestPoint:
@@ -680,4 +784,7 @@ Outputs:
   MicrochipIngestPoint:
     Description: The Amazon S3 bucket for uploading Microchip manifests (JSON)
     Value: !Ref ThingpressMicrochipManifestBucket
+  GeneratedIngestPoint:
+    Description: The Amazon S3 bucket for uploading Generated certificate files (TXT)
+    Value: !Ref ThingpressGeneratedManifestBucket
   # DLQ policies

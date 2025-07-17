@@ -14,7 +14,6 @@ import json
 from unittest import TestCase
 
 from boto3 import _get_default_session
-from botocore.config import Config
 from moto import mock_aws
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -33,6 +32,8 @@ class TestProviderEspressif(TestCase):
     """Unit tests for the espressif provider module"""
     def __init__(self, x):
         super().__init__(x)
+
+        # Session management across all tests
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
         os.environ["AWS_REGION"] = "us-east-1"
         os.environ["AWS_ACCESS_KEY_ID"] = "testing"

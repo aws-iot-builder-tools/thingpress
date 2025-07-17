@@ -22,7 +22,7 @@ from src.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
 from src.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
 from src.layer_utils.aws_utils import send_sqs_message, get_certificate_arn, register_certificate
 from src.layer_utils.aws_utils import process_thing, process_thing_type, process_policy
-from src.layer_utils.aws_utils import process_thing_group
+from src.layer_utils.aws_utils import process_thing_group, boto_errorcode
 from src.layer_utils.cert_utils import decode_certificate
 from src.layer_utils.circuit_state import clear_circuits, reset_circuit
 
@@ -384,3 +384,186 @@ class TestAwsUtils(TestCase):
 
         # Assume operation success with no raise
         process_thing_type('my_thing', self.thing_type_name, _get_default_session())
+
+    def test_neg_send_sqs_message_client_error(self):
+        """Test handling of ClientError in send_sqs_message function"""
+        message = {"key": "value"}
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_error_response = {
+                'Error': {
+                    'Code': 'InvalidParameterValue',
+                    'Message': 'The request was rejected. The queue URL is invalid.'
+                }
+            }
+            mock_sqs.send_message.side_effect = ClientError(
+                mock_error_response, 'SendMessage')
+            mock_client.return_value = mock_sqs
+
+            with raises(ClientError) as exc:
+                send_sqs_message(message, "invalid-queue-url", _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'InvalidParameterValue'
+            mock_sqs.send_message.assert_called_once()
+
+    def test_neg_register_certificate_client_error(self):
+        """Test handling of ClientError in register_certificate function"""
+        invalid_cert = "-----INVALID CERTIFICATE-----"
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_iot = MagicMock()
+            mock_error_response = {
+                'Error': {
+                    'Code': 'InvalidParameterException',
+                    'Message': 'Invalid certificate format'
+                }
+            }
+            mock_iot.register_certificate_without_ca.side_effect = ClientError(
+                mock_error_response, 'RegisterCertificateWithoutCA')
+            mock_client.return_value = mock_iot
+
+            with raises(ClientError) as exc:
+                register_certificate(invalid_cert, _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'InvalidParameterException'
+            mock_iot.register_certificate_without_ca.assert_called_once()
+
+    def test_neg_process_thing_group_client_error(self):
+        """Test handling of ClientError in process_thing_group function"""
+        thing_group_arn = "arn:aws:iot:us-east-1:123456789012:thinggroup/nonexistent-group"
+        thing_arn = "arn:aws:iot:us-east-1:123456789012:thing/nonexistent-thing"
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_iot = MagicMock()
+            mock_error_response = {
+                'Error': {
+                    'Code': 'ResourceNotFoundException',
+                    'Message': 'Thing group not found'
+                }
+            }
+            mock_iot.add_thing_to_thing_group.side_effect = ClientError(
+                mock_error_response, 'AddThingToThingGroup')
+            mock_client.return_value = mock_iot
+
+            with raises(ClientError) as exc:
+                process_thing_group(thing_group_arn, thing_arn, _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'ResourceNotFoundException'
+            mock_iot.add_thing_to_thing_group.assert_called_once_with(
+                thingGroupArn=thing_group_arn,
+                thingArn=thing_arn,
+                overrideDynamicGroups=False
+            )
+
+    def test_neg_process_thing_describe_client_error(self):
+        """Test handling of ClientError in process_thing function when describe_thing fails"""
+        thing_name = "nonexistent-thing"
+        certificate_id = "certificate-id"
+        certificate_arn = "arn:aws:iot:us-east-1:123456789012:cert/certificate-id"
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_iot = MagicMock()
+            # First error for describe_thing
+            mock_error_response_describe = {
+                'Error': {
+                    'Code': 'ResourceNotFoundException',
+                    'Message': 'Thing not found'
+                }
+            }
+            mock_iot.describe_thing.side_effect = ClientError(
+                mock_error_response_describe, 'DescribeThing')
+            
+            # Second error for create_thing
+            mock_error_response_create = {
+                'Error': {
+                    'Code': 'ThrottlingException',
+                    'Message': 'Rate exceeded'
+                }
+            }
+            mock_iot.create_thing.side_effect = ClientError(
+                mock_error_response_create, 'CreateThing')
+            
+            mock_client.return_value = mock_iot
+            
+            # Mock get_certificate_arn to return a valid ARN
+            with patch('src.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
+                with raises(ClientError) as exc:
+                    process_thing(thing_name, certificate_id, _get_default_session())
+                
+                assert boto_errorcode(exc.value) == 'ThrottlingException'
+                mock_iot.describe_thing.assert_called_once_with(thingName=thing_name)
+                mock_iot.create_thing.assert_called_once_with(thingName=thing_name)
+
+    def test_neg_process_thing_attach_client_error(self):
+        """Test handling of ClientError in process_thing function when attach_thing_principal fails"""
+        thing_name = "test-thing"
+        certificate_id = "certificate-id"
+        certificate_arn = "arn:aws:iot:us-east-1:123456789012:cert/certificate-id"
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_iot = MagicMock()
+            # First error for describe_thing
+            mock_error_response_describe = {
+                'Error': {
+                    'Code': 'ResourceNotFoundException',
+                    'Message': 'Thing not found'
+                }
+            }
+            mock_iot.describe_thing.side_effect = ClientError(
+                mock_error_response_describe, 'DescribeThing')
+            
+            # No error for create_thing
+            mock_iot.create_thing.return_value = {'thingName': thing_name}
+            
+            # Error for attach_thing_principal
+            mock_error_response_attach = {
+                'Error': {
+                    'Code': 'InvalidRequestException',
+                    'Message': 'Cannot attach principal to thing'
+                }
+            }
+            mock_iot.attach_thing_principal.side_effect = ClientError(
+                mock_error_response_attach, 'AttachThingPrincipal')
+            
+            mock_client.return_value = mock_iot
+            
+            # Mock get_certificate_arn to return a valid ARN
+            with patch('src.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
+                with raises(ClientError) as exc:
+                    process_thing(thing_name, certificate_id, _get_default_session())
+                
+                assert boto_errorcode(exc.value) == 'InvalidRequestException'
+                mock_iot.describe_thing.assert_called_once_with(thingName=thing_name)
+                mock_iot.create_thing.assert_called_once_with(thingName=thing_name)
+                mock_iot.attach_thing_principal.assert_called_once_with(
+                    thingName=thing_name,
+                    principal=certificate_arn
+                )
+
+    def test_neg_process_thing_type_client_error(self):
+        """Test handling of ClientError in process_thing_type function"""
+        thing_name = "test-thing"
+        thing_type_name = "nonexistent-type"
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_iot = MagicMock()
+            mock_error_response = {
+                'Error': {
+                    'Code': 'ResourceNotFoundException',
+                    'Message': 'Thing type not found'
+                }
+            }
+            mock_iot.update_thing.side_effect = ClientError(
+                mock_error_response, 'UpdateThing')
+            mock_client.return_value = mock_iot
+
+            with raises(ClientError) as exc:
+                process_thing_type(thing_name, thing_type_name, _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'ResourceNotFoundException'
+            mock_iot.update_thing.assert_called_once_with(
+                thingName=thing_name,
+                thingTypeName=thing_type_name,
+                removeThingType=False
+            )

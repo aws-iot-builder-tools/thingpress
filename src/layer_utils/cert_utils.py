@@ -13,6 +13,10 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization, hashes
 from cryptography.x509.oid import NameOID
+import logging
+
+logger = logging.getLogger()
+logger.setLevel("INFO")
 
 def format_certificate(cert_string):
     """Encode certificate so that it can safely travel via sqs"""
@@ -25,11 +29,16 @@ def format_certificate(cert_string):
 
 def get_cn(cert_string):
     """Retrieves the cn value of certificate dn. Generally used for iot thing name"""
-    certificate_obj = x509.load_pem_x509_certificate(data=cert_string.encode('ascii'),
-                                                     backend=default_backend())
-    cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
-    cn.replace(" ", "")
-    return cn
+    try:
+        certificate_obj = x509.load_pem_x509_certificate(data=cert_string.encode('ascii'),
+                                                        backend=default_backend())
+        cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
+        cn.replace(" ", "")
+        return cn
+    except Exception as e:
+        logger.error("Error extracting CN from certificate: %s", e)
+        # Use a hash of the certificate as fallback
+        return f"Device-{hash(cert_string) & 0xFFFFFFFF:08x}"
 
 def decode_certificate(b64_encoded_cert: str) -> bytes:
     return b64decode(literal_eval(b64_encoded_cert))
