@@ -47,8 +47,9 @@ def select_certificate_set(manifest_bundle: io.BytesIO, option: str) -> io.Bytes
 def send_certificates(manifest_archive: io.BytesIO,
                       config: dict,
                       queue_url: str,
-                      session: Session):
+                      session: Session) -> int:
     "Routine to send data through queue for further processing."
+    count = 0
     szf = py7zr.SevenZipFile(manifest_archive)
     fcty = py7io.BytesIOFactory(limit=10000)
     szf.extract(factory=fcty)
@@ -61,6 +62,8 @@ def send_certificates(manifest_archive: io.BytesIO,
         send_sqs_message(config=config,
                          queue_url=queue_url,
                          session=session)
+        count += 1
+    return count
 
 def invoke_export(config, queue_url, cert_type, session: Session=default_session):
     """
@@ -72,4 +75,4 @@ def invoke_export(config, queue_url, cert_type, session: Session=default_session
                                     getvalue=False,
                                     session=session)
     x = select_certificate_set(manifest_bytes, cert_type)
-    send_certificates(x, config, queue_url=queue_url, session=session)
+    return send_certificates(x, config, queue_url=queue_url, session=session)

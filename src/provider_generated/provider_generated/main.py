@@ -7,18 +7,58 @@ and begin the import processing pipeline
 """
 import os
 import json
-import logging
 import base64
 from typing import Dict, Any
+from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
+from aws_lambda_powertools.utilities.idempotency import idempotent_function
+from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import DynamoDBPersistenceLayer
+from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_utils import s3_object_bytes, send_sqs_message
 from cert_utils import get_cn
 from boto3 import Session
 
-logger = logging.getLogger()
-logger.setLevel("INFO")
+# Initialize Logger and Idempotency
+logger = Logger(service="provider_generated")
 default_session: Session = Session()
+
+if os.environ.get("POWERTOOLS_IDEMPOTENCY_TABLE") is None:
+    raise ValueError("Environment variable POWERTOOLS_IDEMPOTENCY_TABLE not set.")
+POWERTOOLS_IDEMPOTENCY_TABLE: str = os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"]
+if os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS") is None:
+    POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = 3600
+POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = int(
+    os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS", 3600))
+
+# Initialize persistence layer for idempotency
+persistence_layer = DynamoDBPersistenceLayer(
+    table_name=POWERTOOLS_IDEMPOTENCY_TABLE,
+    key_attr="id",
+    expiry_attr="expiration",
+    status_attr="status",
+    data_attr="data",
+    validation_key_attr="validation"
+)
+
+# Configure idempotency
+idempotency_config = IdempotencyConfig(
+    expires_after_seconds=POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS
+)
+
+def file_key_generator(event, context):
+    """Generate a unique key based on S3 bucket and key"""
+    if isinstance(event, dict) and "bucket" in event and "key" in event:
+        # Use bucket and key as the idempotency key
+        return f"{event['bucket']}:{event['key']}"
+    return None
+
+#@idempotent_function(
+#    persistence_store=persistence_layer,
+#    config=idempotency_config,
+#    event_key_generator=file_key_generator,
+#    data_keyword_argument="config"
+#)
 
 def process_certificate_file(config: Dict[str, Any], queue_url: str,
                              session: Session=default_session) -> int:
@@ -33,6 +73,12 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
     Returns:
         Number of certificates processed
     """
+    logger.info({
+        "message": "Processing certificate file",
+        "bucket": config['bucket'],
+        "key": config['key']
+    })
+
     # Get the file content from S3
     file_content = s3_object_bytes(config['bucket'], config['key'], getvalue=True,
                                    session=session).decode()
@@ -57,7 +103,13 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
         send_sqs_message(cert_config, queue_url, session)
         count += 1
 
-    logger.info("Processed %s certificates from %s}", count,config['key'])
+    logger.info({
+        "message": "Processed certificates from file",
+        "count": count,
+        "bucket": config['bucket'],
+        "key": config['key']
+    })
+
     return count
 
 def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
@@ -90,7 +142,16 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
 
     for record in event.records:
         config = json.loads(record["body"])
+        logger.info({
+            "message": "Processing SQS message",
+            "bucket": config.get('bucket'),
+            "key": config.get('key')
+        })
         total_processed += process_certificate_file(config, queue_url)
 
-    logger.info("Total certificates processed: %s", total_processed)
+    logger.info({
+        "message": "Total certificates processed",
+        "count": total_processed
+    })
+    
     return event.raw_event

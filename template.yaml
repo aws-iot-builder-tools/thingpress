@@ -70,6 +70,26 @@ Parameters:
       balance.  In case of throttling failure, the payload will be requeued.
 
 Resources:
+  # Idempotency table for Lambda functions
+  ThingpressIdempotencyTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: id
+          KeyType: HASH
+      TimeToLiveSpecification:
+        AttributeName: expiration
+        Enabled: true
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Idempotency
+
   ThingpressUtilsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -311,11 +331,15 @@ Resources:
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ThingpressGeneratedManifestBucket
         - SQSSendMessagePolicy:
             QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
       Events:
         SQSEvent:
           Type: SQS
@@ -476,6 +500,8 @@ Resources:
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
       Events:
         QueueEvent:
           Type: SQS
@@ -504,6 +530,18 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
         - arn:aws:iam::aws:policy/AmazonSQSFullAccess
+      Policies:
+        - PolicyName: IdempotencyTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt ThingpressIdempotencyTable.Arn
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -526,6 +564,8 @@ Resources:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           CERT_TYPE: !Ref InfineonCertBundleType
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
       Events:
         QueueEvent:
           Type: SQS
@@ -575,6 +615,8 @@ Resources:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           VERIFY_CERT: !Ref MicrochipVerifyCertName
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
       Events:
         QueueEvent:
           Type: SQS
@@ -645,6 +687,18 @@ Resources:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
         - arn:aws:iam::aws:policy/AmazonSQSFullAccess
         - arn:aws:iam::aws:policy/AWSIoTFullAccess
+      Policies:
+        - PolicyName: IdempotencyTableAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dynamodb:PutItem
+                  - dynamodb:GetItem
+                  - dynamodb:UpdateItem
+                  - dynamodb:DeleteItem
+                Resource: !GetAtt ThingpressIdempotencyTable.Arn
       AssumeRolePolicyDocument:
         Statement:
           - Effect: Allow
@@ -666,6 +720,8 @@ Resources:
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
       Events:
         QueueEvent:
           Type: SQS
@@ -787,4 +843,7 @@ Outputs:
   GeneratedIngestPoint:
     Description: The Amazon S3 bucket for uploading Generated certificate files (TXT)
     Value: !Ref ThingpressGeneratedManifestBucket
+  IdempotencyTable:
+    Description: The DynamoDB table used for idempotency tracking
+    Value: !Ref ThingpressIdempotencyTable
   # DLQ policies
