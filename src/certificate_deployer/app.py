@@ -9,7 +9,7 @@ import json
 import logging
 
 import boto3
-import cfnresponse
+from . import cfnresponse
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -77,31 +77,22 @@ def configure_bucket_notifications(bucket_name, notification_config=None, lambda
             # Transform the configuration to match S3 API expectations
             s3_config = {}
 
-            # Handle LambdaFunctionConfigurations -> LambdaConfigurations
+            # Handle LambdaFunctionConfigurations
             if 'LambdaFunctionConfigurations' in notification_config:
-                s3_config['LambdaConfigurations'] = []
+                s3_config['LambdaFunctionConfigurations'] = []
                 for lambda_config in notification_config['LambdaFunctionConfigurations']:
                     s3_lambda_config = {
                         'LambdaFunctionArn': lambda_config['LambdaFunctionArn'],
-                        'Events': ([lambda_config['Event']]
-                                 if isinstance(lambda_config['Event'], str)
-                                 else lambda_config['Event'])
+                        'Events': (lambda_config.get('Events', [lambda_config.get('Event', 's3:ObjectCreated:*')])
+                                 if isinstance(lambda_config.get('Events', lambda_config.get('Event')), list)
+                                 else [lambda_config.get('Events', lambda_config.get('Event', 's3:ObjectCreated:*'))])
                     }
 
                     # Handle Filter configuration
                     if 'Filter' in lambda_config:
-                        s3_lambda_config['Filter'] = {}
-                        if 'S3Key' in lambda_config['Filter']:
-                            s3_lambda_config['Filter']['Key'] = {
-                                'FilterRules': []
-                            }
-                            for rule in lambda_config['Filter']['S3Key']['Rules']:
-                                s3_lambda_config['Filter']['Key']['FilterRules'].append({
-                                    'Name': rule['Name'].lower(),  # S3 API expects lowercase
-                                    'Value': rule['Value']
-                                })
+                        s3_lambda_config['Filter'] = lambda_config['Filter']
 
-                    s3_config['LambdaConfigurations'].append(s3_lambda_config)
+                    s3_config['LambdaFunctionConfigurations'].append(s3_lambda_config)
 
             # Handle other configuration types if needed
             if 'TopicConfigurations' in notification_config:
@@ -120,22 +111,10 @@ def configure_bucket_notifications(bucket_name, notification_config=None, lambda
             s3_client.put_bucket_notification_configuration(
                 Bucket=bucket_name,
                 NotificationConfiguration={
-                    'LambdaConfigurations': [
-                        {
-                            'LambdaFunctionArn': lambda_arn,
-                            'Events': ['s3:ObjectCreated:*'],
-                            'Filter': {
-                                'Key': {
-                                    'FilterRules': [
-                                        {
-                                            'Name': 'suffix',
-                                            'Value': '.json'
-                                        }
-                                    ]
-                                }
-                            }
-                        }
-                    ]
+                    'LambdaFunctionConfigurations': [{
+                        'LambdaFunctionArn': lambda_arn,
+                        'Events': ['s3:ObjectCreated:*']
+                    }]
                 }
             )
         else:
@@ -216,7 +195,7 @@ def handle_s3_notification_config(event, context):
 
         else:
             logger.error("Unsupported request type: %s", event['RequestType'])
-            return False
+            success = False
 
         return success
     except Exception as e:
@@ -225,11 +204,11 @@ def handle_s3_notification_config(event, context):
 
 def lambda_handler(event, context):
     """
-    Phase 2: Deploy Microchip verifier certificates to S3 bucket.
+    Deploy Microchip verifier certificates to S3 bucket or configure S3 notifications.
 
-    This function is used as a CloudFormation custom resource to deploy
-    Microchip verifier certificates to an S3 bucket during stack creation
-    or update. Notifications are handled by separate Phase 1 and Phase 3 functions.
+    This function is used as a CloudFormation custom resource to either:
+    1. Deploy Microchip verifier certificates to an S3 bucket
+    2. Configure S3 bucket notifications
 
     Args:
         event (dict): CloudFormation custom resource event
@@ -238,52 +217,64 @@ def lambda_handler(event, context):
     Returns:
         None: Sends response to CloudFormation via cfnresponse
     """
-    logger.info("Phase 2 - Certificate Deployment: Received event: %s", json.dumps(event))
+    logger.info("Certificate Deployer: Received event: %s", json.dumps(event))
 
     try:
-        # Extract parameters from the event for certificate deployment
+        # Check if this is a notification configuration request
+        if 'NotificationConfiguration' in event.get('ResourceProperties', {}):
+            # Handle S3 notification configuration
+            success = handle_s3_notification_config(event, context)
+            if success:
+                cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                    'Message': 'Successfully configured S3 notifications'
+                })
+            else:
+                cfnresponse.send(event, context, cfnresponse.FAILED, {
+                    'Message': 'Failed to configure S3 notifications'
+                })
+            return
+
+        # Handle certificate deployment
         bucket_name = event['ResourceProperties']['BucketName']
         certificates = event['ResourceProperties']['Certificates']
 
         if event['RequestType'] == 'Create':
-            # Phase 2: Deploy certificates (notifications already disabled in Phase 1)
             success = deploy_certificates(bucket_name, certificates)
 
             if success:
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                    'Message': (f'Phase 2: Successfully deployed {len(certificates)} '
+                    'Message': (f'Successfully deployed {len(certificates)} '
                               f'certificates to {bucket_name}')
                 })
             else:
                 cfnresponse.send(event, context, cfnresponse.FAILED, {
-                    'Message': f'Phase 2: Failed to deploy certificates to {bucket_name}'
+                    'Message': f'Failed to deploy certificates to {bucket_name}'
                 })
 
         elif event['RequestType'] == 'Update':
-            # Phase 2: Update certificates (notifications handled by separate phases)
             success = deploy_certificates(bucket_name, certificates)
 
             if success:
                 cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                    'Message': (f'Phase 2: Successfully updated {len(certificates)} '
+                    'Message': (f'Successfully updated {len(certificates)} '
                               f'certificates in {bucket_name}')
                 })
             else:
                 cfnresponse.send(event, context, cfnresponse.FAILED, {
-                    'Message': f'Phase 2: Failed to update certificates in {bucket_name}'
+                    'Message': f'Failed to update certificates in {bucket_name}'
                 })
 
         elif event['RequestType'] == 'Delete':
             # No need to delete the certificates, as the bucket will be deleted by CloudFormation
             cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                'Message': 'Phase 2: No action needed for Delete'
+                'Message': 'No action needed for Delete'
             })
         else:
             cfnresponse.send(event, context, cfnresponse.FAILED, {
                 'Message': f'Unsupported request type: {event["RequestType"]}'
             })
     except Exception as e:
-        logger.error("Phase 2 Error: %s", str(e))
+        logger.error("Certificate Deployer Error: %s", str(e))
         cfnresponse.send(event, context, cfnresponse.FAILED, {
-            'Message': f'Phase 2 Error: {str(e)}'
+            'Message': f'Certificate Deployer Error: {str(e)}'
         })
