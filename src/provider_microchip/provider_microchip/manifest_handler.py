@@ -39,6 +39,7 @@ class ManifestIterator:
         return self.manifest[self.index]
 
 def get_iterator(manifest_file):
+    """Create a ManifestIterator from a JSON manifest file."""
     return ManifestIterator( json.loads(manifest_file) )
 
 class ManifestItem:
@@ -126,7 +127,7 @@ def invoke_export(config, queue_url, session: Session):
     """Main procedure"""
     verify_certname = os.environ['VERIFY_CERT']
     verification_certs_bucket = os.environ['VERIFICATION_CERTS_BUCKET']
-    
+
     manifest_file = s3_object_bytes(config['bucket'],
                                     config['key'],
                                     getvalue=True,
@@ -136,7 +137,14 @@ def invoke_export(config, queue_url, session: Session):
                                          getvalue=True,
                                          session=session)
 
-    manifest_iterator = ManifestIterator( json.loads(manifest_file) )
+    # Ensure manifest_file is properly decoded for json.loads
+    if isinstance(manifest_file, bytes):
+        manifest_data = json.loads(manifest_file.decode('utf-8'))
+    else:
+        # Handle BytesIO case (though getvalue=True should return bytes)
+        manifest_data = json.loads(manifest_file.read().decode('utf-8'))
+
+    manifest_iterator = ManifestIterator(manifest_data)
 
     while manifest_iterator.index != 0:
         manifest_item = ManifestItem( next( manifest_iterator ), verify_file )

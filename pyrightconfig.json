@@ -1,0 +1,22 @@
+{
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "**/__pycache__",
+        "**/.aws-sam"
+    ],
+    "extraPaths": [
+        "src",
+        "src/layer_utils"
+    ],
+    "pythonVersion": "3.13",
+    "typeCheckingMode": "basic",
+    "reportMissingImports": "warning",
+    "reportMissingTypeStubs": "none",
+    "reportImportCycles": "error",
+    "reportUnusedImport": "warning",
+    "reportUnusedVariable": "warning",
+    "reportDuplicateImport": "warning",
+    "reportUnnecessaryTypeIgnoreComment": "warning"
+}
