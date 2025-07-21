@@ -236,7 +236,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/certificate_deployer/
-      Handler: app.lambda_handler
+      Handler: certificate_deployer.main.lambda_handler
       Runtime: python3.13
       Timeout: 300
       MemorySize: 256
