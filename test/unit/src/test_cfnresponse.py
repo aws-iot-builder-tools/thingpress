@@ -11,7 +11,7 @@ from unittest import TestCase
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 
-from src.certificate_deployer.cfnresponse import send, SUCCESS, FAILED
+from src.certificate_deployer.certificate_deployer.cfnresponse import send, SUCCESS, FAILED
 
 
 class TestCfnResponse(TestCase):

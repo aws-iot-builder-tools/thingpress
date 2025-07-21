@@ -16,14 +16,14 @@ from boto3 import Session, _get_default_session
 from moto import mock_aws
 from botocore.exceptions import ClientError
 
-from src.certificate_deployer.app import (
+from src.certificate_deployer.certificate_deployer.main import (
     disable_bucket_notifications,
     configure_bucket_notifications,
     deploy_certificates,
     handle_s3_notification_config,
     lambda_handler
 )
-import src.certificate_deployer.cfnresponse as cfnresponse
+import src.certificate_deployer.certificate_deployer.cfnresponse as cfnresponse
 
 @mock_aws(config={
     "core": {
@@ -89,6 +89,12 @@ class TestCertificateDeployer(TestCase):
                 }
             }
         }
+
+    def _create_mock_context(self):
+        """Create a properly configured mock context"""
+        mock_context = MagicMock()
+        mock_context.log_stream_name = 'test-log-stream-2025/07/21/[$LATEST]abcdef123456'
+        return mock_context
 
     def tearDown(self):
         """Clean up test fixtures"""
@@ -205,7 +211,7 @@ class TestCertificateDeployer(TestCase):
 
     def test_handle_s3_notification_config_create(self):
         """Test handling S3 notification configuration for Create request"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         
         result = handle_s3_notification_config(self.sample_notification_event, mock_context)
         
@@ -222,7 +228,7 @@ class TestCertificateDeployer(TestCase):
 
     def test_handle_s3_notification_config_delete(self):
         """Test handling S3 notification configuration for Delete request"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         delete_event = self.sample_notification_event.copy()
         delete_event['RequestType'] = 'Delete'
         
@@ -240,10 +246,10 @@ class TestCertificateDeployer(TestCase):
         # Should not have any notification configurations
         self.assertNotIn('LambdaFunctionConfigurations', current_config)
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_certificate_deployment_create(self, mock_cfn_send):
         """Test Lambda handler for certificate deployment Create request"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         
         lambda_handler(self.sample_cfn_event, mock_context)
         
@@ -262,10 +268,10 @@ class TestCertificateDeployer(TestCase):
             )
             self.assertIsNotNone(response['Body'])
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_certificate_deployment_update(self, mock_cfn_send):
         """Test Lambda handler for certificate deployment Update request"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         update_event = self.sample_cfn_event.copy()
         update_event['RequestType'] = 'Update'
         
@@ -277,10 +283,10 @@ class TestCertificateDeployer(TestCase):
         
         self.assertEqual(args[0][2], cfnresponse.SUCCESS)  # status
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_certificate_deployment_delete(self, mock_cfn_send):
         """Test Lambda handler for certificate deployment Delete request"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         delete_event = self.sample_cfn_event.copy()
         delete_event['RequestType'] = 'Delete'
         
@@ -292,10 +298,10 @@ class TestCertificateDeployer(TestCase):
         
         self.assertEqual(args[0][2], cfnresponse.SUCCESS)  # status
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_s3_notification_config(self, mock_cfn_send):
         """Test Lambda handler for S3 notification configuration"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         
         lambda_handler(self.sample_notification_event, mock_context)
         
@@ -305,10 +311,10 @@ class TestCertificateDeployer(TestCase):
         
         self.assertEqual(args[0][2], cfnresponse.SUCCESS)  # status
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_missing_bucket_name(self, mock_cfn_send):
         """Test Lambda handler with missing BucketName property"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         invalid_event = self.sample_cfn_event.copy()
         del invalid_event['ResourceProperties']['BucketName']
         
@@ -320,10 +326,10 @@ class TestCertificateDeployer(TestCase):
         
         self.assertEqual(args[0][2], cfnresponse.FAILED)  # status
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_deployment_failure(self, mock_cfn_send):
         """Test Lambda handler when certificate deployment fails"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         
         # Use invalid bucket name to trigger failure
         failure_event = self.sample_cfn_event.copy()
@@ -379,10 +385,10 @@ class TestCertificateDeployer(TestCase):
         self.assertEqual(len(lambda_config['Events']), 2)
         self.assertIn('Filter', lambda_config)
 
-    @patch('src.certificate_deployer.cfnresponse.send')
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_exception_handling(self, mock_cfn_send):
         """Test Lambda handler exception handling"""
-        mock_context = MagicMock()
+        mock_context = self._create_mock_context()
         
         # Create event that will cause an exception (invalid JSON structure)
         invalid_event = {
