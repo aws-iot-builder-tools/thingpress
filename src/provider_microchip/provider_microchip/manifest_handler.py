@@ -125,11 +125,13 @@ class ManifestItem:
 def invoke_export(config, queue_url, session: Session):
     """Main procedure"""
     verify_certname = os.environ['VERIFY_CERT']
+    verification_certs_bucket = os.environ['VERIFICATION_CERTS_BUCKET']
+    
     manifest_file = s3_object_bytes(config['bucket'],
                                     config['key'],
                                     getvalue=True,
                                     session=session)
-    verify_file = s3_object_bytes(config['bucket'],
+    verify_file = s3_object_bytes(verification_certs_bucket,
                                          verify_certname,
                                          getvalue=True,
                                          session=session)

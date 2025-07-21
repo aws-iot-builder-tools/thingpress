@@ -26,7 +26,8 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
     
     Environment variables:
         QUEUE_TARGET: URL of the SQS queue to forward processed certificates to
-        VERIFY_CERT: Name of the verification certificate file in the same S3 bucket
+        VERIFY_CERT: Name of the verification certificate file
+        VERIFICATION_CERTS_BUCKET: S3 bucket containing verification certificates
     
     Args:
         event (SQSEvent): SQS event containing messages with S3 bucket/object information

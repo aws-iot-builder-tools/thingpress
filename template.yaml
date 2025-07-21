@@ -9,7 +9,9 @@ Description: |
 
 Globals:
   Function:
-    Timeout: 3
+    # Default settings for all functions
+    Tags:
+      Application: Thingpress
 
 Metadata:
   AWS::ServerlessRepo::Application:
@@ -68,6 +70,31 @@ Parameters:
     Description: By default the concurrent executions for the bulk importer is 10
       since the IoT Limit TPS for most APIs is 10, and there is some
       balance.  In case of throttling failure, the payload will be requeued.
+      
+  DLQRetentionPeriod:
+    Type: Number
+    Default: 1209600
+    Description: Retention period for Dead Letter Queues in seconds (default 14 days)
+    
+  QueueVisibilityTimeout:
+    Type: Number
+    Default: 900
+    Description: Visibility timeout for SQS queues in seconds (default 15 minutes)
+    
+  IdempotencyExpirySeconds:
+    Type: Number
+    Default: 3600
+    Description: Expiry time for idempotency records in seconds (default 1 hour)
+    
+  LambdaMemorySize:
+    Type: Number
+    Default: 2048
+    Description: Memory size for Lambda functions in MB (default 2048 MB)
+    
+  LambdaTimeout:
+    Type: Number
+    Default: 300
+    Description: Timeout for Lambda functions in seconds (default 5 minutes)
 
 Resources:
   # Idempotency table for Lambda functions
@@ -157,9 +184,27 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+        
+  # S3 Bucket for Microchip verification certificates (separate from manifest bucket)
+  ThingpressMicrochipVerificationCertsBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub thingpress-microchip-certs-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
 
   # S3 Bucket to receive Microchip manifest payload which is a
-  # JSON file having a vendor defined structure.
+  # JSON file with vendor defined structure.
   ThingpressMicrochipManifestBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -176,7 +221,45 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .json
+            Function: !GetAtt ThingpressProductProviderFunction.Arn
 
+  # Certificate deployer Lambda function
+  ThingpressCertificateDeployerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/certificate_deployer/
+      Handler: app.lambda_handler
+      Runtime: python3.13
+      Timeout: 300
+      MemorySize: 256
+      Policies:
+        - S3CrudPolicy:
+            BucketName: !Ref ThingpressMicrochipVerificationCertsBucket
+      Environment:
+        Variables:
+          LOG_LEVEL: INFO
+
+  # Deploy Microchip verifier certificates to separate bucket
+  ThingpressMicrochipVerifierCertificates:
+    Type: Custom::MicrochipVerifierCertificates
+    Properties:
+      ServiceToken: !GetAtt ThingpressCertificateDeployerFunction.Arn
+      BucketName: !Ref ThingpressMicrochipVerificationCertsBucket
+      Certificates:
+        MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUIwakNDQVhpZ0F3SUJBZ0lRY1AxNGhMbHdVcGlyM2k4dGR6cm1oVEFLQmdncWhrak9QUVFEQWpCQk1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhIREFhQmdOVkJBTU1FMDFoYm1sbQpaWE4wSUZOcFoyNWxjaUF3TURVd0lCY05NalF3TXpBM01ERXpNakk0V2hnUE9UazVPVEV5TXpFeU16VTVOVGxhCk1FRXhJVEFmQmdOVkJBb01HRTFwWTNKdlkyaHBjQ0JVWldOb2JtOXNiMmQ1SUVsdVl6RWNNQm9HQTFVRUF3d1QKVFdGdWFXWmxjM1FnVTJsbmJtVnlJREF3TlRCWk1CTUdCeXFHU000OUFnRUdDQ3FHU000OUF3RUhBMElBQkV5dgpIZGw5ZWFoR1ZWQjZxQmsxMGhKSm8wTFFZVmJwK1dpRjdiSU5pSHdZamdhRGJheGljVFlVbWh4ZWdmcTE2bk1NCjNXYjhDNWpmc3pCRzNKSWo1SmlqVURCT01CMEdBMVVkRGdRV0JCUk1LZW1mTmdId3pjSTd2dm9ISThuYkpmY3AKaWpBZkJnTlZIU01FR0RBV2dCUk1LZW1mTmdId3pjSTd2dm9ISThuYkpmY3BpakFNQmdOVkhSTUJBZjhFQWpBQQpNQW9HQ0NxR1NNNDlCQU1DQTBnQU1FVUNJRXFvc2d6T2NGNFl1dHVTWmJ3NGQzQ3VuTW1NRTRwWVVpTWhRQ0tHCjlhSG5BaUVBempOWTZZSnh0Z0V3eHpnQlVtWFAxQTVJUzdFblVRQ2JjTGtHVURoM3VNTT0KLS0tLS1FTkQgQ0VSVElGSUNBVEUtLS0tLQo="
+        MCHP_manifest_signer_2_Aug-15-2019_Aug-15-2020.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4ekNDQVd5Z0F3SUJBZ0lRYzZIeU1qcmtUMlRPWTE3RkFYN1hWakFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQXlNQjRYRFRFNU1EZ3hOVEU1TkRjMU9Wb1hEVEl3TURneE5URTVORGMxT1Zvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdNakJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCTENMcmdQbFQzT2V6bnREOWxDMgpTaHdVaGx4MDdmaXEvVkVUSitJVFVBd2JnclBqQi9YaTlHY2hMSU03RndaU1VHT0VxUkE2S3RIMzJYTXBUR0hLCm1DQ2pVREJPTUIwR0ExVWREZ1FXQkJUeFY0b1ozSlRaM3pCNi9yOVhNMGs0RTYvNXdEQWZCZ05WSFNNRUdEQVcKZ0JUeFY0b1ozSlRaM3pCNi9yOVhNMGs0RTYvNXdEQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGtBTUVZQ0lRREtIZ2N0TG5xL3pOcWZCKzF2MEtSaERWUHZSZjZEaW10OGFXOVdMUzBOV0FJaEFKdlVlM3VKCnBrTUc0enBvdjlGQ29qNEczNDBpZEVhZG03bVZiQWQ1R09COQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        MCHP_manifest_signer_1_Jan-21-2019_Jul2-21-2019.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tDQpNSUlCeGpDQ0FXeWdBd0lCQWdJUVpHSVd5TVpJOWNNY0JaaXBYeFRPV0RBS0JnZ3Foa2pPUFFRREFqQThNU0V3DQpId1lEVlFRS0RCaE5hV055YjJOb2FYQWdWR1ZqYUc1dmJHOW5lU0JKYm1NeEZ6QVZCZ05WQkFNTURreHZaeUJUDQphV2R1WlhJZ01EQXhNQjRYRFRFNU1ERXlNakF3TWpjME1sb1hEVEU1TURjeU1qQXdNamMwTWxvd1BERWhNQjhHDQpBMVVFQ2d3WVRXbGpjbTlqYUdsd0lGUmxZMmh1YjJ4dloza2dTVzVqTVJjd0ZRWURWUVFEREE1TWIyY2dVMmxuDQpibVZ5SURBd01UQlpNQk1HQnlxR1NNNDlBZ0VHQ0NxR1NNNDlBd0VIQTBJQUJFdTgvWnlSZFR1NE4wa3V1NzZDDQpSMUpSNXZ6MDRFdVJxTDRUUXhNaW5SaVVjM0h0cXkzOE82SHJYbzJxbU5veXJPMHhkMkkycGZRaFhXWXVMVDM1DQpNR1dqVURCT01CMEdBMVVkRGdRV0JCVHR3SWd1VUE3QmlqWDQ4S0VhNmpKUWhJd3JlREFmQmdOVkhTTUVHREFXDQpnQlR0d0lndVVBN0Jpalg0OEtFYTZqSlFoSXdyZURBTUJnTlZIUk1CQWY4RUFqQUFNQW9HQ0NxR1NNNDlCQU1DDQpBMGdBTUVVQ0lRRDkveDl6eG1Ia2VXR3dqRXE2N1FzUXFCVm1vWThrNlB2RlZyNEJ6MXRZT3dJZ1lmY2srZnYvDQpwbm84KzJ2VlRrUURoY2luTnJnb1BMUU9SelY1L2wvYjR6ND0NCi0tLS0tRU5EIENFUlRJRklDQVRFLS0tLS0="
+        MCHP_manifest_signer_3_Aug-13-2020_Aug-13-2023.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4akNDQVd5Z0F3SUJBZ0lRZHZiam1vRnZFUUNPV1VZY1dCNjNuREFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQXpNQjRYRFRJd01EZ3hNekUyTkRReU9Wb1hEVEl6TURneE16RTJORFF5T1Zvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdNekJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCT2VRYlF3M1JSK0V1TXBJMWxCRAptcm10WlI1cFgzempuejU3eDlvNm1XdWRJUmdNdFh1TzdQUzVNT0ducXp0eGdyVUs3RVQ2OXVBalFqQzVUNC83CnEyV2pVREJPTUIwR0ExVWREZ1FXQkJTRjhLeXBWajY1QTFRazBwTDRzb1A5eVJqN1VUQWZCZ05WSFNNRUdEQVcKZ0JTRjhLeXBWajY1QTFRazBwTDRzb1A5eVJqN1VUQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGdBTUVVQ0lRRFRGYmkyRVJCTnNLNW8xQTJ0MGFidERzNzgvS2FxL1FVY0hFbmxCK2owb1FJZ1Q3amVUU1R3CmUzUnpvMmVteXRnZXQ2Vm9nT1dsTU1WRGU5K3pkVVQ0cmNZPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        MCHP_manifest_signer_4_Jul-18-2023_Jul-18-2026.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4ekNDQVd5Z0F3SUJBZ0lRZjZQR0I0NEloZlhCV1VycVVLZEc3akFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQTBNQjRYRFRJek1EY3hPREU0TXpjMU1Wb1hEVEkyTURjeE9ERTRNemMxTVZvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdOREJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCQVR4aU9jbEdpb1RtTS81UkQ2bwo1dW96SkkyK29ZSU5uZmYybFZ3M004U25wSGREcFg3TXREU3o2bGNEclpHUlR1amwvQ2tvOWZMYVlBSHJyNUUzClRSU2pVREJPTUIwR0ExVWREZ1FXQkJTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQWZCZ05WSFNNRUdEQVcKZ0JTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGtBTUVZQ0lRQ25DQUJlOGlRWmdTMkt6NDc2dUtRQmk0NTJDMUdlTEFvNStBOHFkQ0lCVXdJaEFPNGthUUwrCjZvb1NjcmdpbTA0V1lEcC9ZZ3JwTUNuYjY1VmpYRkNGdFRBRQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
+        
   # Allow Espressif bucket event to invoke the product provider function
   ThingpressProductProviderInvokeFromEspressifPerm:
     Type: AWS::Lambda::Permission
@@ -281,16 +364,6 @@ Resources:
         EV3:
           Type: S3
           Properties:
-            Bucket: !Ref ThingpressMicrochipManifestBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: Suffix
-                    Value: .json
-        EV4:
-          Type: S3
-          Properties:
             Bucket: !Ref ThingpressGeneratedManifestBucket
             Events: s3:ObjectCreated:*
             Filter:
@@ -305,7 +378,12 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Generated-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
 
   # The product provider lambda function sends a message to this queue if the
   # manifest source comes from the Generated certificates bucket.
@@ -314,10 +392,15 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Generated-Provider-Queue-${AWS::StackName}
       SqsManagedSseEnabled: true
-      VisibilityTimeout: 900
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ThingpressGeneratedProviderDLQ.Arn
         maxReceiveCount: 3
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
 
   # Lambda function for processing generated certificates
   ThingpressGeneratedProviderFunction:
@@ -327,12 +410,12 @@ Resources:
       Handler: main.lambda_handler
       Runtime: python3.13
       MemorySize: 256
-      Timeout: 300
+      Timeout: !Ref LambdaTimeout
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
-          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ThingpressGeneratedManifestBucket
@@ -352,17 +435,27 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Espressif-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
 
   ThingpressEspressifProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Espressif-Provider-${AWS::StackName}
-      VisibilityTimeout: 900
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ThingpressEspressifProviderDLQ.Arn
         maxReceiveCount: 5
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
 
   ThingpressEspressifProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -370,10 +463,10 @@ Resources:
       Queues:
         - !Ref ThingpressEspressifProviderQueue
       PolicyDocument:
-        Id: ProviderQueuePolicyId
+        Id: EspressifProviderQueuePolicyId
         Version: '2012-10-17'
         Statement:
-          - Sid: ProviderQueuePolicySId
+          - Sid: EspressifProviderQueuePolicySId
             Action:
               - sqs:SendMessage
             Effect: Allow
@@ -389,17 +482,27 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Infineon-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
 
   ThingpressInfineonProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Infineon-Provider-${AWS::StackName}
-      VisibilityTimeout: 900
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ThingpressInfineonProviderDLQ.Arn
         maxReceiveCount: 5
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
 
   ThingpressInfineonProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -407,10 +510,10 @@ Resources:
       Queues:
         - !Ref ThingpressInfineonProviderQueue
       PolicyDocument:
-        Id: ProviderQueuePolicyId
+        Id: InfineonProviderQueuePolicyId
         Version: '2012-10-17'
         Statement:
-          - Sid: ProviderQueuePolicySId
+          - Sid: InfineonProviderQueuePolicySId
             Action:
               - sqs:SendMessage
               - sqs:ReceiveMessage
@@ -427,28 +530,38 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Microchip-Provider-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
 
   ThingpressMicrochipProviderQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Microchip-Provider-${AWS::StackName}
-      VisibilityTimeout: 900
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ThingpressMicrochipProviderDLQ.Arn
         maxReceiveCount: 5
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
 
-  ThingpressSiliconProviderQueuePolicy:
+  ThingpressMicrochipProviderQueuePolicy:
     Type: AWS::SQS::QueuePolicy
     Properties:
       Queues:
         - !Ref ThingpressMicrochipProviderQueue
       PolicyDocument:
-        Id: ProviderQueuePolicyId
+        Id: MicrochipProviderQueuePolicyId
         Version: '2012-10-17'
         Statement:
-          - Sid: ProviderQueuePolicySId
+          - Sid: MicrochipProviderQueuePolicySId
             Action:
               - sqs:SendMessage
               - sqs:ReceiveMessage
@@ -470,38 +583,29 @@ Resources:
       Principal: sqs.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressEspressifProviderQueue.Arn
-  ThingpressEspressifProviderFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      RoleName: !Sub Thingpress-Espressif-Provider-Function-Role-${AWS::StackName}
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
   ThingpressEspressifProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_espressif/
       Handler: main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ThingpressEspressifProviderFunctionRole.Arn
       Timeout: 900
+      MemorySize: !Ref LambdaMemorySize
       Layers:
         - !Ref ThingpressUtilsLayer
-      MemorySize: 2048
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
-          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressEspressifManifestBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
       Events:
         QueueEvent:
           Type: SQS
@@ -521,51 +625,30 @@ Resources:
       Principal: sqs.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressInfineonProviderQueue.Arn
-  ThingpressInfineonProviderFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      RoleName: !Sub Thingpress-Infineon-Provider-Function-Role-${AWS::StackName}
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
-      Policies:
-        - PolicyName: IdempotencyTableAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                Resource: !GetAtt ThingpressIdempotencyTable.Arn
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
   ThingpressInfineonProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_infineon/
       Handler: provider_infineon.main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ThingpressInfineonProviderFunctionRole.Arn
       Timeout: 900
+      MemorySize: !Ref LambdaMemorySize
       Layers:
         - !Ref ThingpressUtilsLayer
-      MemorySize: 2048
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           CERT_TYPE: !Ref InfineonCertBundleType
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
-          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressInfineonManifestBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
       Events:
         QueueEvent:
           Type: SQS
@@ -584,39 +667,33 @@ Resources:
       Principal: sqs.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressMicrochipProviderQueue.Arn
-  ThingpressMicrochipProviderFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      RoleName: !Sub Thingpress-Microchip-Provider-Function-Role-${AWS::StackName}
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonS3ReadOnlyAccess
-        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
   ThingpressMicrochipProviderFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_microchip/
       Handler: provider_microchip.main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ThingpressMicrochipProviderFunctionRole.Arn
       Timeout: 900
+      MemorySize: !Ref LambdaMemorySize
       Layers:
         - !Ref ThingpressUtilsLayer
-      MemorySize: 2048
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           VERIFY_CERT: !Ref MicrochipVerifyCertName
+          VERIFICATION_CERTS_BUCKET: !Ref ThingpressMicrochipVerificationCertsBucket
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
-          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressMicrochipManifestBucket
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressMicrochipVerificationCertsBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
       Events:
         QueueEvent:
           Type: SQS
@@ -634,17 +711,27 @@ Resources:
     Properties:
       QueueName: !Sub Thingpress-Bulk-Importer-DLQ-${AWS::StackName}
       SqsManagedSseEnabled: true
-      MessageRetentionPeriod: 1209600 # 14 days
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
 
   ThingpressBulkImporterQueue:
     Type: AWS::SQS::Queue
     Properties:
       QueueName: !Sub Thingpress-Bulk-Importer-${AWS::StackName}
-      VisibilityTimeout: 900
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
       SqsManagedSseEnabled: true
       RedrivePolicy:
         deadLetterTargetArn: !GetAtt ThingpressBulkImporterDLQ.Arn
         maxReceiveCount: 5
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
 
   ThingpressBulkImporterQueuePolicy:
     Type: AWS::SQS::QueuePolicy
@@ -663,10 +750,7 @@ Resources:
             Resource: !GetAtt ThingpressBulkImporterQueue.Arn
             Principal:
               AWS:
-                - !GetAtt ThingpressBulkImporterFunctionRole.Arn
-                - !GetAtt ThingpressEspressifProviderFunctionRole.Arn
-                - !GetAtt ThingpressInfineonProviderFunctionRole.Arn
-                - !GetAtt ThingpressMicrochipProviderFunctionRole.Arn
+                - !GetAtt ThingpressProductProviderFunctionRole.Arn
   #--------------------------------------------------------------------------
   # Bulk importer function configuration
   #--------------------------------------------------------------------------
@@ -678,50 +762,28 @@ Resources:
       Principal: sqs.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressBulkImporterQueue.Arn
-  ThingpressBulkImporterFunctionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      Path: /
-      RoleName: !Sub Thingpress-Bulk-Importer-Function-Role-${AWS::StackName}
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-        - arn:aws:iam::aws:policy/AmazonSQSFullAccess
-        - arn:aws:iam::aws:policy/AWSIoTFullAccess
-      Policies:
-        - PolicyName: IdempotencyTableAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dynamodb:PutItem
-                  - dynamodb:GetItem
-                  - dynamodb:UpdateItem
-                  - dynamodb:DeleteItem
-                Resource: !GetAtt ThingpressIdempotencyTable.Arn
-      AssumeRolePolicyDocument:
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action:
-              - sts:AssumeRole
   ThingpressBulkImporterFunction:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/bulk_importer/
       Handler: main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ThingpressBulkImporterFunctionRole.Arn
       ReservedConcurrentExecutions: !Ref ConcurrentExecutions
-      Timeout: 300
+      Timeout: !Ref LambdaTimeout
       Layers:
         - !Ref ThingpressUtilsLayer
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
-          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: 3600  # 1 hour
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - SQSPollerPolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - AWSIoTFullAccess
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
       Events:
         QueueEvent:
           Type: SQS
@@ -843,7 +905,42 @@ Outputs:
   GeneratedIngestPoint:
     Description: The Amazon S3 bucket for uploading Generated certificate files (TXT)
     Value: !Ref ThingpressGeneratedManifestBucket
+  MicrochipVerificationCertsBucket:
+    Description: The Amazon S3 bucket containing Microchip verification certificates
+    Value: !Ref ThingpressMicrochipVerificationCertsBucket
   IdempotencyTable:
     Description: The DynamoDB table used for idempotency tracking
     Value: !Ref ThingpressIdempotencyTable
-  # DLQ policies
+  ProductProviderFunction:
+    Description: The Lambda function that processes S3 events and routes to provider queues
+    Value: !Ref ThingpressProductProviderFunction
+  EspressifProviderFunction:
+    Description: The Lambda function that processes Espressif manifests
+    Value: !Ref ThingpressEspressifProviderFunction
+  InfineonProviderFunction:
+    Description: The Lambda function that processes Infineon manifests
+    Value: !Ref ThingpressInfineonProviderFunction
+  MicrochipProviderFunction:
+    Description: The Lambda function that processes Microchip manifests
+    Value: !Ref ThingpressMicrochipProviderFunction
+  GeneratedProviderFunction:
+    Description: The Lambda function that processes generated certificate manifests
+    Value: !Ref ThingpressGeneratedProviderFunction
+  BulkImporterFunction:
+    Description: The Lambda function that imports certificates to AWS IoT
+    Value: !Ref ThingpressBulkImporterFunction
+  EspressifProviderDLQ:
+    Description: Dead letter queue for Espressif provider
+    Value: !Ref ThingpressEspressifProviderDLQ
+  InfineonProviderDLQ:
+    Description: Dead letter queue for Infineon provider
+    Value: !Ref ThingpressInfineonProviderDLQ
+  MicrochipProviderDLQ:
+    Description: Dead letter queue for Microchip provider
+    Value: !Ref ThingpressMicrochipProviderDLQ
+  GeneratedProviderDLQ:
+    Description: Dead letter queue for Generated provider
+    Value: !Ref ThingpressGeneratedProviderDLQ
+  BulkImporterDLQ:
+    Description: Dead letter queue for Bulk Importer
+    Value: !Ref ThingpressBulkImporterDLQ

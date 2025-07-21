@@ -2,7 +2,7 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
-Unit tests for provider_infineon
+Unit tests for provider_microchip
 
 If run local with no local aws credentials, AWS_DEFAULT_REGION must be
 set to the environment.
@@ -42,9 +42,14 @@ class TestProviderMicrochip(TestCase):
         self.session = _get_default_session()
 
     def setUp(self):
+        # Separate buckets for manifest files and verification certificates
         self.test_s3_bucket_name = "unit_test_s3_bucket"
+        self.test_verification_certs_bucket_name = "unit_test_verification_certs_bucket"
         self.test_s3_object_content = None
+        
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
+        os.environ["VERIFICATION_CERTS_BUCKET"] = self.test_verification_certs_bucket_name
+        
         self.o_manifest_tlss_b = 'ECC608-TMNGTLSS-B.json'
         self.o_manifest_tlsu_b = 'ECC608C-TNGTLSU-B.json'
         f_manifest_tlss_b = './test/artifacts/' + self.o_manifest_tlss_b
@@ -53,8 +58,12 @@ class TestProviderMicrochip(TestCase):
         f_validator = './test/artifacts/mchp_verifiers/' + self.o_validator
 
         s3_client = self.session.client('s3')
-        s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
+        
+        # Create both buckets
+        s3_client.create_bucket(Bucket=self.test_s3_bucket_name)
+        s3_client.create_bucket(Bucket=self.test_verification_certs_bucket_name)
 
+        # Put manifest files in the main bucket
         with open(f_manifest_tlss_b, 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name,
                                  Key=self.o_manifest_tlss_b, Body=data)
@@ -66,10 +75,11 @@ class TestProviderMicrochip(TestCase):
             self.test_s3_manifest_tlsu_b = s3_client.get_object(Bucket=self.test_s3_bucket_name,
                                                          Key=self.o_manifest_tlsu_b)['Body']
 
+        # Put verification certificate in the separate verification certificates bucket
         with open(f_validator, 'rb') as data:
-            s3_client.put_object(Bucket=self.test_s3_bucket_name,
+            s3_client.put_object(Bucket=self.test_verification_certs_bucket_name,
                                  Key=self.o_validator, Body=data)
-            self.test_s3_validator = s3_client.get_object(Bucket=self.test_s3_bucket_name,
+            self.test_s3_validator = s3_client.get_object(Bucket=self.test_verification_certs_bucket_name,
                                                           Key=self.o_validator)['Body']
  
         mocked_s3_resource = { "resource" : self.session.resource("s3"),
@@ -86,6 +96,7 @@ class TestProviderMicrochip(TestCase):
 
     def test_neg_invoke_export(self):
         os.environ['VERIFY_CERT'] = self.o_validator
+        os.environ['VERIFICATION_CERTS_BUCKET'] = self.test_verification_certs_bucket_name
         config = {
             'policy_arn': 'dev_policy',
             'bucket': self.test_s3_bucket_name,
@@ -95,6 +106,7 @@ class TestProviderMicrochip(TestCase):
 
     def test_pos_invoke_export(self):
         os.environ['VERIFY_CERT'] = self.o_validator
+        os.environ['VERIFICATION_CERTS_BUCKET'] = self.test_verification_certs_bucket_name
         config = {
             'policy_arn': 'dev_policy',
             'bucket': self.test_s3_bucket_name,
@@ -112,6 +124,7 @@ class TestProviderMicrochip(TestCase):
         """Invoke the main handler with one file"""
         os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
         os.environ['VERIFY_CERT'] = 'MCHP_manifest_signer_5_Mar_6-2024_noExpiration.crt'
+        os.environ['VERIFICATION_CERTS_BUCKET'] = self.test_verification_certs_bucket_name
 
         r1 = {
             'policy_arn': 'dev_policy',
@@ -132,10 +145,18 @@ class TestProviderMicrochip(TestCase):
 
     def tearDown(self):
         s3_resource = self.session.resource("s3")
-        s3_bucket = s3_resource.Bucket( self.test_s3_bucket_name )
+        
+        # Clean up main bucket
+        s3_bucket = s3_resource.Bucket(self.test_s3_bucket_name)
         for key in s3_bucket.objects.all():
             key.delete()
         s3_bucket.delete()
+        
+        # Clean up verification certificates bucket
+        verification_bucket = s3_resource.Bucket(self.test_verification_certs_bucket_name)
+        for key in verification_bucket.objects.all():
+            key.delete()
+        verification_bucket.delete()
 
         sqs_resource = self.session.resource("sqs")
         sqs_client = self.session.client("sqs")
