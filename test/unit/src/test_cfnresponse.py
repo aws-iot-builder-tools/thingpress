@@ -7,8 +7,6 @@ Unit tests for cfnresponse module
 Tests the CloudFormation custom resource response helper functions.
 """
 import json
-import sys
-from io import StringIO
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
@@ -35,262 +33,233 @@ class TestCfnResponse(TestCase):
             'Message': 'Test operation completed successfully'
         }
 
-    def _suppress_print_output(self, test_func):
-        """Helper method to suppress print output during test execution"""
-        # Capture stdout to suppress print statements
-        captured_output = StringIO()
-        old_stdout = sys.stdout
-        sys.stdout = captured_output
-        
-        try:
-            result = test_func()
-        finally:
-            # Restore stdout
-            sys.stdout = old_stdout
-        
-        return result
-
     @patch('urllib.request.urlopen')
     def test_send_success_response(self, mock_urlopen):
         """Test sending successful CloudFormation response"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data,
-                physicalResourceId='test-physical-id'
-            )
-            
-            # Verify urlopen was called
-            mock_urlopen.assert_called_once()
-            
-            # Get the request that was made
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            
-            # Verify the request URL
-            self.assertEqual(request.full_url, self.sample_event['ResponseURL'])
-            
-            # Verify the request method
-            self.assertEqual(request.get_method(), 'PUT')
-            
-            # Verify the request data
-            request_data = json.loads(request.data.decode('utf-8'))
-            self.assertEqual(request_data['Status'], SUCCESS)
-            self.assertEqual(request_data['RequestId'], self.sample_event['RequestId'])
-            self.assertEqual(request_data['StackId'], self.sample_event['StackId'])
-            self.assertEqual(request_data['LogicalResourceId'], self.sample_event['LogicalResourceId'])
-            self.assertEqual(request_data['PhysicalResourceId'], 'test-physical-id')
-            self.assertEqual(request_data['Data'], self.sample_response_data)
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            self.sample_response_data,
+            physicalResourceId='test-physical-id'
+        )
         
-        self._suppress_print_output(_test)
+        # Verify urlopen was called
+        mock_urlopen.assert_called_once()
+        
+        # Get the request that was made
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        
+        # Verify the request URL
+        self.assertEqual(request.full_url, self.sample_event['ResponseURL'])
+        
+        # Verify the request method
+        self.assertEqual(request.get_method(), 'PUT')
+        
+        # Verify the request data
+        request_data = json.loads(request.data.decode('utf-8'))
+        self.assertEqual(request_data['Status'], SUCCESS)
+        self.assertEqual(request_data['RequestId'], self.sample_event['RequestId'])
+        self.assertEqual(request_data['StackId'], self.sample_event['StackId'])
+        self.assertEqual(request_data['LogicalResourceId'], self.sample_event['LogicalResourceId'])
+        self.assertEqual(request_data['PhysicalResourceId'], 'test-physical-id')
+        self.assertEqual(request_data['Data'], self.sample_response_data)
 
     @patch('urllib.request.urlopen')
     def test_send_failure_response(self, mock_urlopen):
         """Test sending failure CloudFormation response"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                FAILED,
-                {'Error': 'Test error occurred'}
-            )
-            
-            # Verify urlopen was called
-            mock_urlopen.assert_called_once()
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            self.assertEqual(request_data['Status'], FAILED)
-            self.assertEqual(request_data['Data'], {'Error': 'Test error occurred'})
+        send(
+            self.sample_event,
+            self.sample_context,
+            FAILED,
+            {'Error': 'Test error occurred'}
+        )
         
-        self._suppress_print_output(_test)
+        # Verify urlopen was called
+        mock_urlopen.assert_called_once()
+        
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        self.assertEqual(request_data['Status'], FAILED)
+        self.assertEqual(request_data['Data'], {'Error': 'Test error occurred'})
 
     @patch('urllib.request.urlopen')
     def test_send_with_default_physical_resource_id(self, mock_urlopen):
         """Test sending response with default physical resource ID"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data
-            )
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            # Should use log stream name as default physical resource ID
-            self.assertEqual(request_data['PhysicalResourceId'], 'test-log-stream')
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            self.sample_response_data
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        # Should use log stream name as default physical resource ID
+        self.assertEqual(request_data['PhysicalResourceId'], 'test-log-stream')
 
     @patch('urllib.request.urlopen')
     def test_send_with_no_echo(self, mock_urlopen):
         """Test sending response with noEcho flag"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data,
-                noEcho=True
-            )
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            self.assertTrue(request_data['NoEcho'])
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            self.sample_response_data,
+            noEcho=True
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        self.assertTrue(request_data['NoEcho'])
 
     @patch('urllib.request.urlopen')
     def test_send_with_no_echo_false(self, mock_urlopen):
         """Test sending response with noEcho flag set to False"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data,
-                noEcho=False
-            )
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            self.assertFalse(request_data['NoEcho'])
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            self.sample_response_data,
+            noEcho=False
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        self.assertFalse(request_data['NoEcho'])
 
     @patch('urllib.request.urlopen')
     def test_send_handles_url_error(self, mock_urlopen):
         """Test that send handles URLError gracefully"""
         mock_urlopen.side_effect = URLError('Connection failed')
         
-        def _test():
-            # Should not raise exception
+        # Should raise the exception (proper error handling)
+        with self.assertRaises(URLError):
             send(
                 self.sample_event,
                 self.sample_context,
                 SUCCESS,
                 self.sample_response_data
             )
-        
-        # The function should complete without raising an exception
-        self._suppress_print_output(_test)
 
     @patch('urllib.request.urlopen')
     def test_send_handles_general_exception(self, mock_urlopen):
         """Test that send handles general exceptions gracefully"""
         mock_urlopen.side_effect = Exception('Unexpected error')
         
-        def _test():
-            # Should not raise exception
+        # Should raise the exception (proper error handling)
+        with self.assertRaises(Exception):
             send(
                 self.sample_event,
                 self.sample_context,
                 SUCCESS,
                 self.sample_response_data
             )
-        
-        # The function should complete without raising an exception
-        self._suppress_print_output(_test)
 
     @patch('urllib.request.urlopen')
     def test_send_request_headers(self, mock_urlopen):
         """Test that send sets correct request headers"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data
-            )
-            
-            # Get the request that was made
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            
-            # Verify Content-Type header
-            self.assertEqual(request.get_header('Content-type'), '')
-            self.assertEqual(request.get_header('Content-length'), str(len(request.data)))
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            self.sample_response_data
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request that was made
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        
+        # Verify Content-Type header
+        self.assertEqual(request.get_header('Content-type'), '')
+        self.assertEqual(request.get_header('Content-length'), str(len(request.data)))
 
     @patch('urllib.request.urlopen')
     def test_send_empty_response_data(self, mock_urlopen):
         """Test sending response with empty response data"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                {}
-            )
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            self.assertEqual(request_data['Data'], {})
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            {}
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        self.assertEqual(request_data['Data'], {})
 
     @patch('urllib.request.urlopen')
     def test_send_none_response_data(self, mock_urlopen):
         """Test sending response with None response data"""
         mock_response = MagicMock()
+        mock_response.status = 200
+        mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        def _test():
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                None
-            )
-            
-            # Get the request data
-            call_args = mock_urlopen.call_args
-            request = call_args[0][0]
-            request_data = json.loads(request.data.decode('utf-8'))
-            
-            self.assertIsNone(request_data['Data'])
+        send(
+            self.sample_event,
+            self.sample_context,
+            SUCCESS,
+            None
+        )
         
-        self._suppress_print_output(_test)
+        # Get the request data
+        call_args = mock_urlopen.call_args
+        request = call_args[0][0]
+        request_data = json.loads(request.data.decode('utf-8'))
+        
+        self.assertIsNone(request_data['Data'])
 
     def test_constants(self):
         """Test that SUCCESS and FAILED constants are defined correctly"""

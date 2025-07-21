@@ -1,8 +1,18 @@
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
 
+"""
+CloudFormation custom resource response helper module.
+
+Provides functionality to send responses back to CloudFormation for custom resources.
+Uses AWS Lambda Powertools for structured logging.
+"""
+
 import json
 import urllib.request
+from aws_lambda_powertools import Logger
+
+logger = Logger()
 
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
@@ -24,7 +34,10 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
     """
     responseUrl = event['ResponseURL']
 
-    print(responseUrl)
+    logger.info("Sending CloudFormation response", extra={
+        "response_url": responseUrl,
+        "status": responseStatus
+    })
 
     responseBody = {}
     responseBody['Status'] = responseStatus
@@ -38,7 +51,9 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
 
     json_responseBody = json.dumps(responseBody)
 
-    print("Response body:\n" + json_responseBody)
+    logger.debug("CloudFormation response body", extra={
+        "response_body": json_responseBody
+    })
 
     headers = {
         'content-type': '',
@@ -51,6 +66,14 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
                                      headers=headers,
                                      method='PUT')
         response = urllib.request.urlopen(req)
-        print("Status code: " + response.reason)
+        logger.info("CloudFormation response sent successfully", extra={
+            "status_code": response.status,
+            "reason": response.reason
+        })
     except Exception as e:
-        print("send(..) failed executing requests.put(..): " + str(e))
+        logger.error("Failed to send CloudFormation response", extra={
+            "error": str(e),
+            "response_url": responseUrl
+        })
+        # Re-raise the exception so calling code can handle it appropriately
+        raise

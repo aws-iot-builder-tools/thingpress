@@ -6,13 +6,12 @@ Lambda function to deploy Microchip verifier certificates to S3 bucket.
 """
 import base64
 import json
-import logging
 
 import boto3
+from aws_lambda_powertools import Logger
 from . import cfnresponse
 
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger = Logger()
 
 def disable_bucket_notifications(bucket_name):
     """
