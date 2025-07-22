@@ -9,7 +9,22 @@ import json
 from boto3 import Session
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
-from .manifest_handler import invoke_export
+import sys
+import os
+
+# Handle imports for both Lambda and unit test environments
+try:
+    # Try Lambda environment first - flattened structure
+    from provider_microchip.manifest_handler import invoke_export
+except ImportError:
+    try:
+        # Try unit test environment - nested structure  
+        from .manifest_handler import invoke_export
+    except ImportError:
+        # Last resort - add current directory to path and try again
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, current_dir)
+        from manifest_handler import invoke_export
 
 default_session: Session = Session()
 

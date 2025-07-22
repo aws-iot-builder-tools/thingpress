@@ -18,7 +18,22 @@ from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import Dyn
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_utils import verify_queue
 from aws_utils import boto_exception
-from .manifest_handler import invoke_export, verify_certtype
+import sys
+import os
+
+# Handle imports for both Lambda and unit test environments  
+try:
+    # Try Lambda environment first - flattened structure
+    from provider_infineon.manifest_handler import invoke_export, verify_certtype
+except ImportError:
+    try:
+        # Try unit test environment - nested structure
+        from .manifest_handler import invoke_export, verify_certtype
+    except ImportError:
+        # Last resort - add current directory to path and try again
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        sys.path.insert(0, current_dir)
+        from manifest_handler import invoke_export, verify_certtype
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_infineon")
