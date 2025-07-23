@@ -3,13 +3,15 @@
 # SPDX-License-Identifier: MIT-0
 """
 import io
+
+import boto3
 import py7zr
 import py7zr.io as py7io
-from layer_utils.cert_utils import format_certificate, get_cn
-from layer_utils.aws_utils import s3_object_bytes
-from layer_utils.throttling_utils import create_standardized_throttler
-import boto3
 from boto3 import Session
+from layer_utils.aws_utils import s3_object_bytes
+from layer_utils.cert_utils import format_certificate, get_cn
+from layer_utils.throttling_utils import create_standardized_throttler
+
 default_session: Session = Session()
 
 def verify_certtype(option: str) -> bool:
@@ -51,40 +53,41 @@ def send_certificates(manifest_archive: io.BytesIO,
                       session: Session) -> int:
     "Routine to send data through queue for further processing with batch optimization."
     import os
-    
+
     # Process certificates in batches for optimal SQS throughput
     batch_messages = []
     batch_size = 10  # SQS batch limit
     total_count = 0
-    
+
     # Initialize standardized throttler
     throttler = create_standardized_throttler()
-    
+
     szf = py7zr.SevenZipFile(manifest_archive)
     fcty = py7io.BytesIOFactory(limit=10000)
     szf.extract(factory=fcty)
-    
+
     for x in szf.list():
         j = fcty.get(filename = x.filename).read().decode('ascii')
         k = format_certificate(j)
         l = get_cn(j)
-        
+
         cert_config = config.copy()
         cert_config['thing'] = l
         cert_config['certificate'] = k
-        
+
         batch_messages.append(cert_config)
         total_count += 1
-        
+
         # Send batch when full
         if len(batch_messages) >= batch_size:
             throttler.send_batch_with_throttling(batch_messages, queue_url, session)
             batch_messages = []
-    
+
     # Send remaining messages
     if batch_messages:
-        throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)
-    
+        throttler.send_batch_with_throttling(
+            batch_messages, queue_url, session, is_final_batch=True)
+
     return total_count
 
 def invoke_export(config, queue_url, cert_type, session: Session=default_session):

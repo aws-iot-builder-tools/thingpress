@@ -10,14 +10,14 @@ It verifies S3 uploads and does NOT process certificates directly - that's done 
 Event Flow:
 S3 Upload → Product Verifier (S3 Event) → SQS Queue → Vendor Provider (SQS Event) → Bulk Importer
 """
-import os
 import logging
+import os
 
-from boto3 import Session
-from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import S3Event
-from layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, send_sqs_message
-from layer_utils.aws_utils import check_cfn_prop_valid
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3 import Session
+from layer_utils.aws_utils import (check_cfn_prop_valid, get_policy_arn, get_thing_group_arn,
+                                   get_thing_type_arn, send_sqs_message)
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -84,7 +84,7 @@ def lambda_handler(event,
         # Raw dict format - convert to S3Event
         s3_event = S3Event(event)
         raw_event = event
-    
+
     # Process the first record to get bucket name for queue determination
     records_list = list(s3_event.records)
     first_record = records_list[0]
@@ -112,14 +112,15 @@ def lambda_handler(event,
         # TODO: verify s3 object, for now assume it is reachable
         # v_object = verify_s3_object(bucket, record.s3.get_object.key)
         config['key'] = record.s3.get_object.key
-        
+
         # Log the provider type based on the bucket name
         if config['bucket'].startswith(GENERATED_BUCKET_PREFIX):
             logger.info(f"Processing generated certificate file: {record.s3.get_object.key}")
         else:
             logger.info(f"Processing vendor certificate manifest: {record.s3.get_object.key}")
-            
+
         send_sqs_message(config, queue_url, default_session)
-        logger.info("Sent message to queue %s for s3://%s/%s", queue_url, bucket_name, record.s3.get_object.key)
+        logger.info("Sent message to queue %s for s3://%s/%s",
+                    queue_url, bucket_name, record.s3.get_object.key)
 
     return raw_event

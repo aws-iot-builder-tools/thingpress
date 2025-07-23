@@ -5,21 +5,22 @@
 Lambda function to decompose Espressif based certificate manifest(s) and begin
 the import processing pipeline
 """
-import os
-from io import StringIO
+import base64
 import csv
 import json
-import base64
+import os
+from io import StringIO
+
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import (
-    DynamoDBPersistenceLayer)
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
+from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
+    DynamoDBPersistenceLayer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.throttling_utils import create_standardized_throttler
-from boto3 import Session
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_espressif")
@@ -79,30 +80,31 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
     batch_messages = []
     batch_size = 10  # SQS batch limit
     total_count = 0
-    
+
     # Initialize standardized throttler
     throttler = create_standardized_throttler()
-    
+
     for row in reader_list:
         cert_config = config.copy()
         cert_config['thing'] = row['MAC']
         cert_config['certificate'] = base64.b64encode(row['cert'].encode('ascii')).decode('ascii')
-        
+
         batch_messages.append(cert_config)
         total_count += 1
-        
+
         # Send batch when full
         if len(batch_messages) >= batch_size:
             throttler.send_batch_with_throttling(batch_messages, queue_url, session)
             batch_messages = []
-    
+
     # Send remaining messages
     if batch_messages:
-        throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)
+        throttler.send_batch_with_throttling(
+            batch_messages, queue_url, session, is_final_batch=True)
 
     # Get throttling statistics for logging
     throttling_stats = throttler.get_throttling_stats()
-    
+
     logger.info({
         "message": "Processed certificates from Espressif manifest with standardized throttling",
         "total_certificates": total_count,
@@ -154,7 +156,7 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         from aws_lambda_powertools.utilities.data_classes import SQSEvent
         sqs_event = SQSEvent(event)
         raw_event = event
-    
+
     queue_url = os.environ['QUEUE_TARGET']
     total_processed = 0
 

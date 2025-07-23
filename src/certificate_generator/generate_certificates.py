@@ -28,24 +28,23 @@ Options:
     --org-unit NAME             Organizational unit (default: 'IoT Division')
 """
 
-import os
-import base64
-import time
 import argparse
+import base64
 import datetime
 import multiprocessing
-from pathlib import Path
-from typing import Dict, List, Tuple, Optional, Union, Any
+import os
+import time
 from concurrent.futures import ProcessPoolExecutor
-from tqdm import tqdm
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 from cryptography import x509
-from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa, ec
-from cryptography.hazmat.primitives.asymmetric.types import (
-    PrivateKeyTypes, CertificateIssuerPrivateKeyTypes
-)
+from cryptography.hazmat.primitives.asymmetric import ec, rsa
+from cryptography.hazmat.primitives.asymmetric.types import (CertificateIssuerPrivateKeyTypes,
+                                                             PrivateKeyTypes)
+from cryptography.x509.oid import NameOID
+from tqdm import tqdm
 
 # Type aliases for better readability
 Certificate = x509.Certificate
@@ -85,10 +84,10 @@ def parse_args(args=None) -> argparse.Namespace:
                         help='Organization name (default: Example Corp)')
     parser.add_argument('--org-unit', default='IoT Division',
                         help='Organizational unit (default: IoT Division)')
-    
+
     return parser.parse_args(args)
 
-def generate_key_pair(key_type: str, ec_curve: str = 'secp256r1', 
+def generate_key_pair(key_type: str, ec_curve: str = 'secp256r1',
                      rsa_key_size: int = 2048) -> PrivateKey:
     """Generate a private key based on the specified parameters."""
     if key_type == 'ec':
@@ -131,9 +130,10 @@ def create_root_ca(common_name: str, validity_days: int, key_type: str,
         public_key=private_key.public_key(),
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.datetime.now(datetime.timezone.utc),
-        not_valid_after=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=validity_days)
+        not_valid_after=datetime.datetime.now(
+            datetime.timezone.utc) + datetime.timedelta(days=validity_days)
     )
-    
+
     # Add extensions
     builder = builder.add_extension(
         x509.BasicConstraints(ca=True, path_length=1), critical=True
@@ -175,7 +175,8 @@ def create_intermediate_ca(common_name: str, validity_days: int, key_type: str,
         public_key=private_key.public_key(),
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.datetime.now(datetime.timezone.utc),
-        not_valid_after=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=validity_days)
+        not_valid_after=datetime.datetime.now(
+            datetime.timezone.utc) + datetime.timedelta(days=validity_days)
     )
 
     # Add extensions
@@ -209,7 +210,7 @@ def create_intermediate_ca(common_name: str, validity_days: int, key_type: str,
 def create_end_entity_cert(common_name: str, validity_days: int, key_type: str,
                           ec_curve: str, rsa_key_size: int, country: str, state: str,
                           locality: str, org: str, org_unit: str,
-                          intermediate_ca: Certificate, 
+                          intermediate_ca: Certificate,
                           intermediate_ca_key: PrivateKey) -> CertificateAndKey:
     """Create an end-entity certificate and private key."""
     private_key = generate_key_pair(key_type, ec_curve, rsa_key_size)
@@ -223,7 +224,8 @@ def create_end_entity_cert(common_name: str, validity_days: int, key_type: str,
         public_key=private_key.public_key(),
         serial_number=x509.random_serial_number(),
         not_valid_before=datetime.datetime.now(datetime.timezone.utc),
-        not_valid_after=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=validity_days)
+        not_valid_after=datetime.datetime.now(
+            datetime.timezone.utc) + datetime.timedelta(days=validity_days)
     )
 
     # Add extensions
@@ -263,7 +265,7 @@ def certificate_to_pem(cert: Certificate) -> bytes:
     """Convert a certificate to PEM format."""
     return cert.public_bytes(encoding=serialization.Encoding.PEM)
 
-def create_certificate_chain(end_entity_cert: Certificate, 
+def create_certificate_chain(end_entity_cert: Certificate,
                             intermediate_ca: Certificate,
                             root_ca: Certificate) -> bytes:
     """Create a certificate chain in PEM format."""
@@ -281,7 +283,7 @@ def generate_batch(start_idx: int, count: int, args: argparse.Namespace,
     intermediate_ca = x509.load_pem_x509_certificate(intermediate_ca_ser)
     intermediate_ca_key = serialization.load_pem_private_key(intermediate_ca_key_ser, password=None)
     root_ca = x509.load_pem_x509_certificate(root_ca_ser)
-    
+
     results = []
 
     for i in range(count):
@@ -303,15 +305,15 @@ def generate_batch(start_idx: int, count: int, args: argparse.Namespace,
             intermediate_ca=intermediate_ca,
             intermediate_ca_key=intermediate_ca_key
         )
-        
+
         # Create certificate chain
         cert_chain = create_certificate_chain(end_entity_cert, intermediate_ca, root_ca)
-        
+
         # Base64 encode the certificate chain
         encoded_chain = base64.b64encode(cert_chain).decode('utf-8')
-        
+
         results.append(encoded_chain)
-    
+
     return results
 
 def main(args=None):
@@ -321,12 +323,12 @@ def main(args=None):
     # Create output directory if it doesn't exist
     output_dir = Path(args.output_dir)
     output_dir.mkdir(parents=True, exist_ok=True)
-    
+
     print(f"Generating {args.count} certificates with {args.key_type} keys...")
-    
+
     # Create timestamp for filenames
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
+
     # Create root CA
     print("Creating root CA certificate...")
     root_ca, root_ca_key = create_root_ca(
@@ -341,18 +343,18 @@ def main(args=None):
         org=args.org,
         org_unit=args.org_unit
     )
-    
+
     # Save root CA certificate and private key
     with open(output_dir / f"root_ca_{timestamp}.pem", "wb") as f:
         f.write(certificate_to_pem(root_ca))
-    
+
     with open(output_dir / f"root_ca_{timestamp}.key", "wb") as f:
         f.write(root_ca_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
         ))
-    
+
     # Create intermediate CA
     print("Creating intermediate CA certificate...")
     intermediate_ca, intermediate_ca_key = create_intermediate_ca(
@@ -369,26 +371,27 @@ def main(args=None):
         root_ca=root_ca,
         root_ca_key=root_ca_key
     )
-    
+
     # Save intermediate CA certificate and private key
     with open(output_dir / f"intermediate_ca_{timestamp}.pem", "wb") as f:
         f.write(certificate_to_pem(intermediate_ca))
-    
+
     with open(output_dir / f"intermediate_ca_{timestamp}.key", "wb") as f:
         f.write(intermediate_ca_key.private_bytes(
             encoding=serialization.Encoding.PEM,
             format=serialization.PrivateFormat.PKCS8,
             encryption_algorithm=serialization.NoEncryption()
         ))
-    
+
     # Calculate number of batches
     num_batches = (args.count + args.batch_size - 1) // args.batch_size
-    
+
     # Determine optimal number of workers
     num_workers = min(multiprocessing.cpu_count(), num_batches)
-    
-    print(f"Generating {args.count} certificates in {num_batches} batches using {num_workers} workers...")
-    
+
+    print(
+        f"Generating {args.count} certificates in {num_batches} batches using {num_workers} workers...")
+
     # Serialize root and intermediate CA for pickling
     root_ca_ser = root_ca.public_bytes(encoding=serialization.Encoding.PEM)
     intermediate_ca_ser = intermediate_ca.public_bytes(encoding=serialization.Encoding.PEM)
@@ -401,11 +404,11 @@ def main(args=None):
     # Generate certificates in batches using multiprocessing
     with ProcessPoolExecutor(max_workers=num_workers) as executor:
         futures = []
-        
+
         for batch_idx in range(num_batches):
             start_idx = batch_idx * args.batch_size
             batch_count = min(args.batch_size, args.count - start_idx)
-            
+
             future = executor.submit(
                 generate_batch,
                 start_idx,

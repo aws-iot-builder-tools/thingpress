@@ -9,6 +9,7 @@ import json
 
 import boto3
 from aws_lambda_powertools import Logger
+
 from . import cfnresponse
 
 logger = Logger()

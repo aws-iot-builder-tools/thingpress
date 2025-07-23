@@ -4,16 +4,17 @@
 
 Library to handle Microchip manifests
 """
-from base64 import b64decode, b64encode
-import os
 import json
 import logging
+import os
+from base64 import b64decode, b64encode
+
 from boto3 import Session
-from jose import jws
-from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
+from jose import jws
+from jose.utils import base64url_decode, base64url_encode
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.throttling_utils import create_standardized_throttler
 
@@ -151,7 +152,7 @@ def invoke_export(config, queue_url, session: Session):
     batch_messages = []
     batch_size = 10  # SQS batch limit
     total_count = 0
-    
+
     # Initialize standardized throttler
     throttler = create_standardized_throttler()
 
@@ -161,18 +162,19 @@ def invoke_export(config, queue_url, session: Session):
         if len(block) == 0:
             logger.error("Certificate %s could not be extracted", manifest_item.identifier)
             continue
-        
+
         cert_config = config.copy()
         cert_config['certificate'] = str(b64encode(block.encode('ascii')))
-        
+
         batch_messages.append(cert_config)
         total_count += 1
-        
+
         # Send batch when full
         if len(batch_messages) >= batch_size:
             throttler.send_batch_with_throttling(batch_messages, queue_url, session)
             batch_messages = []
-    
+
     # Send remaining messages
     if batch_messages:
-        throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)
+        throttler.send_batch_with_throttling(
+            batch_messages, queue_url, session, is_final_batch=True)

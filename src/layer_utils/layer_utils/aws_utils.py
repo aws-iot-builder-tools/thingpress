@@ -5,15 +5,17 @@
 AWS related functions that multiple lambda functions use, here to reduce redundancy
 """
 import time
-from logging import getLogger
 from inspect import stack
 from io import BytesIO
 from json import dumps
+from logging import getLogger
+
 from boto3 import Session
-from botocore.exceptions import ClientError
 from botocore.config import Config
-from .circuit_state import circuit_is_open, reset_circuit, record_failure
-from .circuit_state import CircuitOpenError, with_circuit_breaker
+from botocore.exceptions import ClientError
+
+from .circuit_state import (CircuitOpenError, circuit_is_open, record_failure, reset_circuit,
+                            with_circuit_breaker)
 
 logger = getLogger()
 logger.setLevel("INFO")
@@ -86,13 +88,13 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
     batch_size = 10  # SQS batch limit
     results = []
     failed_messages = []
-    
+
     logger.info(f"Sending {len(messages)} messages in batches to queue")
-    
+
     for i in range(0, len(messages), batch_size):
         batch = messages[i:i + batch_size]
         entries = []
-        
+
         # Prepare batch entries
         for idx, message in enumerate(batch):
             entry_id = str(i + idx)
@@ -106,23 +108,24 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
                     }
                 }
             })
-        
+
         try:
             response = sqs_client.send_message_batch(
                 QueueUrl=queue_url,
                 Entries=entries
             )
-            
+
             results.append(response)
-            
+
             # Log successful sends
             if 'Successful' in response:
                 logger.info(f"Successfully sent {len(response['Successful'])} messages in batch")
-            
+
             # Handle partial failures
             if 'Failed' in response and response['Failed']:
-                logger.warning(f"Batch send partial failure: {len(response['Failed'])} messages failed")
-                
+                logger.warning(
+                    f"Batch send partial failure: {len(response['Failed'])} messages failed")
+
                 for failure in response['Failed']:
                     failed_msg_idx = int(failure['Id'])
                     failed_messages.append({
@@ -130,27 +133,28 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
                         'error': failure,
                         'batch_index': failed_msg_idx
                     })
-                    
-                    logger.error(f"Failed to send message {failure['Id']}: {failure['Code']} - {failure['Message']}")
-            
+
+                    logger.error(
+                        f"Failed to send message {failure['Id']}: {failure['Code']} - {failure['Message']}")
+
         except ClientError as error:
             logger.error(f"SQS batch send failed for batch starting at index {i}: {error}")
             boto_exception(error, f"With queue_url [{queue_url}]")
             raise error
-    
+
     # Report final statistics
     total_sent = sum(len(r.get('Successful', [])) for r in results)
     total_failed = len(failed_messages)
-    
+
     logger.info(f"Batch send complete: {total_sent} sent, {total_failed} failed")
-    
+
     if failed_messages:
         logger.warning(f"Failed messages details logged for retry")
-    
+
     return results
 
 @with_circuit_breaker('sqs_send_message_batch_with_retry')
-def send_sqs_message_batch_with_retry(messages: list, queue_url: str, 
+def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
                                     session: Session=default_session, max_retries: int = 3):
     """
     Send messages in batches with retry logic for failed messages
@@ -166,17 +170,18 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
     """
     remaining_messages = messages.copy()
     all_results = []
-    
+
     for attempt in range(max_retries):
         if not remaining_messages:
             break
-            
-        logger.info(f"Batch send attempt {attempt + 1}/{max_retries} for {len(remaining_messages)} messages")
-        
+
+        logger.info(
+            f"Batch send attempt {attempt + 1}/{max_retries} for {len(remaining_messages)} messages")
+
         try:
             results = send_sqs_message_batch(remaining_messages, queue_url, session)
             all_results.extend(results)
-            
+
             # Collect failed messages for retry
             failed_messages = []
             for result in results:
@@ -185,30 +190,33 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
                         failed_msg_idx = int(failure['Id'])
                         if failed_msg_idx < len(remaining_messages):
                             failed_messages.append(remaining_messages[failed_msg_idx])
-            
+
             remaining_messages = failed_messages
-            
+
             if not remaining_messages:
                 logger.info("All messages sent successfully")
                 break
             elif attempt < max_retries - 1:
                 # Exponential backoff
                 sleep_time = 2 ** attempt
-                logger.info(f"Retrying {len(remaining_messages)} failed messages after {sleep_time}s delay")
+                logger.info(
+                    f"Retrying {len(remaining_messages)} failed messages after {sleep_time}s delay")
                 time.sleep(sleep_time)
-            
+
         except ClientError as error:
             if attempt == max_retries - 1:
                 logger.error(f"Final retry attempt failed: {error}")
                 raise error
             else:
                 sleep_time = 2 ** attempt
-                logger.warning(f"Retry attempt {attempt + 1} failed, waiting {sleep_time}s: {error}")
+                logger.warning(
+                    f"Retry attempt {attempt + 1} failed, waiting {sleep_time}s: {error}")
                 time.sleep(sleep_time)
-    
+
     if remaining_messages:
-        logger.error(f"Failed to send {len(remaining_messages)} messages after {max_retries} attempts")
-    
+        logger.error(
+            f"Failed to send {len(remaining_messages)} messages after {max_retries} attempts")
+
     return all_results
 
 def get_queue_depth(queue_url: str, session: Session = default_session) -> dict:
@@ -223,7 +231,7 @@ def get_queue_depth(queue_url: str, session: Session = default_session) -> dict:
         Dictionary with queue depth metrics
     """
     sqs_client = session.client('sqs')
-    
+
     try:
         response = sqs_client.get_queue_attributes(
             QueueUrl=queue_url,
@@ -233,14 +241,14 @@ def get_queue_depth(queue_url: str, session: Session = default_session) -> dict:
                 'ApproximateNumberOfMessagesDelayed'
             ]
         )
-        
+
         attrs = response['Attributes']
-        
+
         visible = int(attrs.get('ApproximateNumberOfMessages', 0))
         in_flight = int(attrs.get('ApproximateNumberOfMessagesNotVisible', 0))
         delayed = int(attrs.get('ApproximateNumberOfMessagesDelayed', 0))
         total = visible + in_flight
-        
+
         return {
             'visible': visible,
             'in_flight': in_flight,
@@ -248,7 +256,7 @@ def get_queue_depth(queue_url: str, session: Session = default_session) -> dict:
             'total': total,
             'queue_url': queue_url
         }
-        
+
     except ClientError as error:
         logger.error(f"Failed to get queue attributes for {queue_url}: {error}")
         boto_exception(error, f"With queue_url [{queue_url}]")
@@ -276,8 +284,8 @@ def calculate_optimal_delay(queue_depth: int, base_delay: int = 30) -> int:
     else:
         return 0               # No delay for low load
 
-def send_sqs_message_with_throttling(messages: list, queue_url: str, 
-                                   session: Session = default_session, 
+def send_sqs_message_with_throttling(messages: list, queue_url: str,
+                                   session: Session = default_session,
                                    enable_throttling: bool = True,
                                    base_delay: int = 30) -> list:
     """
@@ -298,16 +306,17 @@ def send_sqs_message_with_throttling(messages: list, queue_url: str,
             # Check queue depth and calculate delay
             queue_metrics = get_queue_depth(queue_url, session)
             delay = calculate_optimal_delay(queue_metrics['total'], base_delay)
-            
+
             logger.info(f"Queue throttling check: depth={queue_metrics['total']}, delay={delay}s")
-            
+
             if delay > 0:
-                logger.info(f"Throttling: waiting {delay} seconds before sending {len(messages)} messages")
+                logger.info(
+                    f"Throttling: waiting {delay} seconds before sending {len(messages)} messages")
                 time.sleep(delay)
         except Exception as e:
             # If throttling check fails, continue without throttling
             logger.warning(f"Throttling check failed, proceeding without delay: {e}")
-    
+
     # Send messages in batches with retry
     return send_sqs_message_batch_with_retry(messages, queue_url, session)
 
@@ -330,46 +339,47 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
     """
     batch_size = 10  # SQS batch limit
     all_results = []
-    
+
     logger.info(f"Starting adaptive throttling send for {len(messages)} messages")
-    
+
     for i in range(0, len(messages), batch_size):
         batch = messages[i:i + batch_size]
         batch_num = (i // batch_size) + 1
-        
+
         # Check queue depth periodically
         if batch_num % check_interval == 1:  # Check on first batch and every check_interval batches
             try:
                 queue_metrics = get_queue_depth(queue_url, session)
                 current_depth = queue_metrics['total']
-                
-                logger.info(f"Adaptive throttling check (batch {batch_num}): queue_depth={current_depth}")
-                
+
+                logger.info(
+                    f"Adaptive throttling check (batch {batch_num}): queue_depth={current_depth}")
+
                 if current_depth > max_queue_depth:
                     # Calculate adaptive delay based on how far over the limit we are
                     excess_ratio = current_depth / max_queue_depth
                     adaptive_delay = min(60, int(30 * excess_ratio))  # Cap at 60 seconds
-                    
+
                     logger.info(f"Queue depth ({current_depth}) exceeds limit ({max_queue_depth}), "
                               f"waiting {adaptive_delay}s")
                     time.sleep(adaptive_delay)
-                    
+
             except Exception as e:
                 logger.warning(f"Adaptive throttling check failed for batch {batch_num}: {e}")
-        
+
         # Send the batch
         try:
             batch_results = send_sqs_message_batch_with_retry([batch], queue_url, session)
             all_results.extend(batch_results)
-            
+
             # Small delay between batches to avoid overwhelming
             if i + batch_size < len(messages):
                 time.sleep(0.1)  # 100ms between batches
-                
+
         except Exception as e:
             logger.error(f"Failed to send batch {batch_num}: {e}")
             raise e
-    
+
     logger.info(f"Adaptive throttling send completed: {len(all_results)} batch responses")
     return all_results
 
@@ -433,16 +443,16 @@ def register_certificate(certificate: str, tags_or_session=None, session: Sessio
         tags = tags_or_session
         if session is None:
             session = default_session
-    
+
     iot_client = session.client('iot')
     try:
         # Register the certificate
         response = iot_client.register_certificate_without_ca(
             certificatePem=certificate,
             status='ACTIVE')
-        
+
         certificate_id = response.get("certificateId")
-        
+
         # Apply tags if provided
         if tags and len(tags) > 0:
             try:
@@ -455,7 +465,7 @@ def register_certificate(certificate: str, tags_or_session=None, session: Sessio
             except ClientError as tag_error:
                 logger.warning("Failed to tag certificate %s: %s", certificate_id, str(tag_error))
                 # Don't fail the entire operation for tagging issues
-        
+
         return certificate_id
     except ClientError as error:
         boto_exception(error, f"register_certificate failed on certificate {certificate}")
@@ -529,7 +539,8 @@ def process_thing_group(thing_group_arn: str,
                                             thingArn=thing_arn,
                                             overrideDynamicGroups=False)
     except ClientError as error:
-        boto_exception(error, f"Thing {thing_arn} attachment to thing group {thing_group_arn} creation failed")
+        boto_exception(
+            error, f"Thing {thing_arn} attachment to thing group {thing_group_arn} creation failed")
         raise error
 
 def process_policy(policy_name: str,
@@ -555,7 +566,7 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
     iot_client = session.client('iot')
     certificate_arn = get_certificate_arn(certificate_id, session)
     thing_created = False
-    
+
     try:
         iot_client.describe_thing(thingName=thing_name)
         logger.info("Thing %s already exists", thing_name)
@@ -568,7 +579,7 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
             iot_client.create_thing(**create_params)
             thing_created = True
             logger.info("Created thing %s", thing_name)
-            
+
             # Apply tags separately if provided
             if tags and len(tags) > 0:
                 try:
@@ -581,7 +592,7 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
                 except ClientError as tag_error:
                     logger.warning("Failed to tag thing %s: %s", thing_name, str(tag_error))
                     # Don't fail the entire operation for tagging issues
-            
+
         except ClientError as err_create:
             boto_exception(err_create, f"Thing {thing_name} creation failed")
             raise err_create
@@ -620,35 +631,35 @@ def list_thingpress_things(session: Session=default_session) -> list:
     """
     iot_client = session.client('iot')
     thingpress_things = []
-    
+
     try:
         # List all things (paginated)
         paginator = iot_client.get_paginator('list_things')
-        
+
         for page in paginator.paginate():
             for thing in page.get('things', []):
                 thing_name = thing['thingName']
                 thing_arn = thing['thingArn']
-                
+
                 try:
                     # Get tags for this thing
                     tags_response = iot_client.list_tags_for_resource(resourceArn=thing_arn)
                     tags = tags_response.get('tags', [])
-                    
+
                     # Check if created by Thingpress
                     for tag in tags:
                         if tag.get('Key') == 'created-by' and tag.get('Value') == 'thingpress':
                             thingpress_things.append(thing_name)
                             break
-                            
+
                 except ClientError as error:
                     logger.warning("Failed to get tags for thing %s: %s", thing_name, str(error))
                     continue
-                    
+
     except ClientError as error:
         boto_exception(error, "Failed to list things")
         raise error
-    
+
     return thingpress_things
 
 def list_thingpress_certificates(session: Session=default_session) -> list:
@@ -659,35 +670,36 @@ def list_thingpress_certificates(session: Session=default_session) -> list:
     """
     iot_client = session.client('iot')
     thingpress_certificates = []
-    
+
     try:
         # List all certificates (paginated)
         paginator = iot_client.get_paginator('list_certificates')
-        
+
         for page in paginator.paginate():
             for cert in page.get('certificates', []):
                 certificate_id = cert['certificateId']
                 certificate_arn = cert['certificateArn']
-                
+
                 try:
                     # Get tags for this certificate
                     tags_response = iot_client.list_tags_for_resource(resourceArn=certificate_arn)
                     tags = tags_response.get('tags', [])
-                    
+
                     # Check if created by Thingpress
                     for tag in tags:
                         if tag.get('Key') == 'created-by' and tag.get('Value') == 'thingpress':
                             thingpress_certificates.append(certificate_id)
                             break
-                            
+
                 except ClientError as error:
-                    logger.warning("Failed to get tags for certificate %s: %s", certificate_id, str(error))
+                    logger.warning("Failed to get tags for certificate %s: %s",
+                                   certificate_id, str(error))
                     continue
-                    
+
     except ClientError as error:
         boto_exception(error, "Failed to list certificates")
         raise error
-    
+
     return thingpress_certificates
 
 def cleanup_thingpress_objects(dry_run: bool = True, session: Session=default_session) -> dict:
@@ -708,20 +720,20 @@ def cleanup_thingpress_objects(dry_run: bool = True, session: Session=default_se
         'certificates_deleted': [],
         'errors': []
     }
-    
+
     try:
         # Find Thingpress objects
         thingpress_things = list_thingpress_things(session)
         thingpress_certificates = list_thingpress_certificates(session)
-        
+
         results['things_found'] = thingpress_things
         results['certificates_found'] = thingpress_certificates
-        
+
         if dry_run:
-            logger.info("DRY RUN: Found %d things and %d certificates created by Thingpress", 
+            logger.info("DRY RUN: Found %d things and %d certificates created by Thingpress",
                        len(thingpress_things), len(thingpress_certificates))
             return results
-        
+
         # Delete things
         for thing_name in thingpress_things:
             try:
@@ -729,44 +741,45 @@ def cleanup_thingpress_objects(dry_run: bool = True, session: Session=default_se
                 thing_response = iot_client.list_thing_principals(thingName=thing_name)
                 for principal in thing_response.get('principals', []):
                     iot_client.detach_thing_principal(thingName=thing_name, principal=principal)
-                
+
                 # Delete the thing
                 iot_client.delete_thing(thingName=thing_name)
                 results['things_deleted'].append(thing_name)
                 logger.info("Deleted thing: %s", thing_name)
-                
+
             except ClientError as error:
                 error_msg = f"Failed to delete thing {thing_name}: {str(error)}"
                 results['errors'].append(error_msg)
                 logger.error(error_msg)
-        
+
         # Delete certificates
         for certificate_id in thingpress_certificates:
             try:
                 # First detach all policies
-                policies_response = iot_client.list_attached_policies(target=get_certificate_arn(certificate_id, session))
+                policies_response = iot_client.list_attached_policies(
+                    target=get_certificate_arn(certificate_id, session))
                 for policy in policies_response.get('policies', []):
-                    iot_client.detach_policy(policyName=policy['policyName'], 
+                    iot_client.detach_policy(policyName=policy['policyName'],
                                            target=get_certificate_arn(certificate_id, session))
-                
+
                 # Update certificate to INACTIVE before deletion
                 iot_client.update_certificate(certificateId=certificate_id, newStatus='INACTIVE')
-                
+
                 # Delete the certificate
                 iot_client.delete_certificate(certificateId=certificate_id)
                 results['certificates_deleted'].append(certificate_id)
                 logger.info("Deleted certificate: %s", certificate_id)
-                
+
             except ClientError as error:
                 error_msg = f"Failed to delete certificate {certificate_id}: {str(error)}"
                 results['errors'].append(error_msg)
                 logger.error(error_msg)
-                
+
     except Exception as error:
         error_msg = f"Cleanup operation failed: {str(error)}"
         results['errors'].append(error_msg)
         logger.error(error_msg)
-    
+
     return results
     if value in ("None", ""):
         return False

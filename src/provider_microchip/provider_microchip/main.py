@@ -4,13 +4,13 @@
 
 Lambda function to import Microchip manifest
 """
-import os
 import json
-from boto3 import Session
-from aws_lambda_powertools.utilities.typing import LambdaContext
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
-import sys
 import os
+import sys
+
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3 import Session
 
 # Handle imports for both Lambda and unit test environments
 try:
@@ -18,7 +18,7 @@ try:
     from provider_microchip.manifest_handler import invoke_export
 except ImportError:
     try:
-        # Try unit test environment - nested structure  
+        # Try unit test environment - nested structure
         from .manifest_handler import invoke_export
     except ImportError:
         # Last resort - add current directory to path and try again
@@ -61,7 +61,7 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         from aws_lambda_powertools.utilities.data_classes import SQSEvent
         sqs_event = SQSEvent(event)
         raw_event = event
-    
+
     queue_url = os.environ['QUEUE_TARGET']
 
     for record in sqs_event.records:

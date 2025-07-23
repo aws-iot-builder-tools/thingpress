@@ -5,23 +5,23 @@
 Lambda function to import certificate, construct IoT Thing, and associate
 the Thing, Policy, Certificate, Thing Type, and Thing Group
 """
-import os
 import hashlib
+import os
 import random
 from json import loads
-from botocore.exceptions import ClientError
-from boto3 import Session
+
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import (
-    DynamoDBPersistenceLayer)
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
+from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
+    DynamoDBPersistenceLayer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3 import Session
+from botocore.exceptions import ClientError
+from layer_utils.aws_utils import (get_certificate, process_policy, process_thing,
+                                   process_thing_group, process_thing_type, register_certificate)
 from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
-from layer_utils.aws_utils import (
-    process_thing_group, process_policy, process_thing, process_thing_type,
-    get_certificate, register_certificate)
 
 # Initialize Logger and Idempotency
 logger = Logger(service="bulk_importer")

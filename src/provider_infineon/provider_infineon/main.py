@@ -5,23 +5,23 @@
 Lambda function to decompose Infineon based certificate manifest(s) and begin
 the import processing pipeline
 """
-import os
 import json
 import logging
-from botocore.exceptions import ClientError
-from boto3 import Session
+import os
+import sys
+
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from layer_utils.aws_utils import verify_queue
-from layer_utils.aws_utils import boto_exception
-import sys
-import os
+from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
+    DynamoDBPersistenceLayer
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from boto3 import Session
+from botocore.exceptions import ClientError
+from layer_utils.aws_utils import boto_exception, verify_queue
 
-# Handle imports for both Lambda and unit test environments  
+# Handle imports for both Lambda and unit test environments
 try:
     # Try Lambda environment first - flattened structure
     from provider_infineon.manifest_handler import invoke_export, verify_certtype
@@ -83,16 +83,16 @@ def process_infineon_manifest(config, queue_url, cert_type, session=default_sess
         "key": config['key'],
         "cert_type": cert_type
     })
-    
+
     count = invoke_export(config, queue_url, cert_type, session)
-    
+
     logger.info({
         "message": "Processed certificates from Infineon manifest",
         "count": count,
         "bucket": config['bucket'],
         "key": config['key']
     })
-    
+
     return count
 
 def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
@@ -131,7 +131,7 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         from aws_lambda_powertools.utilities.data_classes import SQSEvent
         sqs_event = SQSEvent(event)
         raw_event = event
-    
+
     queue_url = os.environ['QUEUE_TARGET']
     cert_type = os.environ['CERT_TYPE']
     total_processed = 0

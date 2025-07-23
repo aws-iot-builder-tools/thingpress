@@ -6,14 +6,14 @@ Certificate/manifest related functions that multiple lambda functions use,
 here to reduce redundancy
 """
 import binascii
+import logging
 from ast import literal_eval
-from base64 import b64decode
-from base64 import b64encode
+from base64 import b64decode, b64encode
+
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
-from cryptography.hazmat.primitives import serialization, hashes
+from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.x509.oid import NameOID
-import logging
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -35,7 +35,7 @@ def get_cn(cert_data):
             cert_bytes = cert_data.encode('ascii')
         else:
             cert_bytes = cert_data
-            
+
         certificate_obj = x509.load_pem_x509_certificate(data=cert_bytes,
                                                         backend=default_backend())
         cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value

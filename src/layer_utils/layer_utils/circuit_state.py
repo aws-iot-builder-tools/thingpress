@@ -6,10 +6,10 @@ Circuit breaker pattern implementation for AWS API calls
 Please see the following url for conceptual overview
 https://martinfowler.com/bliki/CircuitBreaker.html
 """
-import time
 import logging
-from threading import Lock
+import time
 from functools import wraps
+from threading import Lock
 
 # Set up logging
 logger = logging.getLogger()
@@ -79,7 +79,7 @@ def record_failure(operation_name: str):
         circuit.failure_count += 1
         circuit.last_failure_time = time.time()
 
-        logger.warning("Circuit breaker failure recorded for %s (count: %d/%d)", 
+        logger.warning("Circuit breaker failure recorded for %s (count: %d/%d)",
                       operation_name, circuit.failure_count, circuit.threshold)
 
         # Open the circuit if we exceed the threshold
@@ -87,7 +87,7 @@ def record_failure(operation_name: str):
             circuit.is_open = True
             logger.error("🚨 CIRCUIT BREAKER OPENED for %s after %d failures - failing fast for %d seconds",
                         operation_name, circuit.threshold, circuit.timeout)
-            logger.error("Circuit state: failures=%d, threshold=%d, timeout=%ds", 
+            logger.error("Circuit state: failures=%d, threshold=%d, timeout=%ds",
                         circuit.failure_count, circuit.threshold, circuit.timeout)
 
 def reset_circuit(operation_name):

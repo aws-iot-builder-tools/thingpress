@@ -10,6 +10,7 @@ Uses AWS Lambda Powertools for structured logging.
 
 import json
 import urllib.request
+
 from aws_lambda_powertools import Logger
 
 logger = Logger()
