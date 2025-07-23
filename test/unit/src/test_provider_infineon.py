@@ -45,17 +45,6 @@ class TestProviderInfineon(TestCase):
     """Infineon provider test cases"""
     def __init__(self, x):
         super().__init__(x)
-        os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
-        os.environ["AWS_REGION"] = "us-east-1"
-        os.environ["AWS_ACCESS_KEY_ID"] = "testing"
-        os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
-        os.environ["AWS_SECURITY_TOKEN"] = "testing"
-        os.environ["AWS_SESSION_TOKEN"] = "testing"
-        # Disable throttling for tests
-        os.environ["AUTO_THROTTLING_ENABLED"] = "false"
-        os.environ["USE_ADAPTIVE_THROTTLING"] = "false"
-        os.environ["THROTTLING_BASE_DELAY"] = "0"
-        os.environ["THROTTLING_BATCH_INTERVAL"] = "1"
         self.session = _get_default_session()
 
     def setUp(self):

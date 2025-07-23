@@ -9,6 +9,25 @@ import sys
 from pathlib import Path
 import pytest
 
+# Set up test environment variables at module level (before imports)
+# AWS credentials for moto
+os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
+os.environ["AWS_REGION"] = "us-east-1"
+os.environ["AWS_ACCESS_KEY_ID"] = "testing"
+os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
+os.environ["AWS_SECURITY_TOKEN"] = "testing"
+os.environ["AWS_SESSION_TOKEN"] = "testing"
+
+# Powertools configuration for tests
+os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"] = "test-idempotency-table"
+os.environ["POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS"] = "3600"
+
+# Disable throttling for tests to prevent hanging
+os.environ["AUTO_THROTTLING_ENABLED"] = "false"
+os.environ["USE_ADAPTIVE_THROTTLING"] = "false"
+os.environ["THROTTLING_BASE_DELAY"] = "0"
+os.environ["THROTTLING_BATCH_INTERVAL"] = "1"
+
 # Add the project root directory to the Python path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
