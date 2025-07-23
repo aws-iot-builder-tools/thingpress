@@ -27,10 +27,16 @@ def format_certificate(cert_string):
     block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
     return str(b64encode(block.encode('ascii')))
 
-def get_cn(cert_string):
+def get_cn(cert_data):
     """Retrieves the cn value of certificate dn. Generally used for iot thing name"""
     try:
-        certificate_obj = x509.load_pem_x509_certificate(data=cert_string.encode('ascii'),
+        # Handle both string and bytes input
+        if isinstance(cert_data, str):
+            cert_bytes = cert_data.encode('ascii')
+        else:
+            cert_bytes = cert_data
+            
+        certificate_obj = x509.load_pem_x509_certificate(data=cert_bytes,
                                                         backend=default_backend())
         cn = certificate_obj.subject.get_attributes_for_oid(NameOID.COMMON_NAME)[0].value
         cn.replace(" ", "")
@@ -38,7 +44,7 @@ def get_cn(cert_string):
     except Exception as e:
         logger.error("Error extracting CN from certificate: %s", e)
         # Use a hash of the certificate as fallback
-        return f"Device-{hash(cert_string) & 0xFFFFFFFF:08x}"
+        return f"Device-{hash(str(cert_data)) & 0xFFFFFFFF:08x}"
 
 def decode_certificate(b64_encoded_cert: str) -> bytes:
     return b64decode(literal_eval(b64_encoded_cert))

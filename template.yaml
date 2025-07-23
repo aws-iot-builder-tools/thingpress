@@ -86,6 +86,41 @@ Parameters:
     Default: 3600
     Description: Expiry time for idempotency records in seconds (default 1 hour)
     
+  # SQS Throttling Configuration
+  AutoThrottlingEnabled:
+    Type: String
+    Default: 'true'
+    AllowedValues: ['true', 'false']
+    Description: Enable automatic SQS-based throttling to prevent system overload
+    
+  ThrottlingBaseDelay:
+    Type: Number
+    Default: 30
+    MinValue: 0
+    MaxValue: 300
+    Description: Base delay in seconds for throttling calculations (0-300 seconds)
+    
+  ThrottlingBatchInterval:
+    Type: Number
+    Default: 3
+    MinValue: 1
+    MaxValue: 10
+    Description: Apply throttling delay every N batches (e.g., 3 = every third batch)
+    
+  MaxQueueDepth:
+    Type: Number
+    Default: 1000
+    MinValue: 100
+    MaxValue: 10000
+    Description: Maximum queue depth before aggressive throttling kicks in
+    
+  ProviderConcurrencyLimit:
+    Type: Number
+    Default: 5
+    MinValue: 1
+    MaxValue: 100
+    Description: Maximum concurrent executions for provider functions (throttling)
+    
   LambdaMemorySize:
     Type: Number
     Default: 2048
@@ -95,6 +130,9 @@ Parameters:
     Type: Number
     Default: 300
     Description: Timeout for Lambda functions in seconds (default 5 minutes)
+
+Conditions:
+  EnableAutoThrottling: !Equals [!Ref AutoThrottlingEnabled, 'true']
 
 Resources:
   # Idempotency table for Lambda functions
@@ -229,7 +267,7 @@ Resources:
                 Rules:
                   - Name: suffix
                     Value: .json
-            Function: !GetAtt ThingpressProductProviderFunction.Arn
+            Function: !GetAtt ThingpressProductVerifierFunction.Arn
 
   # Certificate deployer Lambda function
   ThingpressCertificateDeployerFunction:
@@ -261,30 +299,30 @@ Resources:
         MCHP_manifest_signer_4_Jul-18-2023_Jul-18-2026.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4ekNDQVd5Z0F3SUJBZ0lRZjZQR0I0NEloZlhCV1VycVVLZEc3akFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQTBNQjRYRFRJek1EY3hPREU0TXpjMU1Wb1hEVEkyTURjeE9ERTRNemMxTVZvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdOREJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCQVR4aU9jbEdpb1RtTS81UkQ2bwo1dW96SkkyK29ZSU5uZmYybFZ3M004U25wSGREcFg3TXREU3o2bGNEclpHUlR1amwvQ2tvOWZMYVlBSHJyNUUzClRSU2pVREJPTUIwR0ExVWREZ1FXQkJTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQWZCZ05WSFNNRUdEQVcKZ0JTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGtBTUVZQ0lRQ25DQUJlOGlRWmdTMkt6NDc2dUtRQmk0NTJDMUdlTEFvNStBOHFkQ0lCVXdJaEFPNGthUUwrCjZvb1NjcmdpbTA0V1lEcC9ZZ3JwTUNuYjY1VmpYRkNGdFRBRQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
         
   # Allow Espressif bucket event to invoke the product provider function
-  ThingpressProductProviderInvokeFromEspressifPerm:
+  ThingpressProductVerifierInvokeFromEspressifPerm:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressEspressifManifestBucket.Arn
 
   # Allow Infineon bucket event to invoke the product provider function
-  ThingpressProductProviderInvokeFromInfineonPerm:
+  ThingpressProductVerifierInvokeFromInfineonPerm:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
       SourceArn: !GetAtt ThingpressInfineonManifestBucket.Arn
 
   # Allow Microchip bucket event to invoke the product provider function
-  ThingpressProductProviderInvokeFromMicrochipPerm:
+  ThingpressProductVerifierInvokeFromMicrochipPerm:
     Type: AWS::Lambda::Permission
     Properties:
-      FunctionName: !GetAtt ThingpressProductProviderFunction.Arn
+      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
       Action: lambda:InvokeFunction
       Principal: s3.amazonaws.com
       SourceAccount: !Ref AWS::AccountId
@@ -293,11 +331,11 @@ Resources:
   # Invoked on S3 event, the product provider evaluates configuration
   # prior to passing along normalized configuration (object ARN resolution,
   # S3 object validation) to the supplier-specific queue.
-  ThingpressProductProviderFunctionRole:
+  ThingpressProductVerifierFunctionRole:
     Type: AWS::IAM::Role
     Properties:
       Path: /
-      RoleName: !Sub Thingpress-Product-Provider-Role-${AWS::StackName}
+      RoleName: !Sub Thingpress-Product-Verifier-Role-${AWS::StackName}
       ManagedPolicyArns:
         - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
@@ -321,13 +359,13 @@ Resources:
             Action:
               - sts:AssumeRole
 
-  ThingpressProductProviderFunction:
+  ThingpressProductVerifierFunction:
     Type: AWS::Serverless::Function
     Properties:
-      CodeUri: src/product_provider/
+      CodeUri: src/product_verifier/
       Handler: main.lambda_handler
       Runtime: python3.13
-      Role: !GetAtt ThingpressProductProviderFunctionRole.Arn
+      Role: !GetAtt ThingpressProductVerifierFunctionRole.Arn
       Timeout: 300
       Layers:
         - !Ref ThingpressUtilsLayer
@@ -411,11 +449,18 @@ Resources:
       Runtime: python3.13
       MemorySize: 256
       Timeout: !Ref LambdaTimeout
+      Layers:
+        - !Ref ThingpressUtilsLayer
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Throttling configuration
+          AUTO_THROTTLING_ENABLED: !Ref AutoThrottlingEnabled
+          THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
+          THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
+          MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ThingpressGeneratedManifestBucket
@@ -423,12 +468,24 @@ Resources:
             QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
         - DynamoDBCrudPolicy:
             TableName: !Ref ThingpressIdempotencyTable
+        # Add permission to read queue attributes for throttling
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:GetQueueAttributes
+              Resource: 
+                - !GetAtt ThingpressBulkImporterQueue.Arn
       Events:
         SQSEvent:
           Type: SQS
           Properties:
             Queue: !GetAtt ThingpressGeneratedProviderQueue.Arn
             BatchSize: 10
+            # Enhanced batch configuration for better throughput
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
 
   ThingpressEspressifProviderDLQ:
     Type: AWS::SQS::Queue
@@ -474,7 +531,7 @@ Resources:
               - !GetAtt ThingpressEspressifProviderQueue.Arn
             Principal:
               AWS:
-                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+                - !GetAtt ThingpressProductVerifierFunctionRole.Arn
 
   # Dead letter queue for Infineon provider
   ThingpressInfineonProviderDLQ:
@@ -522,7 +579,7 @@ Resources:
               - !GetAtt ThingpressInfineonProviderQueue.Arn
             Principal:
               AWS:
-                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+                - !GetAtt ThingpressProductVerifierFunctionRole.Arn
 
   # Dead letter queue for Microchip provider
   ThingpressMicrochipProviderDLQ:
@@ -570,7 +627,7 @@ Resources:
               - !GetAtt ThingpressMicrochipProviderQueue.Arn
             Principal:
               AWS:
-                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+                - !GetAtt ThingpressProductVerifierFunctionRole.Arn
 
   #--------------------------------------------------------------------------
   # Espressif provider function configuration
@@ -598,6 +655,11 @@ Resources:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Throttling configuration
+          AUTO_THROTTLING_ENABLED: !Ref AutoThrottlingEnabled
+          THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
+          THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
+          MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
       Policies:
         - AWSLambdaBasicExecutionRole
         - S3ReadPolicy:
@@ -641,6 +703,11 @@ Resources:
           CERT_TYPE: !Ref InfineonCertBundleType
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Throttling configuration
+          AUTO_THROTTLING_ENABLED: !Ref AutoThrottlingEnabled
+          THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
+          THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
+          MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
       Policies:
         - AWSLambdaBasicExecutionRole
         - S3ReadPolicy:
@@ -684,6 +751,11 @@ Resources:
           VERIFICATION_CERTS_BUCKET: !Ref ThingpressMicrochipVerificationCertsBucket
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Throttling configuration
+          AUTO_THROTTLING_ENABLED: !Ref AutoThrottlingEnabled
+          THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
+          THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
+          MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
       Policies:
         - AWSLambdaBasicExecutionRole
         - S3ReadPolicy:
@@ -750,7 +822,7 @@ Resources:
             Resource: !GetAtt ThingpressBulkImporterQueue.Arn
             Principal:
               AWS:
-                - !GetAtt ThingpressProductProviderFunctionRole.Arn
+                - !GetAtt ThingpressProductVerifierFunctionRole.Arn
   #--------------------------------------------------------------------------
   # Bulk importer function configuration
   #--------------------------------------------------------------------------
@@ -892,6 +964,137 @@ Resources:
               ArnEquals:
                 aws:SourceArn: !GetAtt ThingpressGeneratedProviderQueue.Arn
 
+  # CloudWatch Alarms for SQS Throttling Monitoring
+  ThingpressBulkImporterQueueDepthAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAutoThrottling
+    Properties:
+      AlarmName: !Sub Thingpress-Bulk-Importer-Queue-Depth-High-${AWS::StackName}
+      AlarmDescription: Alert when bulk importer queue depth is high (throttling trigger)
+      MetricName: ApproximateNumberOfMessages
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: !Ref MaxQueueDepth
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ThingpressBulkImporterQueue.QueueName
+      TreatMissingData: notBreaching
+
+  ThingpressProcessingLatencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAutoThrottling
+    Properties:
+      AlarmName: !Sub Thingpress-Processing-Latency-High-${AWS::StackName}
+      AlarmDescription: Alert when message processing latency is high
+      MetricName: ApproximateAgeOfOldestMessage
+      Namespace: AWS/SQS
+      Statistic: Average
+      Period: 300
+      EvaluationPeriods: 2
+      Threshold: 600  # 10 minutes
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: QueueName
+          Value: !GetAtt ThingpressBulkImporterQueue.QueueName
+      TreatMissingData: notBreaching
+
+  ThingpressProviderConcurrencyAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Condition: EnableAutoThrottling
+    Properties:
+      AlarmName: !Sub Thingpress-Provider-Concurrency-High-${AWS::StackName}
+      AlarmDescription: Alert when provider function concurrency is at limit
+      MetricName: ConcurrentExecutions
+      Namespace: AWS/Lambda
+      Statistic: Maximum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: !Ref ProviderConcurrencyLimit
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref ThingpressGeneratedProviderFunction
+      TreatMissingData: notBreaching
+
+  # CloudWatch Dashboard for Throttling Monitoring
+  ThingpressThrottlingDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Condition: EnableAutoThrottling
+    Properties:
+      DashboardName: !Sub Thingpress-Throttling-Monitor-${AWS::StackName}
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/SQS", "ApproximateNumberOfMessages", "QueueName", "${ThingpressBulkImporterQueue.QueueName}" ],
+                  [ ".", "ApproximateNumberOfMessagesNotVisible", ".", "." ],
+                  [ ".", "NumberOfMessagesSent", ".", "." ],
+                  [ ".", "NumberOfMessagesReceived", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "SQS Queue Metrics (Throttling Indicators)",
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            },
+            {
+              "type": "metric",
+              "x": 12,
+              "y": 0,
+              "width": 12,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Duration", "FunctionName", "${ThingpressGeneratedProviderFunction}" ],
+                  [ ".", "Invocations", ".", "." ],
+                  [ ".", "ConcurrentExecutions", ".", "." ],
+                  [ ".", "Throttles", ".", "." ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Lambda Performance (Throttling Impact)"
+              }
+            },
+            {
+              "type": "metric",
+              "x": 0,
+              "y": 6,
+              "width": 24,
+              "height": 6,
+              "properties": {
+                "metrics": [
+                  [ "AWS/SQS", "ApproximateAgeOfOldestMessage", "QueueName", "${ThingpressBulkImporterQueue.QueueName}" ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Message Age (Processing Latency)",
+                "yAxis": {
+                  "left": {
+                    "min": 0
+                  }
+                }
+              }
+            }
+          ]
+        }
+
 Outputs:
   EspressifIngestPoint:
     Description: The Amazon S3 bucket for uploading Espressif manifests (CSV)
@@ -911,9 +1114,9 @@ Outputs:
   IdempotencyTable:
     Description: The DynamoDB table used for idempotency tracking
     Value: !Ref ThingpressIdempotencyTable
-  ProductProviderFunction:
-    Description: The Lambda function that processes S3 events and routes to provider queues
-    Value: !Ref ThingpressProductProviderFunction
+  ProductVerifierFunction:
+    Description: The Lambda function that verifies S3 uploads and routes to provider queues
+    Value: !Ref ThingpressProductVerifierFunction
   EspressifProviderFunction:
     Description: The Lambda function that processes Espressif manifests
     Value: !Ref ThingpressEspressifProviderFunction
@@ -944,3 +1147,29 @@ Outputs:
   BulkImporterDLQ:
     Description: Dead letter queue for Bulk Importer
     Value: !Ref ThingpressBulkImporterDLQ
+    
+  # Throttling Configuration Outputs
+  AutoThrottlingEnabled:
+    Description: Whether automatic SQS throttling is enabled
+    Value: !Ref AutoThrottlingEnabled
+    
+  ThrottlingBaseDelay:
+    Description: Base delay for throttling calculations in seconds
+    Value: !Ref ThrottlingBaseDelay
+    
+  ThrottlingBatchInterval:
+    Description: Throttling delay applied every N batches
+    Value: !Ref ThrottlingBatchInterval
+    
+  MaxQueueDepth:
+    Description: Maximum queue depth before aggressive throttling
+    Value: !Ref MaxQueueDepth
+    
+  ProviderConcurrencyLimit:
+    Description: Maximum concurrent executions for provider functions
+    Value: !Ref ProviderConcurrencyLimit
+    
+  ThrottlingDashboard:
+    Condition: EnableAutoThrottling
+    Description: CloudWatch dashboard for monitoring SQS throttling effectiveness
+    Value: !Sub "https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${ThingpressThrottlingDashboard}"

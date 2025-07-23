@@ -18,8 +18,8 @@ from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import (
     DynamoDBPersistenceLayer)
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
-from aws_utils import (
+from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
+from layer_utils.aws_utils import (
     process_thing_group, process_policy, process_thing, process_thing_type,
     get_certificate, register_certificate)
 
@@ -96,7 +96,18 @@ def process_certificate(config, session: Session=default_session):
             "fingerprint": fingerprint,
             "error": str(error)
         })
-        return register_certificate(decoded_certificate.decode('ascii'), session)
+        return register_certificate(decoded_certificate.decode('ascii'), get_thingpress_tags(), session)
+
+def get_thingpress_tags() -> list:
+    """Generate standard Thingpress tags for IoT objects
+    
+    Returns:
+        List of tags in AWS format: [{'Key': 'key', 'Value': 'value'}]
+    """
+    return [
+        {'Key': 'created-by', 'Value': 'thingpress'},
+        {'Key': 'managed-by', 'Value': 'thingpress'}
+    ]
 
 def process_sqs(config, session: Session=default_session):
     """Main processing function to procedurally run through processing steps."""
@@ -108,7 +119,10 @@ def process_sqs(config, session: Session=default_session):
         "certificate_id": certificate_id
     })
 
-    process_thing(config.get('thing'), certificate_id, session)
+    # Create standard Thingpress tags
+    thingpress_tags = get_thingpress_tags()
+
+    process_thing(config.get('thing'), certificate_id, tags=thingpress_tags, session=session)
     process_policy(config.get('policy_name'), certificate_id, session)
     process_thing_group(config.get('thing_group_arn'), config.get('thing'), session)
     process_thing_type(config.get('thing'), config.get('thing_type_name'), session)

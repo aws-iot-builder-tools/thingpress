@@ -20,7 +20,9 @@ from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from src.layer_utils.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
 from src.layer_utils.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
-from src.layer_utils.layer_utils.aws_utils import send_sqs_message, get_certificate_arn, register_certificate
+from src.layer_utils.layer_utils.aws_utils import send_sqs_message, send_sqs_message_batch, send_sqs_message_batch_with_retry
+from src.layer_utils.layer_utils.aws_utils import get_queue_depth, calculate_optimal_delay, send_sqs_message_with_throttling, send_sqs_message_with_adaptive_throttling
+from src.layer_utils.layer_utils.aws_utils import get_certificate_arn, register_certificate
 from src.layer_utils.layer_utils.aws_utils import process_thing, process_thing_type, process_policy
 from src.layer_utils.layer_utils.aws_utils import process_thing_group, boto_errorcode
 from src.layer_utils.layer_utils.cert_utils import decode_certificate
@@ -406,6 +408,343 @@ class TestAwsUtils(TestCase):
                 
             assert boto_errorcode(exc.value) == 'InvalidParameterValue'
             mock_sqs.send_message.assert_called_once()
+
+    def test_pos_send_sqs_message_batch(self):
+        """Test sending multiple messages to SQS in batch"""
+        messages = [
+            {"thing": "device-001", "certificate": "cert1"},
+            {"thing": "device-002", "certificate": "cert2"},
+            {"thing": "device-003", "certificate": "cert3"}
+        ]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [
+                    {'Id': '0', 'MessageId': 'msg-001'},
+                    {'Id': '1', 'MessageId': 'msg-002'},
+                    {'Id': '2', 'MessageId': 'msg-003'}
+                ],
+                'Failed': []
+            }
+            mock_client.return_value = mock_sqs
+
+            result = send_sqs_message_batch(messages, self.queue_url, _get_default_session())
+
+            # Verify batch was sent
+            assert len(result) == 1
+            assert len(result[0]['Successful']) == 3
+            mock_sqs.send_message_batch.assert_called_once()
+            
+            # Verify batch entries were formatted correctly
+            call_args = mock_sqs.send_message_batch.call_args
+            entries = call_args[1]['Entries']
+            assert len(entries) == 3
+            assert entries[0]['Id'] == '0'
+            assert 'device-001' in entries[0]['MessageBody']
+
+    def test_pos_send_sqs_message_batch_large(self):
+        """Test sending more than 10 messages (multiple batches)"""
+        messages = [{"thing": f"device-{i:03d}", "certificate": f"cert{i}"} for i in range(25)]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [{'Id': str(i), 'MessageId': f'msg-{i:03d}'} for i in range(10)],
+                'Failed': []
+            }
+            mock_client.return_value = mock_sqs
+
+            result = send_sqs_message_batch(messages, self.queue_url, _get_default_session())
+
+            # Should make 3 batch calls (10 + 10 + 5)
+            assert len(result) == 3
+            assert mock_sqs.send_message_batch.call_count == 3
+
+    def test_pos_send_sqs_message_batch_partial_failure(self):
+        """Test handling partial failures in batch send"""
+        messages = [
+            {"thing": "device-001", "certificate": "cert1"},
+            {"thing": "device-002", "certificate": "cert2"},
+            {"thing": "device-003", "certificate": "cert3"}
+        ]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [
+                    {'Id': '0', 'MessageId': 'msg-001'},
+                    {'Id': '2', 'MessageId': 'msg-003'}
+                ],
+                'Failed': [
+                    {'Id': '1', 'Code': 'InvalidParameterValue', 'Message': 'Invalid message'}
+                ]
+            }
+            mock_client.return_value = mock_sqs
+
+            result = send_sqs_message_batch(messages, self.queue_url, _get_default_session())
+
+            # Should still return result with partial success
+            assert len(result) == 1
+            assert len(result[0]['Successful']) == 2
+            assert len(result[0]['Failed']) == 1
+
+    def test_pos_send_sqs_message_batch_with_retry(self):
+        """Test batch send with retry functionality"""
+        messages = [
+            {"thing": "device-001", "certificate": "cert1"},
+            {"thing": "device-002", "certificate": "cert2"}
+        ]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            # First call fails partially, second call succeeds
+            mock_sqs.send_message_batch.side_effect = [
+                {
+                    'Successful': [{'Id': '0', 'MessageId': 'msg-001'}],
+                    'Failed': [{'Id': '1', 'Code': 'Throttling', 'Message': 'Rate exceeded'}]
+                },
+                {
+                    'Successful': [{'Id': '0', 'MessageId': 'msg-002'}],
+                    'Failed': []
+                }
+            ]
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep'):  # Mock sleep to speed up test
+                result = send_sqs_message_batch_with_retry(messages, self.queue_url, _get_default_session())
+
+            # Should make 2 calls (initial + retry)
+            assert mock_sqs.send_message_batch.call_count == 2
+            assert len(result) == 2
+
+    def test_neg_send_sqs_message_batch_client_error(self):
+        """Test handling of ClientError in send_sqs_message_batch function"""
+        messages = [{"thing": "device-001", "certificate": "cert1"}]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.side_effect = ClientError(
+                error_response={'Error': {'Code': 'InvalidParameterValue', 'Message': 'Invalid queue URL'}},
+                operation_name='SendMessageBatch'
+            )
+            mock_client.return_value = mock_sqs
+
+            with raises(ClientError) as exc:
+                send_sqs_message_batch(messages, "invalid-queue-url", _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'InvalidParameterValue'
+            mock_sqs.send_message_batch.assert_called_once()
+
+    def test_neg_send_sqs_message_batch_with_retry_max_retries(self):
+        """Test batch send with retry when max retries exceeded"""
+        messages = [{"thing": "device-001", "certificate": "cert1"}]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.side_effect = ClientError(
+                error_response={'Error': {'Code': 'ServiceUnavailable', 'Message': 'Service unavailable'}},
+                operation_name='SendMessageBatch'
+            )
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep'):  # Mock sleep to speed up test
+                with raises(ClientError) as exc:
+                    send_sqs_message_batch_with_retry(messages, self.queue_url, _get_default_session(), max_retries=2)
+                
+            assert boto_errorcode(exc.value) == 'ServiceUnavailable'
+            assert mock_sqs.send_message_batch.call_count == 2  # Initial + 1 retry
+
+    def test_pos_get_queue_depth(self):
+        """Test getting queue depth metrics for throttling"""
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.get_queue_attributes.return_value = {
+                'Attributes': {
+                    'ApproximateNumberOfMessages': '150',
+                    'ApproximateNumberOfMessagesNotVisible': '50',
+                    'ApproximateNumberOfMessagesDelayed': '25'
+                }
+            }
+            mock_client.return_value = mock_sqs
+
+            result = get_queue_depth(self.queue_url, _get_default_session())
+
+            assert result['visible'] == 150
+            assert result['in_flight'] == 50
+            assert result['delayed'] == 25
+            assert result['total'] == 200
+            assert result['queue_url'] == self.queue_url
+            mock_sqs.get_queue_attributes.assert_called_once()
+
+    def test_pos_calculate_optimal_delay(self):
+        """Test calculating optimal delay based on queue depth"""
+        # Test different queue depths
+        assert calculate_optimal_delay(50) == 0      # Low load - no delay
+        assert calculate_optimal_delay(200) == 15    # Low-medium load - half base delay
+        assert calculate_optimal_delay(750) == 30    # Medium load - base delay
+        assert calculate_optimal_delay(1500) == 60   # High load - double base delay
+        assert calculate_optimal_delay(2500) == 120  # Very high load - 4x base delay
+        
+        # Test with custom base delay
+        assert calculate_optimal_delay(750, base_delay=60) == 60
+        assert calculate_optimal_delay(1500, base_delay=60) == 120
+
+    def test_pos_send_sqs_message_with_throttling(self):
+        """Test sending messages with throttling enabled"""
+        messages = [{"thing": "device-001", "certificate": "cert1"}]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            
+            # Mock queue attributes for throttling check
+            mock_sqs.get_queue_attributes.return_value = {
+                'Attributes': {
+                    'ApproximateNumberOfMessages': '1200',  # High load
+                    'ApproximateNumberOfMessagesNotVisible': '300',
+                    'ApproximateNumberOfMessagesDelayed': '0'
+                }
+            }
+            
+            # Mock batch send
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [{'Id': '0', 'MessageId': 'msg-001'}],
+                'Failed': []
+            }
+            
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep') as mock_sleep:
+                result = send_sqs_message_with_throttling(
+                    messages, self.queue_url, _get_default_session(), 
+                    enable_throttling=True, base_delay=30
+                )
+
+            # Should have checked queue depth and applied throttling
+            mock_sqs.get_queue_attributes.assert_called_once()
+            mock_sleep.assert_called_once_with(60)  # 2x base delay for high load
+            mock_sqs.send_message_batch.assert_called_once()
+            assert len(result) == 1
+
+    def test_pos_send_sqs_message_with_throttling_disabled(self):
+        """Test sending messages with throttling disabled"""
+        messages = [{"thing": "device-001", "certificate": "cert1"}]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [{'Id': '0', 'MessageId': 'msg-001'}],
+                'Failed': []
+            }
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep') as mock_sleep:
+                result = send_sqs_message_with_throttling(
+                    messages, self.queue_url, _get_default_session(), 
+                    enable_throttling=False
+                )
+
+            # Should not have checked queue depth or applied throttling
+            mock_sqs.get_queue_attributes.assert_not_called()
+            mock_sleep.assert_not_called()
+            mock_sqs.send_message_batch.assert_called_once()
+
+    def test_pos_send_sqs_message_with_adaptive_throttling(self):
+        """Test adaptive throttling with queue depth monitoring"""
+        messages = [{"thing": f"device-{i:03d}", "certificate": f"cert{i}"} for i in range(25)]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            
+            # Mock queue attributes - first check shows high load, second shows normal
+            mock_sqs.get_queue_attributes.side_effect = [
+                {
+                    'Attributes': {
+                        'ApproximateNumberOfMessages': '1500',  # High load
+                        'ApproximateNumberOfMessagesNotVisible': '200',
+                        'ApproximateNumberOfMessagesDelayed': '0'
+                    }
+                },
+                {
+                    'Attributes': {
+                        'ApproximateNumberOfMessages': '800',   # Normal load
+                        'ApproximateNumberOfMessagesNotVisible': '100',
+                        'ApproximateNumberOfMessagesDelayed': '0'
+                    }
+                }
+            ]
+            
+            # Mock batch send
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [{'Id': '0', 'MessageId': 'msg-001'}],
+                'Failed': []
+            }
+            
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep') as mock_sleep:
+                result = send_sqs_message_with_adaptive_throttling(
+                    messages, self.queue_url, _get_default_session(),
+                    max_queue_depth=1000, check_interval=10
+                )
+
+            # Should have checked queue depth and applied adaptive throttling
+            assert mock_sqs.get_queue_attributes.call_count >= 1
+            # Should have applied throttling delay for high load
+            throttling_calls = [call for call in mock_sleep.call_args_list if call[0][0] > 1]
+            assert len(throttling_calls) >= 1  # At least one throttling delay
+            
+            # Should have sent all batches
+            expected_batches = (len(messages) + 9) // 10  # Round up
+            assert mock_sqs.send_message_batch.call_count == expected_batches
+
+    def test_neg_get_queue_depth_client_error(self):
+        """Test handling of ClientError in get_queue_depth function"""
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            mock_sqs.get_queue_attributes.side_effect = ClientError(
+                error_response={'Error': {'Code': 'QueueDoesNotExist', 'Message': 'Queue not found'}},
+                operation_name='GetQueueAttributes'
+            )
+            mock_client.return_value = mock_sqs
+
+            with raises(ClientError) as exc:
+                get_queue_depth("invalid-queue-url", _get_default_session())
+                
+            assert boto_errorcode(exc.value) == 'QueueDoesNotExist'
+
+    def test_pos_send_sqs_message_with_throttling_fallback(self):
+        """Test throttling with fallback when queue depth check fails"""
+        messages = [{"thing": "device-001", "certificate": "cert1"}]
+        
+        with patch('boto3.Session.client') as mock_client:
+            mock_sqs = MagicMock()
+            
+            # Mock queue attributes to fail
+            mock_sqs.get_queue_attributes.side_effect = ClientError(
+                error_response={'Error': {'Code': 'AccessDenied', 'Message': 'Access denied'}},
+                operation_name='GetQueueAttributes'
+            )
+            
+            # Mock batch send to succeed
+            mock_sqs.send_message_batch.return_value = {
+                'Successful': [{'Id': '0', 'MessageId': 'msg-001'}],
+                'Failed': []
+            }
+            
+            mock_client.return_value = mock_sqs
+
+            with patch('time.sleep') as mock_sleep:
+                result = send_sqs_message_with_throttling(
+                    messages, self.queue_url, _get_default_session(), 
+                    enable_throttling=True
+                )
+
+            # Should have attempted queue depth check but continued without throttling
+            mock_sqs.get_queue_attributes.assert_called_once()
+            mock_sleep.assert_not_called()  # No throttling delay due to fallback
+            mock_sqs.send_message_batch.assert_called_once()
+            assert len(result) == 1
 
     def test_neg_register_certificate_client_error(self):
         """Test handling of ClientError in register_certificate function"""

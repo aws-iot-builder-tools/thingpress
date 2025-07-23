@@ -1,0 +1,25 @@
+schemaVersion: 2.0.0
+metadata:
+  name: aws-lambda-python
+components:
+  - name: dev
+    container:
+      image: public.ecr.aws/aws-mde/universal-image:latest
+commands:
+  - id: install
+    exec:
+      component: dev
+      commandLine: "pip install -r requirements.txt && pip install -r lambda-bulk-importer/requirements.txt && pip install pytest"
+  - id: build
+    exec:
+      component: dev
+      commandLine: "./script/build.sh"
+  - id: test
+    exec:
+      component: dev
+      commandLine: "pytest -v --disable-socket -s test/unit/src/"
+  - id: cover
+    exec:
+      component: dev
+      commandLine: "coverage run --source=src/bulk_importer,src/product_provider,src/provider_espressif,src/provider_infineon,src/provider_microchip -m pytest&& coverage html"
+      

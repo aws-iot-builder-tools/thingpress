@@ -20,7 +20,7 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from moto import mock_aws
 from py7zr import FileInfo
 from pytest import raises
-from src.layer_utils.aws_utils import s3_object_bytes
+from src.layer_utils.layer_utils.aws_utils import s3_object_bytes
 from src.provider_infineon.provider_infineon.main import lambda_handler
 from src.provider_infineon.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass

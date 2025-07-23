@@ -1,0 +1,144 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Integration test stack for Thingpress Infineon provider
+
+Parameters:
+  TestId:
+    Type: String
+    Description: Unique identifier for this test run
+    Default: test-run-1
+
+Resources:
+  # S3 buckets for test input and output
+  TestInputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "thingpress-test-input-${TestId}"
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 1
+            Status: Enabled
+
+  TestOutputBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub "thingpress-test-output-${TestId}"
+      LifecycleConfiguration:
+        Rules:
+          - ExpirationInDays: 1
+            Status: Enabled
+
+  # SQS queues for test messages
+  TestInputQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "thingpress-test-input-${TestId}"
+      MessageRetentionPeriod: 3600  # 1 hour
+
+  TestOutputQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub "thingpress-test-output-${TestId}"
+      MessageRetentionPeriod: 3600  # 1 hour
+
+  # IAM role for test execution
+  TestExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: TestResourceAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:ListBucket
+                Resource:
+                  - !GetAtt TestInputBucket.Arn
+                  - !Sub "${TestInputBucket.Arn}/*"
+                  - !GetAtt TestOutputBucket.Arn
+                  - !Sub "${TestOutputBucket.Arn}/*"
+              - Effect: Allow
+                Action:
+                  - sqs:SendMessage
+                  - sqs:ReceiveMessage
+                  - sqs:DeleteMessage
+                  - sqs:GetQueueAttributes
+                Resource:
+                  - !GetAtt TestInputQueue.Arn
+                  - !GetAtt TestOutputQueue.Arn
+              - Effect: Allow
+                Action:
+                  - iot:CreateThing
+                  - iot:DeleteThing
+                  - iot:DescribeThing
+                  - iot:RegisterCertificateWithoutCA
+                  - iot:UpdateCertificate
+                  - iot:DeleteCertificate
+                  - iot:AttachThingPrincipal
+                  - iot:DetachThingPrincipal
+                  - iot:CreateThingType
+                  - iot:DeleteThingType
+                  - iot:CreateThingGroup
+                  - iot:DeleteThingGroup
+                  - iot:AddThingToThingGroup
+                  - iot:RemoveThingFromThingGroup
+                  - iot:ListThingPrincipals
+                  - iot:CreatePolicy
+                  - iot:DeletePolicy
+                  - iot:AttachPolicy
+                  - iot:DetachPolicy
+                Resource: "*"
+
+  # Lambda function for test execution
+  TestFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: ./
+      Handler: test_infineon.lambda_handler
+      Runtime: python3.13
+      Timeout: 300
+      MemorySize: 512
+      Role: !GetAtt TestExecutionRole.Arn
+      Environment:
+        Variables:
+          INPUT_BUCKET: !Ref TestInputBucket
+          OUTPUT_BUCKET: !Ref TestOutputBucket
+          INPUT_QUEUE: !Ref TestInputQueue
+          OUTPUT_QUEUE: !Ref TestOutputQueue
+          TEST_ID: !Ref TestId
+
+  # CloudWatch Log Group for test metrics
+  TestMetricsLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub "/aws/lambda/${TestFunction}"
+      RetentionInDays: 7
+
+Outputs:
+  TestFunctionName:
+    Description: Name of the test Lambda function
+    Value: !Ref TestFunction
+  TestInputBucketName:
+    Description: Name of the test input S3 bucket
+    Value: !Ref TestInputBucket
+  TestOutputBucketName:
+    Description: Name of the test output S3 bucket
+    Value: !Ref TestOutputBucket
+  TestInputQueueUrl:
+    Description: URL of the test input SQS queue
+    Value: !Ref TestInputQueue
+  TestOutputQueueUrl:
+    Description: URL of the test output SQS queue
+    Value: !Ref TestOutputQueue

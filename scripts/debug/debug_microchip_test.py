@@ -15,10 +15,19 @@ project_root = Path(__file__).parent
 sys.path.append(str(project_root))
 sys.path.append(str(project_root / 'test/integration'))
 
-from common.test_framework import ProviderComponentTest
+# Import only if the module exists (for CI compatibility)
+try:
+    from common.test_framework import ProviderComponentTest
+except ImportError:
+    print("Warning: common.test_framework not available - running in CI mode")
+    ProviderComponentTest = None
 
 def debug_microchip_provider():
     """Debug the Microchip provider to see what's happening"""
+    
+    if ProviderComponentTest is None:
+        print("⚠️  Skipping debug test - common.test_framework not available")
+        return
     
     print("🔍 DEBUG: Microchip Provider Component Test")
     print("=" * 60)

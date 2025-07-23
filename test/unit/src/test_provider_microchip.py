@@ -19,7 +19,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 
 from src.provider_microchip.provider_microchip.main import lambda_handler, invoke_export
 from src.provider_microchip.provider_microchip.manifest_handler import get_iterator
-from src.layer_utils.aws_utils import s3_object_bytes
+from src.layer_utils.layer_utils.aws_utils import s3_object_bytes
 from .model_provider_infineon import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={

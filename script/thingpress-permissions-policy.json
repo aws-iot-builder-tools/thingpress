@@ -1,0 +1,145 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:CreateStack",
+        "cloudformation:UpdateStack",
+        "cloudformation:DeleteStack",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplateSummary",
+        "cloudformation:ValidateTemplate",
+        "cloudformation:ListStacks",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:ExecuteChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:ListChangeSets",
+        "cloudformation:SetStackPolicy",
+        "cloudformation:TagResource"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:CreateBucket",
+        "s3:DeleteBucket",
+        "s3:PutBucketPolicy",
+        "s3:GetBucketPolicy",
+        "s3:PutBucketNotification",
+        "s3:GetBucketNotification",
+        "s3:PutObject",
+        "s3:GetObject",
+        "s3:DeleteObject",
+        "s3:ListBucket",
+        "s3:PutBucketPublicAccessBlock"
+      ],
+      "Resource": [
+        "arn:aws:s3:::thingpress-*",
+        "arn:aws:s3:::thingpress-*/*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "lambda:CreateFunction",
+        "lambda:DeleteFunction",
+        "lambda:GetFunction",
+        "lambda:UpdateFunctionCode",
+        "lambda:UpdateFunctionConfiguration",
+        "lambda:AddPermission",
+        "lambda:RemovePermission",
+        "lambda:InvokeFunction",
+        "lambda:TagResource",
+        "lambda:ListTags",
+        "lambda:PublishLayerVersion",
+        "lambda:DeleteLayerVersion",
+        "lambda:GetLayerVersion"
+      ],
+      "Resource": [
+        "arn:aws:lambda:*:*:function:Thingpress*",
+        "arn:aws:lambda:*:*:layer:Thingpress*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "sqs:CreateQueue",
+        "sqs:DeleteQueue",
+        "sqs:GetQueueAttributes",
+        "sqs:SetQueueAttributes",
+        "sqs:AddPermission",
+        "sqs:RemovePermission",
+        "sqs:TagQueue",
+        "sqs:SendMessage",
+        "sqs:ReceiveMessage",
+        "sqs:DeleteMessage"
+      ],
+      "Resource": "arn:aws:sqs:*:*:Thingpress*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iot:CreatePolicy",
+        "iot:DeletePolicy",
+        "iot:GetPolicy",
+        "iot:CreateThing",
+        "iot:DeleteThing",
+        "iot:DescribeThing",
+        "iot:CreateThingType",
+        "iot:DeleteThingType",
+        "iot:DescribeThingType",
+        "iot:CreateThingGroup",
+        "iot:DeleteThingGroup",
+        "iot:DescribeThingGroup",
+        "iot:AddThingToThingGroup",
+        "iot:RemoveThingFromThingGroup",
+        "iot:AttachPolicy",
+        "iot:DetachPolicy",
+        "iot:AttachThingPrincipal",
+        "iot:DetachThingPrincipal",
+        "iot:RegisterCertificateWithoutCA",
+        "iot:UpdateCertificate",
+        "iot:DescribeCertificate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "iam:PassRole",
+        "iam:GetRole"
+      ],
+      "Resource": "arn:aws:iam::*:role/Thingpress*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents",
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:DeleteLogGroup"
+      ],
+      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/Thingpress*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:ListAllMyBuckets",
+        "iam:ListRoles",
+        "lambda:ListFunctions",
+        "sqs:ListQueues",
+        "iot:ListPolicies",
+        "iot:ListThingGroups",
+        "iot:ListThingTypes"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

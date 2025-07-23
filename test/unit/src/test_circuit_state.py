@@ -13,7 +13,7 @@ from unittest.mock import patch, MagicMock
 import pytest
 
 # Import the module directly
-from src.layer_utils.circuit_state import (
+from src.layer_utils.layer_utils.circuit_state import (
     CircuitState,
     circuit_is_open,
     record_failure,
@@ -182,7 +182,7 @@ class TestResetCircuit(unittest.TestCase):
         mock_logger.addHandler(mock_handler)
 
         # Replace the logger in the module
-        with patch('src.layer_utils.circuit_state.logger', test_logger):
+        with patch('src.layer_utils.layer_utils.circuit_state.logger', test_logger):
             # Reset the circuit
             reset_circuit("test_operation")
             self.assertFalse(_circuit_states["test_operation"].is_open)
