@@ -89,7 +89,7 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
     results = []
     failed_messages = []
 
-    logger.info(f"Sending {len(messages)} messages in batches to queue")
+    logger.info("Sending %d messages in batches to queue", len(messages))
 
     for i in range(0, len(messages), batch_size):
         batch = messages[i:i + batch_size]
@@ -119,7 +119,7 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
 
             # Log successful sends
             if 'Successful' in response:
-                logger.info(f"Successfully sent {len(response['Successful'])} messages in batch")
+                logger.info("Successfully sent %d messages in batch", len(response['Successful']))
 
             # Handle partial failures
             if 'Failed' in response and response['Failed']:
@@ -138,7 +138,7 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
                         f"Failed to send message {failure['Id']}: {failure['Code']} - {failure['Message']}")
 
         except ClientError as error:
-            logger.error(f"SQS batch send failed for batch starting at index {i}: {error}")
+            logger.error("SQS batch send failed for batch starting at index %d: %s", i, error)
             boto_exception(error, f"With queue_url [{queue_url}]")
             raise error
 
@@ -146,10 +146,10 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
     total_sent = sum(len(r.get('Successful', [])) for r in results)
     total_failed = len(failed_messages)
 
-    logger.info(f"Batch send complete: {total_sent} sent, {total_failed} failed")
+    logger.info("Batch send complete: %d sent, %d failed", total_sent, total_failed)
 
     if failed_messages:
-        logger.warning(f"Failed messages details logged for retry")
+        logger.warning("Failed messages details logged for retry")
 
     return results
 
@@ -205,7 +205,7 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
 
         except ClientError as error:
             if attempt == max_retries - 1:
-                logger.error(f"Final retry attempt failed: {error}")
+                logger.error("Final retry attempt failed: %s", error)
                 raise error
             else:
                 sleep_time = 2 ** attempt
@@ -258,7 +258,7 @@ def get_queue_depth(queue_url: str, session: Session = default_session) -> dict:
         }
 
     except ClientError as error:
-        logger.error(f"Failed to get queue attributes for {queue_url}: {error}")
+        logger.error("Failed to get queue attributes for %s: %s", queue_url, error)
         boto_exception(error, f"With queue_url [{queue_url}]")
         raise error
 
@@ -307,7 +307,7 @@ def send_sqs_message_with_throttling(messages: list, queue_url: str,
             queue_metrics = get_queue_depth(queue_url, session)
             delay = calculate_optimal_delay(queue_metrics['total'], base_delay)
 
-            logger.info(f"Queue throttling check: depth={queue_metrics['total']}, delay={delay}s")
+            logger.info("Queue throttling check: depth=%d, delay=%ds", queue_metrics['total'], delay)
 
             if delay > 0:
                 logger.info(
@@ -315,7 +315,7 @@ def send_sqs_message_with_throttling(messages: list, queue_url: str,
                 time.sleep(delay)
         except Exception as e:
             # If throttling check fails, continue without throttling
-            logger.warning(f"Throttling check failed, proceeding without delay: {e}")
+            logger.warning("Throttling check failed, proceeding without delay: %s", e)
 
     # Send messages in batches with retry
     return send_sqs_message_batch_with_retry(messages, queue_url, session)
@@ -340,7 +340,7 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
     batch_size = 10  # SQS batch limit
     all_results = []
 
-    logger.info(f"Starting adaptive throttling send for {len(messages)} messages")
+    logger.info("Starting adaptive throttling send for %d messages", len(messages))
 
     for i in range(0, len(messages), batch_size):
         batch = messages[i:i + batch_size]
@@ -360,12 +360,12 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
                     excess_ratio = current_depth / max_queue_depth
                     adaptive_delay = min(60, int(30 * excess_ratio))  # Cap at 60 seconds
 
-                    logger.info(f"Queue depth ({current_depth}) exceeds limit ({max_queue_depth}), "
-                              f"waiting {adaptive_delay}s")
+                    logger.info("Queue depth (%d) exceeds limit (%d), waiting %ds", 
+                              current_depth, max_queue_depth, adaptive_delay)
                     time.sleep(adaptive_delay)
 
             except Exception as e:
-                logger.warning(f"Adaptive throttling check failed for batch {batch_num}: {e}")
+                logger.warning("Adaptive throttling check failed for batch %d: %s", batch_num, e)
 
         # Send the batch
         try:
@@ -377,10 +377,10 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
                 time.sleep(0.1)  # 100ms between batches
 
         except Exception as e:
-            logger.error(f"Failed to send batch {batch_num}: {e}")
+            logger.error("Failed to send batch %d: %s", batch_num, e)
             raise e
 
-    logger.info(f"Adaptive throttling send completed: {len(all_results)} batch responses")
+    logger.info("Adaptive throttling send completed: %d batch responses", len(all_results))
     return all_results
 
 @with_circuit_breaker('sqs_get_queue_attributes')

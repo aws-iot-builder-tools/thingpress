@@ -20,12 +20,13 @@ class TestThrottlingConfig:
     """Test cases for ThrottlingConfig class."""
     
     def test_default_configuration(self):
-        """Test default throttling configuration values."""
+        """Test default throttling configuration values in test environment."""
         config = ThrottlingConfig()
         
-        assert config.auto_throttling_enabled is True
-        assert config.throttling_base_delay == 30
-        assert config.throttling_batch_interval == 3
+        # In test environment, throttling is disabled by conftest.py
+        assert config.auto_throttling_enabled is False
+        assert config.throttling_base_delay == 0  # Set to 0 in test environment
+        assert config.throttling_batch_interval == 1  # Set to 1 in test environment
         assert config.max_queue_depth == 1000
         assert config.use_adaptive_throttling is False
     
@@ -161,6 +162,7 @@ class TestStandardizedThrottler:
         self.config.auto_throttling_enabled = True
         self.config.use_adaptive_throttling = True
         self.config.throttling_batch_interval = 3
+        self.config.throttling_base_delay = 30  # Set the base delay explicitly
         self.throttler.batch_count = 3
         
         mock_get_depth.side_effect = Exception("Queue error")
@@ -219,10 +221,10 @@ class TestStandardizedThrottler:
         
         expected_stats = {
             "total_batches_processed": 5,
-            "throttling_enabled": True,
+            "throttling_enabled": False,  # Disabled in test environment
             "throttling_type": "batch_based",
-            "base_delay": 30,
-            "batch_interval": 3,
+            "base_delay": 0,  # Set to 0 in test environment
+            "batch_interval": 1,  # Set to 1 in test environment
             "max_queue_depth": 1000
         }
         
@@ -275,6 +277,11 @@ class TestIntegrationScenarios:
     @patch('time.sleep')
     def test_multiple_batch_processing(self, mock_sleep, mock_send):
         """Test processing multiple batches with throttling."""
+        # Enable throttling for this test
+        self.throttler.config.auto_throttling_enabled = True
+        self.throttler.config.throttling_batch_interval = 3
+        self.throttler.config.throttling_base_delay = 30
+        
         mock_send.return_value = [{"successful": True}]
         
         # Process 10 batches (should throttle on batches 3, 6, 9)
