@@ -19,7 +19,7 @@ The Generated Certificates Provider is a Lambda function that processes certific
 Use the `generate_certificates.py` script to generate certificates:
 
 ```bash
-python script/generate_certificates.py --count 100 --output-dir ./output
+python src/certificate_generator/generate_certificates.py --count 100 --output-dir ./output
 ```
 
 This will create certificate files in the specified output directory.

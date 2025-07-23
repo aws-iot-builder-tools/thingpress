@@ -20,20 +20,20 @@ Each provider directory contains:
 
 ## Running Tests
 
-You can run the integration tests using the `run_integration_tests.py` script in the `script/` directory:
+You can run the integration tests using the `run_integration_tests.py` script in the `scripts/` directory:
 
 ```bash
 # Run tests for all providers
-python script/run_integration_tests.py
+python scripts/run_integration_tests.py
 
 # Run tests for a specific provider
-python script/run_integration_tests.py --provider espressif
+python scripts/run_integration_tests.py --provider espressif
 
 # Run tests with a specific AWS profile
-python script/run_integration_tests.py --provider infineon --profile your-profile-name
+python scripts/run_integration_tests.py --provider infineon --profile your-profile-name
 
 # Skip cleanup after tests
-python script/run_integration_tests.py --provider espressif --no-cleanup
+python scripts/run_integration_tests.py --provider espressif --no-cleanup
 ```
 
 ## Test Flow

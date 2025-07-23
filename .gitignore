@@ -6,6 +6,7 @@ packaged.yaml
 .coverage
 **/__pycache__
 htmlcov
+prof
 .vscode/**/*
 !.vscode/settings.json
 !.vscode/tasks.json

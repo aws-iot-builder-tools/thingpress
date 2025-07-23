@@ -46,7 +46,7 @@ scripts/
 │   ├── debug_microchip_test.py          # ✅ MOVE from root
 │   └── test_lambda_import.py             # ✅ MOVE from root
 └── integration/
-    └── run_integration_tests.py          # ✅ MOVE from script/
+    └── run_integration_tests.py          # ✅ MOVE from scripts/
 ```
 
 ## 🗂️ **Files to Move/Organize**
@@ -99,7 +99,7 @@ git commit -m "feat: Add comprehensive integration test framework
 ```bash
 git mv debug_microchip_test.py scripts/debug/
 git mv test_lambda_import.py scripts/debug/
-git mv script/run_integration_tests.py scripts/integration/
+git mv scripts/run_integration_tests.py scripts/integration/
 git commit -m "refactor: Organize debug and integration scripts
 
 - Move debug scripts to scripts/debug/

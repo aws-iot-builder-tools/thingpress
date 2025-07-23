@@ -55,7 +55,7 @@ scripts/debug/
 └── test_lambda_import.py                 # MOVED from root
 
 scripts/integration/
-└── run_integration_tests.py             # MOVED from script/
+└── run_integration_tests.py             # MOVED from scripts/
 ```
 
 ### **✅ Session Documentation (LOW PRIORITY)**

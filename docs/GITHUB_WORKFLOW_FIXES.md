@@ -3,7 +3,7 @@
 ## Issues Identified
 
 ### 1. Pytest Discovery Problems
-- **Issue**: Pytest was discovering and trying to run files in `scripts/` and `script/` directories as tests
+- **Issue**: Pytest was discovering and trying to run files in `scripts/` directories as tests
 - **Cause**: Default pytest behavior collects all files matching `test_*.py` pattern
 - **Impact**: Import errors from scripts that weren't designed to run in CI environment
 

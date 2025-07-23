@@ -50,7 +50,7 @@ jobs:
       
       - name: Run integration tests
         run: |
-          python script/run_integration_tests.py \
+          python scripts/run_integration_tests.py \
             --provider ${{ github.event.inputs.provider }} \
             --region ${{ github.event.inputs.region }} \
             ${{ github.event.inputs.cleanup == 'false' && '--no-cleanup' || '' }}
