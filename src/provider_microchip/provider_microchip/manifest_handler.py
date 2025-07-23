@@ -14,7 +14,8 @@ from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from layer_utils.aws_utils import s3_object_bytes, send_sqs_message
+from layer_utils.aws_utils import s3_object_bytes
+from layer_utils.throttling_utils import create_standardized_throttler
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
@@ -146,11 +147,32 @@ def invoke_export(config, queue_url, session: Session):
 
     manifest_iterator = ManifestIterator(manifest_data)
 
+    # Process certificates in batches for optimal SQS throughput
+    batch_messages = []
+    batch_size = 10  # SQS batch limit
+    total_count = 0
+    
+    # Initialize standardized throttler
+    throttler = create_standardized_throttler()
+
     while manifest_iterator.index != 0:
         manifest_item = ManifestItem( next( manifest_iterator ), verify_file )
         block = manifest_item.get_certificate_chain()
         if len(block) == 0:
             logger.error("Certificate %s could not be extracted", manifest_item.identifier)
             continue
-        config['certificate'] = str(b64encode(block.encode('ascii')))
-        send_sqs_message(config, queue_url, session=session)
+        
+        cert_config = config.copy()
+        cert_config['certificate'] = str(b64encode(block.encode('ascii')))
+        
+        batch_messages.append(cert_config)
+        total_count += 1
+        
+        # Send batch when full
+        if len(batch_messages) >= batch_size:
+            throttler.send_batch_with_throttling(batch_messages, queue_url, session)
+            batch_messages = []
+    
+    # Send remaining messages
+    if batch_messages:
+        throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)

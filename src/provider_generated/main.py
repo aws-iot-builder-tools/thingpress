@@ -15,8 +15,7 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from layer_utils.aws_utils import (s3_object_bytes, send_sqs_message, send_sqs_message_batch_with_retry, 
-                                   send_sqs_message_with_throttling, send_sqs_message_with_adaptive_throttling)
+from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.cert_utils import get_cn
 from layer_utils.throttling_utils import create_standardized_throttler
 from boto3 import Session
@@ -65,7 +64,7 @@ def file_key_generator(event, context):
 def process_certificate_file(config: Dict[str, Any], queue_url: str,
                              session: Session=default_session) -> int:
     """
-    Process a file containing base64-encoded certificates (one per line).
+    Process a file containing base64-encoded certificates (one per line) using batch processing.
     
     Args:
         config: Configuration dictionary with bucket and key information
@@ -88,10 +87,10 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
     # Process certificates in batches for optimal SQS throughput
     batch_messages = []
     batch_size = 10  # SQS batch limit
-    count = 0
     
     # Initialize standardized throttler
     throttler = create_standardized_throttler()
+    total_count = 0
     
     for line in file_content.splitlines():
         line = line.strip()
@@ -104,21 +103,17 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
         # Store the certificate
         cert_config['certificate'] = line
         cert_bytes = base64.b64decode(line)
-        
-        # Convert bytes to string for get_cn function
-        cert_string = cert_bytes.decode('utf-8')
-        cert_config['thing'] = get_cn(cert_string)
+        cert_config['thing'] = get_cn(cert_bytes)
 
-        # Add to batch
         batch_messages.append(cert_config)
-        count += 1
-
+        total_count += 1
+        
         # Send batch when full
         if len(batch_messages) >= batch_size:
             throttler.send_batch_with_throttling(batch_messages, queue_url, session)
             batch_messages = []
-
-    # Send remaining messages in final batch
+    
+    # Send remaining messages
     if batch_messages:
         throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)
 
@@ -127,13 +122,21 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
     
     logger.info({
         "message": "Processed certificates from file with standardized throttling",
-        "count": count,
+        "total_certificates": total_count,
+        "total_batches": throttling_stats["total_batches_processed"],
+        "api_calls_saved": total_count - throttling_stats["total_batches_processed"],
         "throttling_stats": throttling_stats,
         "bucket": config['bucket'],
         "key": config['key']
     })
 
-    return count
+    return total_count
+
+def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+        "key": config['key']
+    })
+
+    return total_count
 
 def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """

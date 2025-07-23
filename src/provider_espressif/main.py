@@ -17,7 +17,8 @@ from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import (
     DynamoDBPersistenceLayer)
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from layer_utils.aws_utils import s3_object_bytes, send_sqs_message
+from layer_utils.aws_utils import s3_object_bytes
+from layer_utils.throttling_utils import create_standardized_throttler
 from boto3 import Session
 
 # Initialize Logger and Idempotency
@@ -74,22 +75,45 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
                                      session=session)
     reader_list = csv.DictReader(StringIO(manifest_bytes.decode()))
 
-    count = 0
+    # Process certificates in batches for optimal SQS throughput
+    batch_messages = []
+    batch_size = 10  # SQS batch limit
+    total_count = 0
+    
+    # Initialize standardized throttler
+    throttler = create_standardized_throttler()
+    
     for row in reader_list:
         cert_config = config.copy()
         cert_config['thing'] = row['MAC']
-        cert_config['certificate'] = str(base64.b64encode(row['cert'].encode('ascii')))
-        send_sqs_message(cert_config, queue_url, session)
-        count += 1
+        cert_config['certificate'] = base64.b64encode(row['cert'].encode('ascii')).decode('ascii')
+        
+        batch_messages.append(cert_config)
+        total_count += 1
+        
+        # Send batch when full
+        if len(batch_messages) >= batch_size:
+            throttler.send_batch_with_throttling(batch_messages, queue_url, session)
+            batch_messages = []
+    
+    # Send remaining messages
+    if batch_messages:
+        throttler.send_batch_with_throttling(batch_messages, queue_url, session, is_final_batch=True)
 
+    # Get throttling statistics for logging
+    throttling_stats = throttler.get_throttling_stats()
+    
     logger.info({
-        "message": "Processed certificates from Espressif manifest",
-        "count": count,
+        "message": "Processed certificates from Espressif manifest with standardized throttling",
+        "total_certificates": total_count,
+        "total_batches": throttling_stats["total_batches_processed"],
+        "api_calls_saved": total_count - throttling_stats["total_batches_processed"],
+        "throttling_stats": throttling_stats,
         "bucket": config['bucket'],
         "key": config['key']
     })
 
-    return count
+    return total_count
 
 def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
