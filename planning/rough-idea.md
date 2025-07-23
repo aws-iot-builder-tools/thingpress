@@ -1,2 +1,0 @@
-Thingpress needs a single-page web application user interface. I would like users to define the aws iot thing type, aws iot thing group, and aws iot thing policy in the web interface. then I would like users to upload a certificate manifest file for thingpress processing. The user interface authentication should be integrated with aws iam so aws console users can use the same login.
- 
