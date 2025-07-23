@@ -22,3 +22,5 @@ performance_test/
 **/root_ca_*.key
 **/intermediate_ca_*.key
 /tmp/thingpress_perf_*
+scripts/output/
+planning
