@@ -565,7 +565,6 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
     logger.info("Processing thing %s.", thing_name)
     iot_client = session.client('iot')
     certificate_arn = get_certificate_arn(certificate_id, session)
-    thing_created = False
 
     try:
         iot_client.describe_thing(thingName=thing_name)
@@ -577,7 +576,6 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
             # Create the thing without tags first
             create_params = {'thingName': thing_name}
             iot_client.create_thing(**create_params)
-            thing_created = True
             logger.info("Created thing %s", thing_name)
 
             # Apply tags separately if provided

@@ -11,17 +11,12 @@ import os
 from typing import Any, Dict
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
-from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
     DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from boto3 import Session
-from layer_utils.aws_utils import (s3_object_bytes, send_sqs_message,
-                                   send_sqs_message_batch_with_retry,
-                                   send_sqs_message_with_adaptive_throttling,
-                                   send_sqs_message_with_throttling)
+from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.cert_utils import get_cn
 from layer_utils.throttling_utils import create_standardized_throttler
 

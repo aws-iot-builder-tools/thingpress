@@ -6,13 +6,10 @@ Lambda function to decompose Infineon based certificate manifest(s) and begin
 the import processing pipeline
 """
 import json
-import logging
 import os
 import sys
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
-from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
     DynamoDBPersistenceLayer

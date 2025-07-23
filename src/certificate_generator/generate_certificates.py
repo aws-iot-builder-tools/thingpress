@@ -32,17 +32,14 @@ import argparse
 import base64
 import datetime
 import multiprocessing
-import os
 import time
 from concurrent.futures import ProcessPoolExecutor
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import List, Tuple, Union
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, rsa
-from cryptography.hazmat.primitives.asymmetric.types import (CertificateIssuerPrivateKeyTypes,
-                                                             PrivateKeyTypes)
 from cryptography.x509.oid import NameOID
 from tqdm import tqdm
 

@@ -8,7 +8,6 @@ import json
 import os
 import sys
 
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from boto3 import Session
 

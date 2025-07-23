@@ -4,7 +4,6 @@
 """
 import io
 
-import boto3
 import py7zr
 import py7zr.io as py7io
 from boto3 import Session
@@ -52,7 +51,6 @@ def send_certificates(manifest_archive: io.BytesIO,
                       queue_url: str,
                       session: Session) -> int:
     "Routine to send data through queue for further processing with batch optimization."
-    import os
 
     # Process certificates in batches for optimal SQS throughput
     batch_messages = []

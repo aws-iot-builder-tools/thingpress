@@ -5,7 +5,8 @@
 Product Verifier Function (S3 Event Handler)
 ============================================
 This function handles S3 events and routes manifests to appropriate SQS queues.
-It verifies S3 uploads and does NOT process certificates directly - that's done by vendor-specific providers.
+It verifies S3 uploads and does NOT process certificates directly - that's done by
+vendor-specific providers.
 
 Event Flow:
 S3 Upload → Product Verifier (S3 Event) → SQS Queue → Vendor Provider (SQS Event) → Bulk Importer
@@ -105,7 +106,7 @@ def lambda_handler(event,
     try:
         queue_url = get_provider_queue(config['bucket'])
     except ValueError as e:
-        logger.error(f"Queue URL could not be resolved for bucket {config['bucket']}. Exiting.")
+        logger.error("Queue URL could not be resolved for bucket %s. Exiting.", config['bucket'])
         raise e
 
     for record in records_list:
@@ -115,9 +116,9 @@ def lambda_handler(event,
 
         # Log the provider type based on the bucket name
         if config['bucket'].startswith(GENERATED_BUCKET_PREFIX):
-            logger.info(f"Processing generated certificate file: {record.s3.get_object.key}")
+            logger.info("Processing generated certificate file: %s", record.s3.get_object.key)
         else:
-            logger.info(f"Processing vendor certificate manifest: {record.s3.get_object.key}")
+            logger.info("Processing vendor certificate manifest: %s", record.s3.get_object.key)
 
         send_sqs_message(config, queue_url, default_session)
         logger.info("Sent message to queue %s for s3://%s/%s",

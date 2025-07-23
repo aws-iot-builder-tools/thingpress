@@ -109,7 +109,6 @@ def reset_circuit(operation_name):
 
 class CircuitOpenError(Exception):
     """Exception raised when a circuit is open"""
-    pass
 
 def with_circuit_breaker(operation_name, fallback_function=None):
     """
@@ -137,7 +136,7 @@ def with_circuit_breaker(operation_name, fallback_function=None):
                 result = func(*args, **kwargs)
                 reset_circuit(operation_name)
                 return result
-            except Exception as e:
+            except Exception:
                 record_failure(operation_name)
                 raise
 

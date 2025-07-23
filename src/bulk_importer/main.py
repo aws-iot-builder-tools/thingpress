@@ -96,7 +96,8 @@ def process_certificate(config, session: Session=default_session):
             "fingerprint": fingerprint,
             "error": str(error)
         })
-        return register_certificate(decoded_certificate.decode('ascii'), get_thingpress_tags(), session)
+        return register_certificate(decoded_certificate.decode('ascii'),
+                                    get_thingpress_tags(), session)
 
 def get_thingpress_tags() -> list:
     """Generate standard Thingpress tags for IoT objects
@@ -133,7 +134,7 @@ def process_sqs(config, session: Session=default_session):
     }
 
 def lambda_handler(event: SQSEvent,
-                   context: LambdaContext) -> dict: # pylint: disable=unused-argument
+                   _context: LambdaContext) -> dict:
     """Lambda function main entry point"""
 
     for record in event['Records']:
