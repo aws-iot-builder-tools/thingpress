@@ -8,4 +8,4 @@
 -r test/unit/src/requirements.txt
 fastjsonschema==2.21.1
 pyYAML==6.0.2
-types-boto3==1.39.3
+types-boto3==1.39.9
