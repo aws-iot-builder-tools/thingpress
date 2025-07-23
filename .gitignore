@@ -11,3 +11,13 @@ htmlcov
 !.vscode/tasks.json
 !.vscode/launch.json
 !.vscode/extensions.json
+
+# Performance testing - exclude generated files
+performance_test/
+**/certificates_*.txt
+**/batch_*.txt
+**/root_ca_*.pem
+**/intermediate_ca_*.pem
+**/root_ca_*.key
+**/intermediate_ca_*.key
+/tmp/thingpress_perf_*

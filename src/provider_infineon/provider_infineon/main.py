@@ -16,8 +16,8 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from aws_utils import verify_queue
-from aws_utils import boto_exception
+from layer_utils.aws_utils import verify_queue
+from layer_utils.aws_utils import boto_exception
 import sys
 import os
 
@@ -95,7 +95,7 @@ def process_infineon_manifest(config, queue_url, cert_type, session=default_sess
     
     return count
 
-def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
     Process Infineon certificate manifests from SQS messages and forward to target queue.
     
@@ -121,6 +121,17 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
     Returns:
         dict: The original event for AWS Lambda SQS batch processing, or None if validation fails
     """
+    # Handle both raw dict and SQSEvent object formats
+    if hasattr(event, 'records'):
+        # SQSEvent object format
+        sqs_event = event
+        raw_event = event.raw_event
+    else:
+        # Raw dict format - convert to SQSEvent
+        from aws_lambda_powertools.utilities.data_classes import SQSEvent
+        sqs_event = SQSEvent(event)
+        raw_event = event
+    
     queue_url = os.environ['QUEUE_TARGET']
     cert_type = os.environ['CERT_TYPE']
     total_processed = 0
@@ -142,8 +153,8 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
         })
         raise error
 
-    for record in event.records:
-        config = json.loads(record["body"])
+    for record in sqs_event.records:
+        config = json.loads(record.body)
         logger.info({
             "message": "Processing SQS message",
             "bucket": config.get('bucket'),
@@ -156,4 +167,4 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
         "count": total_processed
     })
 
-    return event.raw_event
+    return raw_event

@@ -17,7 +17,7 @@ from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import (
     DynamoDBPersistenceLayer)
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from aws_utils import s3_object_bytes, send_sqs_message
+from layer_utils.aws_utils import s3_object_bytes, send_sqs_message
 from boto3 import Session
 
 # Initialize Logger and Idempotency
@@ -91,7 +91,7 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
 
     return count
 
-def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
     Process Espressif certificate manifests from SQS messages and forward to target queue.
     
@@ -120,11 +120,22 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
     Returns:
         dict: The original event for AWS Lambda SQS batch processing
     """
+    # Handle both raw dict and SQSEvent object formats
+    if hasattr(event, 'records'):
+        # SQSEvent object format
+        sqs_event = event
+        raw_event = event.raw_event
+    else:
+        # Raw dict format - convert to SQSEvent
+        from aws_lambda_powertools.utilities.data_classes import SQSEvent
+        sqs_event = SQSEvent(event)
+        raw_event = event
+    
     queue_url = os.environ['QUEUE_TARGET']
     total_processed = 0
 
-    for record in event.records:
-        config = json.loads(record["body"])
+    for record in sqs_event.records:
+        config = json.loads(record.body)
         logger.info({
             "message": "Processing SQS message",
             "bucket": config.get('bucket'),
@@ -139,4 +150,4 @@ def lambda_handler(event: SQSEvent, context: LambdaContext) -> dict: # pylint: d
         "count": total_processed
     })
 
-    return event.raw_event
+    return raw_event

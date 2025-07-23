@@ -18,13 +18,13 @@ from boto3 import Session, _get_default_session
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from src.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
-from src.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
-from src.layer_utils.aws_utils import send_sqs_message, get_certificate_arn, register_certificate
-from src.layer_utils.aws_utils import process_thing, process_thing_type, process_policy
-from src.layer_utils.aws_utils import process_thing_group, boto_errorcode
-from src.layer_utils.cert_utils import decode_certificate
-from src.layer_utils.circuit_state import clear_circuits, reset_circuit
+from src.layer_utils.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
+from src.layer_utils.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
+from src.layer_utils.layer_utils.aws_utils import send_sqs_message, get_certificate_arn, register_certificate
+from src.layer_utils.layer_utils.aws_utils import process_thing, process_thing_type, process_policy
+from src.layer_utils.layer_utils.aws_utils import process_thing_group, boto_errorcode
+from src.layer_utils.layer_utils.cert_utils import decode_certificate
+from src.layer_utils.layer_utils.circuit_state import clear_circuits, reset_circuit
 
 from .model_provider_espressif import LambdaS3Class
 
@@ -355,7 +355,7 @@ class TestAwsUtils(TestCase):
         iot_client.create_thing(thingName=thing_name)
 
         # Assume operation success with no raise
-        process_thing(thing_name, certificate_id, _get_default_session())
+        process_thing(thing_name, certificate_id, session=_get_default_session())
 
     def test_pos_process_thing_with_type(self):
         """ Positive test case for attaching policy to certificate """
@@ -372,7 +372,7 @@ class TestAwsUtils(TestCase):
         cr = register_certificate(cert, _get_default_session())
 
         # Assume operation success with no raise
-        process_thing('my_thing', cr, _get_default_session())
+        process_thing('my_thing', cr, session=_get_default_session())
 
     def test_pos_process_thing_with_type_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
@@ -380,7 +380,7 @@ class TestAwsUtils(TestCase):
         cr = register_certificate(cert, _get_default_session())
 
         # Assume operation success with no raise
-        process_thing('my_thing', cr, _get_default_session())
+        process_thing('my_thing', cr, session=_get_default_session())
 
         # Assume operation success with no raise
         process_thing_type('my_thing', self.thing_type_name, _get_default_session())
@@ -487,9 +487,9 @@ class TestAwsUtils(TestCase):
             mock_client.return_value = mock_iot
             
             # Mock get_certificate_arn to return a valid ARN
-            with patch('src.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
+            with patch('src.layer_utils.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
                 with raises(ClientError) as exc:
-                    process_thing(thing_name, certificate_id, _get_default_session())
+                    process_thing(thing_name, certificate_id, session=_get_default_session())
                 
                 assert boto_errorcode(exc.value) == 'ThrottlingException'
                 mock_iot.describe_thing.assert_called_once_with(thingName=thing_name)
@@ -529,9 +529,9 @@ class TestAwsUtils(TestCase):
             mock_client.return_value = mock_iot
             
             # Mock get_certificate_arn to return a valid ARN
-            with patch('src.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
+            with patch('src.layer_utils.layer_utils.aws_utils.get_certificate_arn', return_value=certificate_arn):
                 with raises(ClientError) as exc:
-                    process_thing(thing_name, certificate_id, _get_default_session())
+                    process_thing(thing_name, certificate_id, session=_get_default_session())
                 
                 assert boto_errorcode(exc.value) == 'InvalidRequestException'
                 mock_iot.describe_thing.assert_called_once_with(thingName=thing_name)

@@ -5,8 +5,8 @@
 import io
 import py7zr
 import py7zr.io as py7io
-from cert_utils import format_certificate, get_cn
-from aws_utils import s3_object_bytes, send_sqs_message
+from layer_utils.cert_utils import format_certificate, get_cn
+from layer_utils.aws_utils import s3_object_bytes, send_sqs_message
 import boto3
 from boto3 import Session
 default_session: Session = Session()

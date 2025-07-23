@@ -14,7 +14,7 @@ from jose.utils import base64url_decode, base64url_encode
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes, serialization
-from aws_utils import s3_object_bytes, send_sqs_message
+from layer_utils.aws_utils import s3_object_bytes, send_sqs_message
 
 logger = logging.getLogger()
 logger.setLevel("INFO")
