@@ -1,7 +1,7 @@
 ## Step 2: Building and installing the tool
 # Prerequisites
 
-- [Identify any need to increase limit quotas](doc/aws-api-limits.md).
+- [Identify any need to increase limit quotas](aws-api-limits.md).
 - Amazon Web Services account. If you don't have an account, refer to https://docs.aws.amazon.com/iot/latest/developerguide/setting-up.html.  The relevant sections are **Sign up for an AWS account** and **Create a user and grant permissions**.  
 - Basic experience with Amazon CloudFormation 
 - Linux workstation or Amazon Linux EC2 instance with:
