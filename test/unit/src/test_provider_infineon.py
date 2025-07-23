@@ -20,6 +20,11 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from moto import mock_aws
 from py7zr import FileInfo
 from pytest import raises
+
+# Set required environment variables before importing the module
+os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"] = "test-idempotency-table"
+os.environ["POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS"] = "3600"
+
 from src.layer_utils.layer_utils.aws_utils import s3_object_bytes
 from src.provider_infineon.provider_infineon.main import lambda_handler
 from src.provider_infineon.provider_infineon.manifest_handler import verify_certtype, select_certificate_set, verify_certificate_set, send_certificates
@@ -46,6 +51,11 @@ class TestProviderInfineon(TestCase):
         os.environ["AWS_SECRET_ACCESS_KEY"] = "testing"
         os.environ["AWS_SECURITY_TOKEN"] = "testing"
         os.environ["AWS_SESSION_TOKEN"] = "testing"
+        # Disable throttling for tests
+        os.environ["AUTO_THROTTLING_ENABLED"] = "false"
+        os.environ["USE_ADAPTIVE_THROTTLING"] = "false"
+        os.environ["THROTTLING_BASE_DELAY"] = "0"
+        os.environ["THROTTLING_BATCH_INTERVAL"] = "1"
         self.session = _get_default_session()
 
     def setUp(self):
@@ -55,6 +65,23 @@ class TestProviderInfineon(TestCase):
         self.test_s3_bucket_name = "unit_test_s3_bucket"
         self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
+        
+        # Create DynamoDB table for idempotency
+        dynamodb_client = _get_default_session().client('dynamodb', region_name="us-east-1")
+        try:
+            dynamodb_client.create_table(
+                TableName='test-idempotency-table',
+                KeySchema=[
+                    {'AttributeName': 'id', 'KeyType': 'HASH'}
+                ],
+                AttributeDefinitions=[
+                    {'AttributeName': 'id', 'AttributeType': 'S'}
+                ],
+                BillingMode='PAY_PER_REQUEST'
+            )
+        except Exception:
+            pass  # Table might already exist
+        
         s3_client = _get_default_session().client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
         with open(self.artifact_local, 'rb') as data:
@@ -206,5 +233,13 @@ class TestProviderInfineon(TestCase):
         sqs_queue_url = sqs_queue_url_r['QueueUrl']
         sqs_resource = sqs_resource.Queue(url=sqs_queue_url)
         sqs_resource.delete()
+        
+        # Clean up DynamoDB table
+        try:
+            dynamodb_client = _get_default_session().client('dynamodb', region_name="us-east-1")
+            dynamodb_client.delete_table(TableName='test-idempotency-table')
+        except Exception:
+            pass  # Table might not exist
+            
         os.environ['QUEUE_TARGET']=""
         os.environ['CERT_TYPE']=""
