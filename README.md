@@ -20,6 +20,10 @@ parts, and Thingpress documentation for each vendor.
 | [Microchip Technology Inc.](https://www.microchip.com/) | [Trust&Go ATECC608B with TLS](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls) | [Thingpress for Microchip](docs/vendors/microchip.md) |
 | Generated Certificates | Programmatically generated certificates | [Thingpress for Generated Certificates](docs/vendors/generated.md) |
 
+## Development Roadmap
+
+See our [Development Roadmap](planning/ROADMAP.md) for information about upcoming features and development priorities.
+
 # Getting started
 
 Thingpress is a tool used for production environment preparation.
