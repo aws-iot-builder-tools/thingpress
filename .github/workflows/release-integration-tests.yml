@@ -11,17 +11,13 @@ on:
         default: 'all'
       region:
         description: 'AWS region to deploy to'
-        required: true
-        default: 'us-east-1'
+        required: false
+        default: ''
       cleanup:
         description: 'Clean up resources after tests'
         required: true
         default: 'true'
         type: boolean
-
-env:
-  AWS_REGION: us-east-1
-  AWS_ACCOUNT_ID: 477252478758
 
 jobs:
   integration-tests:
@@ -54,8 +50,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::477252478758:role/ThingpressDeploymentRole
-          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+          aws-region: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
           role-session-name: GitHubActions-ThingpressIntegrationTests
       
       - name: Install AWS SAM CLI
@@ -77,10 +73,10 @@ jobs:
           PROVIDER="${{ matrix.provider }}"
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             PROVIDER="${{ github.event.inputs.provider }}"
-            REGION="${{ github.event.inputs.region }}"
+            REGION="${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}"
             CLEANUP="${{ github.event.inputs.cleanup }}"
           else
-            REGION="${{ env.AWS_REGION }}"
+            REGION="${{ secrets.AWS_REGION || 'us-east-1' }}"
             CLEANUP="true"
           fi
           
@@ -95,7 +91,27 @@ jobs:
             --providers "$PROVIDER" \
             --output-file "test-results-${PROVIDER}.json"
         env:
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+      
+      - name: Cleanup integration test resources
+        if: always()
+        run: |
+          echo "🧹 Cleaning up integration test resources..."
+          
+          # Make cleanup script executable
+          chmod +x scripts/cleanup-integration-test.sh
+          
+          # Determine cleanup behavior
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ github.event.inputs.cleanup }}" = "false" ]; then
+            echo "⏭️ Cleanup skipped by user request"
+          else
+            echo "🗑️ Running cleanup for integration test resources"
+            ./scripts/cleanup-integration-test.sh \
+              --stack-prefix "thingpress-${{ matrix.provider }}-test" \
+              --region "${{ secrets.AWS_REGION || 'us-east-1' }}"
+          fi
+        env:
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
       
       - name: Upload test results
         if: always()
@@ -145,8 +161,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::477252478758:role/ThingpressDeploymentRole
-          aws-region: ${{ github.event.inputs.region }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+          aws-region: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
           role-session-name: GitHubActions-ThingpressIntegrationTests-All
       
       - name: Install AWS SAM CLI
@@ -160,6 +176,26 @@ jobs:
             --providers all \
             --output-file "test-results-all.json"
       
+      - name: Cleanup integration test resources
+        if: always()
+        run: |
+          echo "🧹 Cleaning up integration test resources for all providers..."
+          
+          # Make cleanup script executable
+          chmod +x scripts/cleanup-integration-test.sh
+          
+          # Determine cleanup behavior
+          if [ "${{ github.event.inputs.cleanup }}" = "false" ]; then
+            echo "⏭️ Cleanup skipped by user request"
+          else
+            echo "🗑️ Running cleanup for all integration test resources"
+            ./scripts/cleanup-integration-test.sh \
+              --stack-prefix "thingpress" \
+              --region "${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}"
+          fi
+        env:
+          AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+      
       - name: Upload comprehensive test results
         if: always()
         uses: actions/upload-artifact@v4
@@ -171,11 +207,48 @@ jobs:
             test-metrics-*.json
           retention-days: 30
 
+  # Final cleanup job that runs after all tests complete
+  final-cleanup:
+    name: Final Integration Test Cleanup
+    runs-on: ubuntu-latest
+    needs: [integration-tests, integration-tests-all]
+    if: always()
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+          role-session-name: GitHubActions-ThingpressFinalCleanup
+      
+      - name: Final comprehensive cleanup
+        run: |
+          echo "🧹 Running final comprehensive cleanup of integration test account..."
+          
+          # Make cleanup script executable
+          chmod +x scripts/cleanup-integration-test.sh
+          
+          # Run comprehensive cleanup for all thingpress resources
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress" \
+            --region "${{ secrets.AWS_REGION || 'us-east-1' }}"
+          
+          echo "✅ Final cleanup completed - integration test account is clean"
+        env:
+          AWS_DEFAULT_REGION: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
   # Summary job that depends on all integration tests
   test-summary:
     name: Integration Test Summary
     runs-on: ubuntu-latest
-    needs: [integration-tests]
+    needs: [integration-tests, final-cleanup]
     if: always() && github.event_name == 'release'
     
     steps:
@@ -199,7 +272,7 @@ jobs:
           
           for provider in microchip espressif infineon generated; do
             if [ -f "test-results-${provider}.json" ]; then
-              if grep -q '"status": "passed"' "test-results-${provider}.json"; then
+              if grep -q '"success": true' "test-results-${provider}.json"; then
                 PASSED_TESTS="$PASSED_TESTS $provider"
                 echo "✅ **$provider**: PASSED" >> $GITHUB_STEP_SUMMARY
               else

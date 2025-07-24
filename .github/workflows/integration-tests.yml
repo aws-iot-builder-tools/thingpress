@@ -9,17 +9,13 @@ on:
         default: 'all'
       region:
         description: 'AWS region to deploy to'
-        required: true
-        default: 'us-east-1'
+        required: false
+        default: ''
       cleanup:
         description: 'Clean up resources after tests'
         required: true
         default: 'true'
         type: boolean
-
-env:
-  AWS_REGION: us-east-1
-  AWS_ACCOUNT_ID: 477252478758
 
 jobs:
   integration-tests:
@@ -47,8 +43,8 @@ jobs:
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
         with:
-          role-to-assume: arn:aws:iam::477252478758:role/ThingpressDeploymentRole
-          aws-region: ${{ github.event.inputs.region }}
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+          aws-region: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
           role-session-name: GitHubActions-ThingpressManualTests
       
       - name: Install AWS SAM CLI
@@ -67,7 +63,27 @@ jobs:
             --providers ${{ github.event.inputs.provider }} \
             --output-file "manual-test-results.json"
         env:
-          AWS_DEFAULT_REGION: ${{ github.event.inputs.region }}
+          AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+      
+      - name: Cleanup integration test resources
+        if: always()
+        run: |
+          echo "🧹 Cleaning up manual integration test resources..."
+          
+          # Make cleanup script executable
+          chmod +x scripts/cleanup-integration-test.sh
+          
+          # Determine cleanup behavior
+          if [ "${{ github.event.inputs.cleanup }}" = "false" ]; then
+            echo "⏭️ Cleanup skipped by user request"
+          else
+            echo "🗑️ Running cleanup for manual integration test resources"
+            ./scripts/cleanup-integration-test.sh \
+              --stack-prefix "thingpress" \
+              --region "${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}"
+          fi
+        env:
+          AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
       
       - name: Upload test results
         if: always()
@@ -75,6 +91,7 @@ jobs:
         with:
           name: manual-test-results
           path: |
+            manual-test-results.json
             test-results-*.json
             test-results-*.log
             test-metrics-*.json

@@ -34,6 +34,7 @@ aws iam create-open-id-connect-provider \
 export AWS_ACCOUNT_ID="123456789012"  # Your AWS account ID
 export GITHUB_ORG="your-org"          # Your GitHub organization or username
 export GITHUB_REPO="thingpress"       # Your GitHub repository name
+export THINGPRESS_ROLE_NAME="ThingpressDeploymentRole"  # Optional: custom role name
 ```
 
 2. Run the script:
@@ -46,17 +47,26 @@ The script will:
 - Replace placeholders in the trust policy with your values
 - Create the IAM role with the trust policy
 - Attach the permissions policy to the role
+- Use a temporary file to avoid modifying the original trust policy template
 
 ## Using the Role in GitHub Actions
 
 1. Add the following secrets to your GitHub repository:
-   - `AWS_ACCOUNT_ID`: Your AWS account ID
-   - `IAM_USER_ARN`: ARN of the IAM user (if required by your template)
-   - `IOT_POLICY`: Name of the IoT policy to use
-   - `IOT_THING_GROUP`: Name of the IoT thing group to use
-   - `IOT_THING_TYPE`: Name of the IoT thing type to use
+   - `AWS_ACCOUNT_ID`: Your AWS account ID (e.g., "123456789012")
+   - `AWS_REGION`: Your preferred AWS region (e.g., "us-east-1")
+   - Optionally, other Thingpress-specific secrets:
+     - `IOT_POLICY`: Name of the IoT policy to use
+     - `IOT_THING_GROUP`: Name of the IoT thing group to use
+     - `IOT_THING_TYPE`: Name of the IoT thing type to use
 
-2. Create a GitHub Actions workflow file (`.github/workflows/deploy.yml`) using the example provided in `github-workflow-example.yml`.
+2. The GitHub Actions workflows will automatically construct the role ARN using:
+   ```
+   arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+   ```
+
+3. Both manual and release integration tests can be triggered:
+   - **Manual**: Use workflow_dispatch to test specific providers
+   - **Release**: Automatically triggered on GitHub releases
 
 ## Security Considerations
 
