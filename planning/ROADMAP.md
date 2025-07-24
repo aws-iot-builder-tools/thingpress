@@ -10,7 +10,20 @@ This document provides a high-level overview of planned development efforts for 
 - ✅ Lambda handler architecture improvements
 - ✅ 94% test coverage with robust unit testing
 
-## Upcoming Development Areas
+## Next Milestone: v1.0 Launch
+
+### Requirements for v1.0 Release
+1. **Code Quality Completion**
+   - Meet all established quality thresholds
+   - Ensure comprehensive testing coverage
+   - Complete code review and optimization
+
+2. **End-to-End Testing Automation**
+   - Implement end-to-end tests as GitHub Action
+   - Trigger automatically on GitHub releases
+   - See: [Integration Test Status and Action Plan](planning/integration-test-status-and-action-plan.md)
+
+## Future Development Areas
 
 ### Security & Compliance
 - Enhanced credential rotation mechanisms
@@ -39,7 +52,9 @@ This document provides a high-level overview of planned development efforts for 
 
 ## Detailed Roadmaps
 
-*Detailed roadmaps will be linked here as they are created in the planning/ directory.*
+- [Integration Test Status and Action Plan](planning/integration-test-status-and-action-plan.md)
+
+*Additional detailed roadmaps will be linked here as they are created in the planning/ directory.*
 
 ---
 
