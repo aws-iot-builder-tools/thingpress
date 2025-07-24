@@ -1,10 +1,10 @@
 # Thingpress for Microchip Technology
 
-This guide covers Thingpress setup and usage for **Microchip Trust&Go ATECC608B with TLS** security chips with pre-provisioned X.509 certificates.
+This guide covers Thingpress setup and usage for **Microchip Trust&Go ATECC608B/ATECC608C with TLS** security chips with pre-provisioned X.509 certificates.
 
 ## Overview
 
-Microchip Trust&Go ATECC608B devices come with pre-provisioned X.509 certificates secured with JWS (JSON Web Signature) tokens. Thingpress processes these JWS-protected certificate manifests and imports them into AWS IoT Core for device authentication.
+Microchip Trust&Go ATECC608B/ATECC608C devices come with pre-provisioned X.509 certificates secured with JWS (JSON Web Signature) tokens. Thingpress processes these JWS-protected certificate manifests and imports them into AWS IoT Core for device authentication.
 
 ## Prerequisites
 
@@ -42,7 +42,7 @@ After deployment, to view all created resources:
 ### From Microchip Technology
 
 1. **Access MicrochipDirect** - Visit the official Microchip Direct portal
-2. **Request certificate manifests** for your Trust&Go ATECC608B devices
+2. **Request certificate manifests** for your Trust&Go ATECC608B/ATECC608C devices
 3. **Download JWS-protected manifest** - Certificate data secured with JSON Web Signature
 4. **Obtain verification certificate** - Required for JWS token validation
 
@@ -201,7 +201,7 @@ For large deployments:
 
 After successful certificate import:
 
-1. **Verify device connectivity** - Test Trust&Go ATECC608B device connections
+1. **Verify device connectivity** - Test Trust&Go ATECC608B/ATECC608C device connections
 2. **Monitor device behavior** - Use CloudWatch and AWS IoT Device Management
 3. **Scale operations** - Process additional certificate manifests as needed
 
