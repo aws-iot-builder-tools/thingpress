@@ -165,7 +165,7 @@ class TestProviderInfineon(TestCase):
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
         os.environ['CERT_TYPE']="E0E0"
 
-        v = lambda_handler(SQSEvent(e), LambdaContext())
+        v = lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         os.environ['QUEUE_TARGET']=""
         os.environ['CERT_TYPE']=""
         assert v == e
@@ -187,7 +187,7 @@ class TestProviderInfineon(TestCase):
         os.environ['CERT_TYPE']="E0E0"
 
         with raises(ClientError) as exc:
-            lambda_handler(SQSEvent(e), LambdaContext())
+            lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         assert exc.typename == 'QueueDoesNotExist'
 
     def test_neg_lambda_handler_no_cert_type(self):
@@ -206,7 +206,7 @@ class TestProviderInfineon(TestCase):
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
 
         with raises(ValueError) as exc:
-            lambda_handler(SQSEvent(e), LambdaContext())
+            lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         assert exc.typename == 'ValueError'
 
     def tearDown(self):

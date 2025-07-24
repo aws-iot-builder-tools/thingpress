@@ -11,7 +11,6 @@ import random
 from json import loads
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
 from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
@@ -133,7 +132,7 @@ def process_sqs(config, session: Session=default_session):
         "thing_name": config.get('thing')
     }
 
-def lambda_handler(event: SQSEvent,
+def lambda_handler(event: dict,
                    _context: LambdaContext) -> dict:
     """Lambda function main entry point"""
 
@@ -146,4 +145,4 @@ def lambda_handler(event: SQSEvent,
             })
             process_sqs(config)
 
-    return event.raw_event
+    return event

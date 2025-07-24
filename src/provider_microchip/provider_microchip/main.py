@@ -9,6 +9,7 @@ import os
 import sys
 
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 
 # Handle imports for both Lambda and unit test environments
@@ -27,7 +28,7 @@ except ImportError:
 
 default_session: Session = Session()
 
-def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
     Process Microchip certificate manifests from SQS messages and forward to target queue.
     
@@ -50,16 +51,8 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
     Returns:
         dict: The original raw event for AWS Lambda SQS batch processing
     """
-    # Handle both raw dict and SQSEvent object formats
-    if hasattr(event, 'records'):
-        # SQSEvent object format
-        sqs_event = event
-        raw_event = event.raw_event
-    else:
-        # Raw dict format - convert to SQSEvent
-        from aws_lambda_powertools.utilities.data_classes import SQSEvent
-        sqs_event = SQSEvent(event)
-        raw_event = event
+    # Convert raw dict to SQSEvent (AWS always sends raw dict to Lambda handlers)
+    sqs_event = SQSEvent(event)
 
     queue_url = os.environ['QUEUE_TARGET']
 
@@ -67,4 +60,4 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         config = json.loads(record.body)
         invoke_export(config, queue_url, default_session)
 
-    return raw_event
+    return event

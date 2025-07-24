@@ -235,7 +235,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
         }
         
         # Call the Lambda handler
-        result = lambda_handler(SQSEvent(event), LambdaContext())
+        result = lambda_handler(event, LambdaContext())  # Pass raw dict like AWS sends
         
         # Verify the result
         self.assertEqual(result, event, "Lambda handler should return the original event")

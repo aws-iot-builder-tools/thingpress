@@ -139,7 +139,7 @@ class TestProviderMicrochip(TestCase):
         e : SQSEvent = SQSEvent(h)
         c : LambdaContext = LambdaContext()
 
-        v = lambda_handler(e, c)
+        v = lambda_handler(h, c)  # Pass raw dict like AWS sends
         os.environ['QUEUE_TARGET']=""
         assert v == h
 

@@ -14,6 +14,7 @@ from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
     DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
 from layer_utils.aws_utils import boto_exception, verify_queue
@@ -92,7 +93,7 @@ def process_infineon_manifest(config, queue_url, cert_type, session=default_sess
 
     return count
 
-def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
     Process Infineon certificate manifests from SQS messages and forward to target queue.
     
@@ -118,16 +119,8 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
     Returns:
         dict: The original event for AWS Lambda SQS batch processing, or None if validation fails
     """
-    # Handle both raw dict and SQSEvent object formats
-    if hasattr(event, 'records'):
-        # SQSEvent object format
-        sqs_event = event
-        raw_event = event.raw_event
-    else:
-        # Raw dict format - convert to SQSEvent
-        from aws_lambda_powertools.utilities.data_classes import SQSEvent
-        sqs_event = SQSEvent(event)
-        raw_event = event
+    # Convert raw dict to SQSEvent (AWS always sends raw dict to Lambda handlers)
+    sqs_event = SQSEvent(event)
 
     queue_url = os.environ['QUEUE_TARGET']
     cert_type = os.environ['CERT_TYPE']
@@ -164,4 +157,4 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         "count": total_processed
     })
 
-    return raw_event
+    return event

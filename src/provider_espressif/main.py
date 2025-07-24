@@ -16,6 +16,7 @@ from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
 from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
     DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.throttling_utils import create_standardized_throttler
@@ -115,7 +116,7 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
 
     return total_count
 
-def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unused-argument
+def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
     """
     Process Espressif certificate manifests from SQS messages and forward to target queue.
     
@@ -144,16 +145,8 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
     Returns:
         dict: The original event for AWS Lambda SQS batch processing
     """
-    # Handle both raw dict and SQSEvent object formats
-    if hasattr(event, 'records'):
-        # SQSEvent object format
-        sqs_event = event
-        raw_event = event.raw_event
-    else:
-        # Raw dict format - convert to SQSEvent
-        from aws_lambda_powertools.utilities.data_classes import SQSEvent
-        sqs_event = SQSEvent(event)
-        raw_event = event
+    # Convert raw dict to SQSEvent (AWS always sends raw dict to Lambda handlers)
+    sqs_event = SQSEvent(event)
 
     queue_url = os.environ['QUEUE_TARGET']
     total_processed = 0
@@ -174,4 +167,4 @@ def lambda_handler(event, context: LambdaContext) -> dict: # pylint: disable=unu
         "count": total_processed
     })
 
-    return raw_event
+    return event

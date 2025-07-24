@@ -206,7 +206,7 @@ class TestBulkImporter(TestCase):
             mock_entry = MagicMock()
             mock_entry.process_sqs.return_value = None
             mock_process.return_value = mock_entry
-            v = lambda_handler(SQSEvent(e), LambdaContext())
+            v = lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         assert v == e
 
     def tearDown(self):

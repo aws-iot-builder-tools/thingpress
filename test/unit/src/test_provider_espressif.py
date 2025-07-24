@@ -92,7 +92,7 @@ class TestProviderEspressif(TestCase):
                 }]
             }
         os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-        v = lambda_handler(SQSEvent(e), LambdaContext())
+        v = lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         assert v == e
 
     def tearDown(self):
