@@ -76,10 +76,11 @@ You are working on the Thingpress AWS IoT administration tool project. Follow th
 10. Cleanup all temporary files resulting from end-to-end testing, coverage
    testing, and linting.
 11. Summarize the files that need to be added or updated to git.
-   a. Follow the git commit rules.
+   a. Follow the git commit rules - ALWAYS ASK before committing ANY files
    b. Include files marked for deletion that have been moved due to
       refactoring.
-12. Ask for approval to commit files.
+   c. Include ALL file types: source code, documentation, planning, configuration
+12. Ask for approval to commit files - MANDATORY for ALL changes.
 
 ## Security Checks
 Perform comprehensive security checks to detect hardcoded credentials and API keys:
@@ -114,7 +115,14 @@ If ANY hardcoded credentials are found:
 4. Do NOT proceed with deployment or commits
 
 ## Git Commit Rules
-- **ALWAYS ASK before committing files**
+- **ALWAYS ASK before committing files - NO EXCEPTIONS**
+- **This applies to ALL file types including:**
+  - Source code changes
+  - Documentation updates (README.md, docs/, etc.)
+  - Planning files (planning/, roadmaps, etc.)
+  - Configuration changes
+  - Test files
+  - Any other modifications
 - **NEVER commit temporary/generated files:**
   - `pylint_report*.json`
   - `*.pyc`, `__pycache__/`
