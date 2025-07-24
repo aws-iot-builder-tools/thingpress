@@ -1,0 +1,232 @@
+name: Release Integration Tests
+
+on:
+  release:
+    types: [published, prereleased]
+  workflow_dispatch:
+    inputs:
+      provider:
+        description: 'Provider to test (all, espressif, infineon, microchip, generated)'
+        required: true
+        default: 'all'
+      region:
+        description: 'AWS region to deploy to'
+        required: true
+        default: 'us-east-1'
+      cleanup:
+        description: 'Clean up resources after tests'
+        required: true
+        default: 'true'
+        type: boolean
+
+env:
+  AWS_REGION: us-east-1
+  AWS_ACCOUNT_ID: 477252478758
+
+jobs:
+  integration-tests:
+    name: End-to-End Integration Tests
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    strategy:
+      matrix:
+        provider: [microchip, espressif, infineon, generated]
+      fail-fast: false
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::477252478758:role/ThingpressDeploymentRole
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-ThingpressIntegrationTests
+      
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      
+      - name: Verify AWS access
+        run: |
+          aws sts get-caller-identity
+          aws iam get-role --role-name ThingpressDeploymentRole
+      
+      - name: Run integration tests for ${{ matrix.provider }}
+        id: integration-test
+        run: |
+          echo "Running integration tests for ${{ matrix.provider }} provider"
+          
+          # Set test parameters
+          PROVIDER="${{ matrix.provider }}"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            PROVIDER="${{ github.event.inputs.provider }}"
+            REGION="${{ github.event.inputs.region }}"
+            CLEANUP="${{ github.event.inputs.cleanup }}"
+          else
+            REGION="${{ env.AWS_REGION }}"
+            CLEANUP="true"
+          fi
+          
+          # Skip if provider is 'all' in matrix (handled by workflow_dispatch)
+          if [ "$PROVIDER" = "all" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "Skipping 'all' provider in matrix mode"
+            exit 0
+          fi
+          
+          # Run the integration test
+          python test/integration/run_e2e_tests.py \
+            --providers "$PROVIDER" \
+            --output-file "test-results-${PROVIDER}.json"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.provider }}
+          path: |
+            test-results-*.json
+            test-results-*.log
+            test-metrics-*.json
+          retention-days: 30
+      
+      - name: Upload test logs
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-logs-${{ matrix.provider }}
+          path: |
+            /tmp/thingpress-test-*.log
+            ~/.aws/cli/cache/
+          retention-days: 7
+
+  # Run all providers in sequence for workflow_dispatch with 'all'
+  integration-tests-all:
+    name: All Providers Integration Test
+    runs-on: ubuntu-latest
+    if: github.event_name == 'workflow_dispatch' && github.event.inputs.provider == 'all'
+    permissions:
+      id-token: write
+      contents: read
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 pytest
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::477252478758:role/ThingpressDeploymentRole
+          aws-region: ${{ github.event.inputs.region }}
+          role-session-name: GitHubActions-ThingpressIntegrationTests-All
+      
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      
+      - name: Run integration tests for all providers
+        run: |
+          python test/integration/run_e2e_tests.py \
+            --providers all \
+            --output-file "test-results-all.json"
+      
+      - name: Upload comprehensive test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-all-providers
+          path: |
+            test-results-*.json
+            test-results-*.log
+            test-metrics-*.json
+          retention-days: 30
+
+  # Summary job that depends on all integration tests
+  test-summary:
+    name: Integration Test Summary
+    runs-on: ubuntu-latest
+    needs: [integration-tests]
+    if: always() && github.event_name == 'release'
+    
+    steps:
+      - name: Download all test results
+        uses: actions/download-artifact@v4
+        with:
+          pattern: test-results-*
+          merge-multiple: true
+      
+      - name: Generate test summary
+        run: |
+          echo "# Thingpress Release Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Release:** ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Date:** $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Check test results
+          FAILED_TESTS=""
+          PASSED_TESTS=""
+          
+          for provider in microchip espressif infineon generated; do
+            if [ -f "test-results-${provider}.json" ]; then
+              if grep -q '"status": "passed"' "test-results-${provider}.json"; then
+                PASSED_TESTS="$PASSED_TESTS $provider"
+                echo "✅ **$provider**: PASSED" >> $GITHUB_STEP_SUMMARY
+              else
+                FAILED_TESTS="$FAILED_TESTS $provider"
+                echo "❌ **$provider**: FAILED" >> $GITHUB_STEP_SUMMARY
+              fi
+            else
+              FAILED_TESTS="$FAILED_TESTS $provider"
+              echo "⚠️ **$provider**: NO RESULTS" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          if [ -z "$FAILED_TESTS" ]; then
+            echo "🎉 **All integration tests passed!** Release is ready for deployment." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ **Some tests failed:** $FAILED_TESTS" >> $GITHUB_STEP_SUMMARY
+            echo "Please review test logs before proceeding with release deployment." >> $GITHUB_STEP_SUMMARY
+          fi
+      
+      - name: Set release status
+        if: github.event_name == 'release'
+        run: |
+          if [ -z "$FAILED_TESTS" ]; then
+            echo "All integration tests passed for release ${{ github.event.release.tag_name }}"
+            exit 0
+          else
+            echo "Integration tests failed for release ${{ github.event.release.tag_name }}"
+            exit 1
+          fi
