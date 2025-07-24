@@ -24,6 +24,19 @@ This document provides a high-level overview of planned development efforts for 
    - Trigger automatically on GitHub releases
    - See: [Integration Test Status and Action Plan](planning/integration-test-status-and-action-plan.md)
 
+3. **Marketing and Release Readiness**
+   - Complete release preparation and documentation
+   - Validate vendor-specific installation processes
+   - See: [v1.0 Marketing Plan](planning/v1.0-marketing-plan.md)
+
+### v1.0.1 - Multi-Attachment Enhancement
+**Multiple Policy, Thing Type, and Thing Group Support**
+- Enable attachment to multiple Thing Groups (department + location + product hierarchies)
+- Support multiple policies for layered access control
+- Allow multiple Thing Types for complex device categorization
+- Maintain backward compatibility with single attachments
+- **Priority:** High - addresses enterprise IoT deployment needs
+
 ### v1.1.0 - Performance Optimization
 **Divide-and-Conquer Algorithm for Manifest Processing**
 - Automatically split large manifest files into optimal 1000-certificate chunks
@@ -102,6 +115,7 @@ This document provides a high-level overview of planned development efforts for 
 ## Detailed Roadmaps
 
 - [Integration Test Status and Action Plan](planning/integration-test-status-and-action-plan.md)
+- [v1.0 Marketing Plan](planning/v1.0-marketing-plan.md)
 - [Azure Migration Planning](planning/azure-migration.md)
 - [Web App Specification](planning/thingpress-web-app-spec.md)
 
