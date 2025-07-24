@@ -2,6 +2,10 @@
 
 You are working on the Thingpress AWS IoT administration tool project. Follow these requirements:
 
+## Project Documentation
+- **Versioning:** Follow semantic versioning scheme defined in [VERSIONING.md](../../VERSIONING.md)
+- **Roadmap:** Reference development priorities in [planning/ROADMAP.md](../../planning/ROADMAP.md)
+
 ## Python Environment
 - Use Python 3.13 (matching Lambda runtime)
 - Enable strict type checking with Pylance
