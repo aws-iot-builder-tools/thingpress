@@ -90,7 +90,9 @@ class EndToEndTestFramework:
     def _get_deployed_resources(self) -> Dict[str, str]:
         """Get deployed Thingpress resources from CloudFormation stack"""
         try:
-            response = self.cloudformation.describe_stacks(StackName='sam-app')
+            # Allow stack name to be configured via environment variable
+            stack_name = os.environ.get('THINGPRESS_STACK_NAME', 'sam-app')
+            response = self.cloudformation.describe_stacks(StackName=stack_name)
             outputs = response['Stacks'][0]['Outputs']
             
             resources = {}

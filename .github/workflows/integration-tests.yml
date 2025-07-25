@@ -64,6 +64,7 @@ jobs:
             --output-file "manual-test-results.json"
         env:
           AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+          THINGPRESS_STACK_NAME: thingpress-integration-test
       
       - name: Cleanup integration test resources
         if: always()
