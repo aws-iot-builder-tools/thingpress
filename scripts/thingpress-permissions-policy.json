@@ -32,15 +32,26 @@
         "s3:GetBucketPolicy",
         "s3:PutBucketNotification",
         "s3:GetBucketNotification",
+        "s3:PutBucketTagging",
+        "s3:GetBucketTagging",
+        "s3:PutBucketVersioning",
+        "s3:GetBucketVersioning",
         "s3:PutObject",
         "s3:GetObject",
         "s3:DeleteObject",
         "s3:ListBucket",
+        "s3:ListBucketVersions",
+        "s3:GetObjectVersion",
+        "s3:DeleteObjectVersion",
+        "s3:ListMultipartUploads",
+        "s3:AbortMultipartUpload",
         "s3:PutBucketPublicAccessBlock"
       ],
       "Resource": [
         "arn:aws:s3:::thingpress-*",
-        "arn:aws:s3:::thingpress-*/*"
+        "arn:aws:s3:::thingpress-*/*",
+        "arn:aws:s3:::aws-sam-cli-managed-*",
+        "arn:aws:s3:::aws-sam-cli-managed-*/*"
       ]
     },
     {
@@ -87,24 +98,39 @@
         "iot:CreatePolicy",
         "iot:DeletePolicy",
         "iot:GetPolicy",
+        "iot:ListPolicies",
         "iot:CreateThing",
         "iot:DeleteThing",
         "iot:DescribeThing",
+        "iot:ListThings",
+        "iot:UpdateThing",
         "iot:CreateThingType",
         "iot:DeleteThingType",
         "iot:DescribeThingType",
+        "iot:ListThingTypes",
         "iot:CreateThingGroup",
         "iot:DeleteThingGroup",
         "iot:DescribeThingGroup",
+        "iot:ListThingGroups",
+        "iot:ListThingsInThingGroup",
         "iot:AddThingToThingGroup",
         "iot:RemoveThingFromThingGroup",
         "iot:AttachPolicy",
         "iot:DetachPolicy",
+        "iot:ListAttachedPolicies",
+        "iot:ListPolicyPrincipals",
+        "iot:ListPrincipalPolicies",
         "iot:AttachThingPrincipal",
         "iot:DetachThingPrincipal",
+        "iot:ListThingPrincipals",
+        "iot:ListPrincipalThings",
         "iot:RegisterCertificateWithoutCA",
+        "iot:RegisterCertificate",
         "iot:UpdateCertificate",
-        "iot:DescribeCertificate"
+        "iot:DeleteCertificate",
+        "iot:DescribeCertificate",
+        "iot:ListCertificates",
+        "iot:ListCertificatesByCA"
       ],
       "Resource": "*"
     },
@@ -124,20 +150,70 @@
         "logs:PutLogEvents",
         "logs:DescribeLogGroups",
         "logs:DescribeLogStreams",
-        "logs:DeleteLogGroup"
+        "logs:DeleteLogGroup",
+        "logs:FilterLogEvents",
+        "logs:GetLogEvents"
       ],
-      "Resource": "arn:aws:logs:*:*:log-group:/aws/lambda/Thingpress*"
+      "Resource": [
+        "arn:aws:logs:*:*:log-group:/aws/lambda/Thingpress*",
+        "arn:aws:logs:*:*:log-group:/aws/lambda/*thingpress*"
+      ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "dynamodb:CreateTable",
+        "dynamodb:DeleteTable",
+        "dynamodb:DescribeTable",
+        "dynamodb:PutItem",
+        "dynamodb:GetItem",
+        "dynamodb:UpdateItem",
+        "dynamodb:DeleteItem",
+        "dynamodb:Query",
+        "dynamodb:Scan",
+        "dynamodb:TagResource",
+        "dynamodb:ListTagsOfResource"
+      ],
+      "Resource": "arn:aws:dynamodb:*:*:table/*thingpress*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "cloudwatch:PutMetricData",
+        "cloudwatch:GetMetricStatistics",
+        "cloudwatch:ListMetrics",
+        "cloudwatch:PutDashboard",
+        "cloudwatch:GetDashboard",
+        "cloudwatch:DeleteDashboard",
+        "cloudwatch:PutMetricAlarm",
+        "cloudwatch:DeleteAlarms",
+        "cloudwatch:DescribeAlarms"
+      ],
+      "Resource": "*"
     },
     {
       "Effect": "Allow",
       "Action": [
         "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation",
         "iam:ListRoles",
         "lambda:ListFunctions",
+        "lambda:ListEventSourceMappings",
         "sqs:ListQueues",
         "iot:ListPolicies",
         "iot:ListThingGroups",
-        "iot:ListThingTypes"
+        "iot:ListThingTypes",
+        "iot:ListThings",
+        "iot:ListCertificates",
+        "dynamodb:ListTables",
+        "cloudformation:ListStacks",
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeStackResources",
+        "cloudformation:GetTemplate",
+        "cloudformation:ListStackResources",
+        "cloudformation:ContinueUpdateRollback",
+        "cloudformation:CancelUpdateStack"
       ],
       "Resource": "*"
     }
