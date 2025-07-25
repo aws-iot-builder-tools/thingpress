@@ -53,12 +53,6 @@ Parameters:
     Description: The AWS IoT Thing Type you apply to the Thing being created. Put
       None if no Thing Type.
 
-  MicrochipVerifyCertName:
-    Default: verify-cert.cer
-    Type: String
-    Description: 'Microchip only: The verify certificate that is provided by
-      Microchip. This must not have a .json filename suffix.'
-
   InfineonCertBundleType:
     Default: E0E0
     Type: String
@@ -747,7 +741,6 @@ Resources:
       Environment:
         Variables:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
-          VERIFY_CERT: !Ref MicrochipVerifyCertName
           VERIFICATION_CERTS_BUCKET: !Ref ThingpressMicrochipVerificationCertsBucket
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
