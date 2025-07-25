@@ -509,6 +509,20 @@ def get_thing_type_arn(type_name: str, session: Session=default_session) -> str:
         boto_exception(error, f"With thing type name [{type_name}]")
         raise error
 
+@with_circuit_breaker('iot_describe_thing')
+def get_thing_arn(thing_name: str, session: Session=default_session) -> str:
+    """Retrieves the thing ARN"""
+    if thing_name in ("None", ""):
+        raise ValueError("The thing name value signals that no thing defined")
+
+    iot_client = session.client('iot')
+    try:
+        response = iot_client.describe_thing(thingName=thing_name)
+        return response.get('thingArn')
+    except ClientError as error:
+        boto_exception(error, f"With thing name [{thing_name}]")
+        raise error
+
 @with_circuit_breaker('iot_get_policy')
 def get_policy_arn(policy_name: str,
                    session: Session=default_session) -> str:

@@ -19,7 +19,7 @@ from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
 from src.layer_utils.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
-from src.layer_utils.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn
+from src.layer_utils.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, get_thing_arn
 from src.layer_utils.layer_utils.aws_utils import send_sqs_message, send_sqs_message_batch, send_sqs_message_batch_with_retry
 from src.layer_utils.layer_utils.aws_utils import get_queue_depth, calculate_optimal_delay, send_sqs_message_with_throttling, send_sqs_message_with_adaptive_throttling
 from src.layer_utils.layer_utils.aws_utils import get_certificate_arn, register_certificate
@@ -237,6 +237,37 @@ class TestAwsUtils(TestCase):
                 assert False
         else:
             assert False
+
+    def test_pos_get_thing_arn(self):
+        """Positive test case to return thing arn"""
+        thing_name = "test_pos_get_thing_arn"
+        iot_client = _get_default_session().client('iot')
+        r1 = iot_client.create_thing(thingName=thing_name)
+        r2 = get_thing_arn(thing_name, _get_default_session())
+        assert r1['thingArn'] == r2
+
+    def test_neg_get_thing_arn(self):
+        """Negative test for getting thing_arn"""
+        with raises(ClientError) as exc:
+            get_thing_arn("9"*64, self.aws_session)
+        if 'Error' in exc.value.response:
+            err = exc.value.response['Error']
+            if 'Code' in err:
+                assert err['Code'] == 'ResourceNotFoundException'
+            else:
+                assert False
+        else:
+            assert False
+
+    def test_neg_get_thing_arn_none_value(self):
+        """Negative test for getting thing_arn with None value"""
+        with raises(ValueError) as exc:
+            get_thing_arn("None", _get_default_session())
+        assert "no thing defined" in str(exc.value)
+
+        with raises(ValueError) as exc:
+            get_thing_arn("", _get_default_session())
+        assert "no thing defined" in str(exc.value)
 
     def test_neg_verify_queue(self):
         """Negative test for verify_queue"""
