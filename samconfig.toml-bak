@@ -1,0 +1,10 @@
+version = 0.1
+[default.deploy.parameters]
+stack_name = "sam-app"
+resolve_s3 = true
+s3_prefix = "sam-app"
+region = "us-east-1"
+confirm_changeset = true
+capabilities = "CAPABILITY_NAMED_IAM"
+parameter_overrides = "IamUserArn=\"None\" IoTPolicy=\"superthing-Policy\" IoTThingGroup=\"None\" IoTThingType=\"None\" MicrochipVerifyCertName=\"verify-cert.cer\" ConcurrentExecutions=\"10\""
+image_repositories = []

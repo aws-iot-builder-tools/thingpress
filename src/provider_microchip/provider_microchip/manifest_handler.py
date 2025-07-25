@@ -282,6 +282,7 @@ def invoke_export(config, queue_url, session: Session):
 
             cert_config = config.copy()
             cert_config['certificate'] = str(b64encode(block.encode('ascii')))
+            cert_config['thing'] = manifest_item.identifier  # Set thing name from certificate identifier
 
             batch_messages.append(cert_config)
             total_count += 1

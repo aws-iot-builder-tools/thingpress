@@ -1,0 +1,20 @@
+{
+  "test_suite": "End-to-End Integration Tests",
+  "start_time": "2025-07-25T16:02:26.247383",
+  "end_time": "2025-07-25T16:17:28.426170",
+  "total_duration_ms": 902178.787,
+  "summary": {
+    "total_tests": 1,
+    "passed": 0,
+    "failed": 1,
+    "success_rate": 0.0
+  },
+  "results": {
+    "microchip": {
+      "success": false,
+      "duration_ms": 902178.7505149841,
+      "error": "Test failed - check logs above"
+    }
+  },
+  "overall_success": false
+}

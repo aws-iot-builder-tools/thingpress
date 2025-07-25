@@ -1,0 +1,20 @@
+{
+  "test_suite": "End-to-End Integration Tests",
+  "start_time": "2025-07-24T15:58:57.400425",
+  "end_time": "2025-07-24T15:58:57.767913",
+  "total_duration_ms": 367.488,
+  "summary": {
+    "total_tests": 1,
+    "passed": 0,
+    "failed": 1,
+    "success_rate": 0.0
+  },
+  "results": {
+    "microchip": {
+      "success": false,
+      "duration_ms": 365.3450012207031,
+      "error": "An error occurred (ValidationError) when calling the DescribeStacks operation: Stack with id sam-app does not exist"
+    }
+  },
+  "overall_success": false
+}
