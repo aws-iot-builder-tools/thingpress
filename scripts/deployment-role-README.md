@@ -7,6 +7,7 @@ This directory contains scripts and configuration files to set up an IAM role fo
 - `thingpress-permissions-policy.json`: IAM permissions policy that grants the necessary permissions to deploy Thingpress
 - `thingpress-trust-policy.json`: IAM trust policy for GitHub OIDC authentication
 - `create-deployment-role.sh`: Bash script to create the IAM role
+- `update-deployment-role.sh`: Bash script to update an existing IAM role with enhanced permissions
 - `github-workflow-example.yml`: Example GitHub Actions workflow file
 
 ## Prerequisites
@@ -25,6 +26,27 @@ aws iam create-open-id-connect-provider \
   --client-id-list sts.amazonaws.com \
   --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1
 ```
+
+## Updating an Existing Deployment Role
+
+If you already have a deployment role created but need to update it with enhanced permissions (for example, to enable automatic stack deletion), you can use the update script:
+
+```bash
+export THINGPRESS_ROLE_NAME="ThingpressDeploymentRole"  # Optional: custom role name
+./update-deployment-role.sh
+```
+
+The enhanced permissions include:
+- **Lambda Event Source Mappings**: `lambda:CreateEventSourceMapping`, `lambda:DeleteEventSourceMapping`, `lambda:GetEventSourceMapping`, `lambda:UpdateEventSourceMapping`
+- **CloudWatch Dashboard Management**: `cloudwatch:DeleteDashboards`, `cloudwatch:ListDashboards`
+- **Enhanced IAM Management**: Role creation, deletion, policy attachment/detachment for Thingpress resources
+- **Improved CloudFormation Operations**: Stack drift detection and enhanced stack management
+
+These permissions are essential for:
+- Automatic cleanup of Lambda event source mappings during stack deletion
+- Proper deletion of CloudWatch dashboards created by Thingpress
+- Complete stack deletion without manual intervention
+- Enhanced error handling and recovery in CI/CD pipelines
 
 ## Creating the Deployment Role
 
@@ -82,3 +104,27 @@ If you encounter issues:
 2. Check that the environment variables are correctly set before running the script
 3. Ensure your GitHub repository has the necessary secrets configured
 4. Verify that your GitHub Actions workflow has the required permissions (`id-token: write` and `contents: read`)
+
+### Stack Deletion Issues
+
+If you experience CloudFormation stack deletion failures with permission errors:
+
+1. **Lambda Permission Errors**: Update the role with enhanced Lambda permissions using `./update-deployment-role.sh`
+2. **CloudWatch Dashboard Errors**: The enhanced permissions include `cloudwatch:DeleteDashboards` to resolve this
+3. **Event Source Mapping Errors**: Enhanced permissions include full event source mapping management
+4. **Manual Cleanup**: If stack deletion still fails, you may need to manually delete retained resources:
+   ```bash
+   # Delete S3 bucket contents first
+   aws s3 rm s3://bucket-name --recursive
+   # Then retry stack deletion with retain-resources option
+   aws cloudformation delete-stack --stack-name stack-name --retain-resources ResourceName1 ResourceName2
+   ```
+
+### Permission Verification
+
+To verify the role has the correct permissions, you can check the attached policies:
+
+```bash
+aws iam list-role-policies --role-name ThingpressDeploymentRole
+aws iam get-role-policy --role-name ThingpressDeploymentRole --policy-name ThingpressDeploymentPolicy
+```

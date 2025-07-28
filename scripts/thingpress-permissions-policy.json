@@ -69,11 +69,18 @@
         "lambda:ListTags",
         "lambda:PublishLayerVersion",
         "lambda:DeleteLayerVersion",
-        "lambda:GetLayerVersion"
+        "lambda:GetLayerVersion",
+        "lambda:CreateEventSourceMapping",
+        "lambda:DeleteEventSourceMapping",
+        "lambda:GetEventSourceMapping",
+        "lambda:UpdateEventSourceMapping",
+        "lambda:ListEventSourceMappings"
       ],
       "Resource": [
         "arn:aws:lambda:*:*:function:Thingpress*",
-        "arn:aws:lambda:*:*:layer:Thingpress*"
+        "arn:aws:lambda:*:*:function:*thingpress*",
+        "arn:aws:lambda:*:*:layer:Thingpress*",
+        "arn:aws:lambda:*:*:event-source-mapping:*"
       ]
     },
     {
@@ -138,7 +145,20 @@
       "Effect": "Allow",
       "Action": [
         "iam:PassRole",
-        "iam:GetRole"
+        "iam:GetRole",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:UpdateRole",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRolePolicy",
+        "iam:ListRolePolicies",
+        "iam:ListAttachedRolePolicies",
+        "iam:TagRole",
+        "iam:UntagRole",
+        "iam:ListRoleTags"
       ],
       "Resource": "arn:aws:iam::*:role/Thingpress*"
     },
@@ -185,6 +205,8 @@
         "cloudwatch:PutDashboard",
         "cloudwatch:GetDashboard",
         "cloudwatch:DeleteDashboard",
+        "cloudwatch:DeleteDashboards",
+        "cloudwatch:ListDashboards",
         "cloudwatch:PutMetricAlarm",
         "cloudwatch:DeleteAlarms",
         "cloudwatch:DescribeAlarms"
@@ -213,7 +235,10 @@
         "cloudformation:GetTemplate",
         "cloudformation:ListStackResources",
         "cloudformation:ContinueUpdateRollback",
-        "cloudformation:CancelUpdateStack"
+        "cloudformation:CancelUpdateStack",
+        "cloudformation:DetectStackDrift",
+        "cloudformation:DetectStackResourceDrift",
+        "cloudformation:DescribeStackDriftDetectionStatus"
       ],
       "Resource": "*"
     }
