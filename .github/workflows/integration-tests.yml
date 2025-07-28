@@ -16,6 +16,11 @@ on:
         required: true
         default: 'true'
         type: boolean
+      keep_stack:
+        description: 'Keep the test stack after completion (for debugging)'
+        required: false
+        default: 'false'
+        type: boolean
 
 jobs:
   integration-tests:
@@ -24,6 +29,10 @@ jobs:
     permissions:
       id-token: write
       contents: read
+    
+    env:
+      AWS_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+      STACK_NAME: thingpress-integration-test-${{ github.run_number }}
     
     steps:
       - name: Checkout code
@@ -44,8 +53,8 @@ jobs:
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
-          aws-region: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
-          role-session-name: GitHubActions-ThingpressManualTests
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-ThingpressIntegrationTest-${{ github.run_number }}
       
       - name: Install AWS SAM CLI
         uses: aws-actions/setup-sam@v2
@@ -57,43 +66,155 @@ jobs:
           aws sts get-caller-identity
           aws iam get-role --role-name ThingpressDeploymentRole
       
-      - name: Run integration tests
+      - name: Pre-deployment cleanup
         run: |
+          echo "🧹 Pre-deployment cleanup of any existing test resources..."
+          chmod +x scripts/cleanup-integration-test.sh
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress-integration-test" \
+            --region "${{ env.AWS_REGION }}" || true
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Deploy Thingpress stack for testing
+        id: deploy
+        run: |
+          echo "🚀 Deploying Thingpress stack for integration testing..."
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          
+          # Deploy the stack
+          sam deploy \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --resolve-s3 \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+          
+          echo "✅ Stack deployment completed successfully"
+          
+          # Verify stack exists and get outputs
+          aws cloudformation describe-stacks \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Stacks[0].StackStatus' \
+            --output text
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Wait for stack to be ready
+        run: |
+          echo "⏳ Waiting for stack to be fully ready..."
+          sleep 30
+          
+          # Verify all resources are created
+          aws cloudformation describe-stacks \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Stacks[0].{StackStatus:StackStatus,CreationTime:CreationTime}' \
+            --output table
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Run integration tests
+        id: test
+        run: |
+          echo "🧪 Running integration tests against deployed stack..."
+          echo "Testing providers: ${{ github.event.inputs.provider }}"
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          
           python test/integration/run_e2e_tests.py \
             --providers ${{ github.event.inputs.provider }} \
-            --output-file "manual-test-results.json"
+            --output-file "integration-test-results.json"
         env:
-          AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
-          THINGPRESS_STACK_NAME: thingpress-final-v2
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          THINGPRESS_STACK_NAME: ${{ env.STACK_NAME }}
       
-      - name: Cleanup integration test resources
+      - name: Cleanup test artifacts
         if: always()
         run: |
-          echo "🧹 Cleaning up manual integration test resources..."
+          echo "🧹 Cleaning up test artifacts and temporary resources..."
           
-          # Make cleanup script executable
+          # Clean up any test-generated IoT resources, certificates, etc.
           chmod +x scripts/cleanup-integration-test.sh
-          
-          # Determine cleanup behavior
-          if [ "${{ github.event.inputs.cleanup }}" = "false" ]; then
-            echo "⏭️ Cleanup skipped by user request"
-          else
-            echo "🗑️ Running cleanup for manual integration test resources"
-            ./scripts/cleanup-integration-test.sh \
-              --stack-prefix "thingpress" \
-              --region "${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}"
-          fi
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress-test" \
+            --region "${{ env.AWS_REGION }}" || true
         env:
-          AWS_DEFAULT_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Delete test stack
+        if: always() && github.event.inputs.keep_stack != 'true'
+        run: |
+          echo "🗑️ Deleting integration test stack..."
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          
+          # Delete the stack
+          aws cloudformation delete-stack \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}"
+          
+          echo "⏳ Waiting for stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --cli-read-timeout 1800 \
+            --cli-connect-timeout 60 || {
+              echo "⚠️ Stack deletion timed out or failed, but continuing..."
+              aws cloudformation describe-stacks \
+                --stack-name "${{ env.STACK_NAME }}" \
+                --region "${{ env.AWS_REGION }}" \
+                --query 'Stacks[0].StackStatus' \
+                --output text || echo "Stack may have been deleted"
+            }
+          
+          echo "✅ Stack deletion completed"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Final cleanup verification
+        if: always() && github.event.inputs.cleanup == 'true'
+        run: |
+          echo "🔍 Final cleanup verification..."
+          
+          # Run comprehensive cleanup to ensure no resources are left behind
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress-integration-test" \
+            --region "${{ env.AWS_REGION }}" || true
+          
+          echo "✅ Final cleanup verification completed"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
       
       - name: Upload test results
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: manual-test-results
+          name: integration-test-results-${{ github.run_number }}
           path: |
-            manual-test-results.json
+            integration-test-results.json
             test-results-*.json
             test-results-*.log
             test-metrics-*.json
           retention-days: 30
+      
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Providers Tested:** ${{ github.event.inputs.provider }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Keep Stack:** ${{ github.event.inputs.keep_stack }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "integration-test-results.json" ]; then
+            echo "**Test Results:**" >> $GITHUB_STEP_SUMMARY
+            echo '```json' >> $GITHUB_STEP_SUMMARY
+            cat integration-test-results.json >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**Test Results:** No results file found" >> $GITHUB_STEP_SUMMARY
+          fi
