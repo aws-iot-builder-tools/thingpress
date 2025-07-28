@@ -567,7 +567,7 @@ def process_policy(policy_name: str,
     iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
 
 def process_thing(thing_name, certificate_id, tags: list = None, session: Session=Session()) -> None:
-    """Creates the IoT Thing if it does not already exist
+    """Creates the IoT Thing if it does not already exist and attaches certificate
     
     Args:
         thing_name: Name of the IoT Thing to create
@@ -580,10 +580,11 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
     iot_client = session.client('iot')
     certificate_arn = get_certificate_arn(certificate_id, session)
 
+    thing_exists = False
     try:
         iot_client.describe_thing(thingName=thing_name)
         logger.info("Thing %s already exists", thing_name)
-        return
+        thing_exists = True
     except ClientError as err_describe:
         boto_exception(err_describe, f"Thing {thing_name} not found. Creating.")
         try:
@@ -609,12 +610,31 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
             boto_exception(err_create, f"Thing {thing_name} creation failed")
             raise err_create
 
+    # Always attempt to attach certificate, whether thing existed or was just created
     try:
-        iot_client.attach_thing_principal(thingName=thing_name,
-                                          principal=certificate_arn)
+        # Check if certificate is already attached to avoid duplicate attachment errors
+        try:
+            principals_response = iot_client.list_thing_principals(thingName=thing_name)
+            attached_principals = principals_response.get('principals', [])
+            
+            if certificate_arn in attached_principals:
+                logger.info("Certificate %s already attached to thing %s", certificate_id, thing_name)
+            else:
+                iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
+                logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
+        except ClientError as list_error:
+            # If we can't list principals, try to attach anyway (might be a permission issue)
+            logger.warning("Could not list thing principals for %s: %s. Attempting attachment anyway.", thing_name, str(list_error))
+            iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
+            logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
+            
     except ClientError as error:
-        boto_exception(error, "Certificate attachment failed")
-        raise error
+        # Log the error but don't fail if certificate is already attached
+        if error.response['Error']['Code'] == 'ResourceAlreadyExistsException':
+            logger.info("Certificate %s already attached to thing %s", certificate_id, thing_name)
+        else:
+            boto_exception(error, f"Certificate attachment failed for thing {thing_name}")
+            raise error
 
 def process_thing_type(thing_name: str,
                        thing_type_name: str,

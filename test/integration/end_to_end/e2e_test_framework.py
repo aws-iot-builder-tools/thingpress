@@ -330,8 +330,57 @@ class EndToEndTestFramework:
             return {'verified': False, 'error': str(e)}
             
     def cleanup_existing_test_data(self):
-        """Clean up existing test data before running test"""
+        """Clean up existing test data before running test using unified cleanup module"""
         self.logger.info("🧹 Cleaning up existing test data before test run")
+        
+        try:
+            # Import the unified cleanup module
+            import sys
+            import os
+            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
+            
+            from cleanup_utils import ThingpressCleanup, CleanupConfig
+            
+            # Create configuration for integration test cleanup
+            cleanup_config = CleanupConfig.for_integration_tests(
+                stack_name=os.getenv('THINGPRESS_STACK_NAME', 'thingpress'),
+                region=self.region
+            )
+            
+            # Initialize cleanup with our existing AWS clients
+            cleanup = ThingpressCleanup(cleanup_config)
+            
+            # Override the clients to use our existing ones (to maintain session consistency)
+            cleanup.iot_client = self.iot_client
+            cleanup.s3_client = self.s3_client
+            
+            # Perform test-specific cleanup (only IoT resources, no stacks)
+            cleanup_results = cleanup.cleanup_test_resources_only()
+            
+            # Log results
+            things_deleted = cleanup_results.get('iot_things_deleted', [])
+            certs_deleted = cleanup_results.get('iot_certificates_deleted', [])
+            errors = cleanup_results.get('errors', [])
+            
+            if things_deleted:
+                self.logger.info(f"Deleted {len(things_deleted)} IoT things: {things_deleted[:3]}{'...' if len(things_deleted) > 3 else ''}")
+            
+            if certs_deleted:
+                self.logger.info(f"Deleted {len(certs_deleted)} certificates: {certs_deleted[:3]}{'...' if len(certs_deleted) > 3 else ''}")
+            
+            if errors:
+                self.logger.warning(f"Cleanup encountered {len(errors)} errors: {errors[:2]}{'...' if len(errors) > 2 else ''}")
+                
+        except ImportError as e:
+            self.logger.warning(f"Could not import unified cleanup module, falling back to legacy cleanup: {e}")
+            self._legacy_cleanup_existing_test_data()
+        except Exception as e:
+            self.logger.warning(f"Unified cleanup failed, falling back to legacy cleanup: {e}")
+            self._legacy_cleanup_existing_test_data()
+
+    def _legacy_cleanup_existing_test_data(self):
+        """Legacy cleanup method as fallback"""
+        self.logger.info("Using legacy cleanup method")
         
         try:
             # Clean up IoT things that match test patterns
@@ -383,7 +432,7 @@ class EndToEndTestFramework:
                     self.logger.warning(f"Failed to delete thing {thing_name}: {thing_e}")
                     
         except Exception as e:
-            self.logger.warning(f"Failed to cleanup existing test data: {e}")
+            self.logger.warning(f"Legacy cleanup failed: {e}")
 
     def cleanup_test_resources(self):
         """Clean up test resources"""
