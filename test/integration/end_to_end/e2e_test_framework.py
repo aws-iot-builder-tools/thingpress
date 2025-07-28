@@ -147,10 +147,13 @@ class EndToEndTestFramework:
         
         self.logger.info(f"Monitoring processing for up to {timeout_minutes} minutes...")
         
+        # Give the system a moment to start processing after manifest upload
+        time.sleep(5)
+        
         while time.time() - start_time < timeout_seconds:
             
-            # Check for recently created IoT things
-            recent_things = self._get_recent_iot_things(minutes=timeout_minutes + 2)
+            # Check for recently created IoT things (use longer window for detection)
+            recent_things = self._get_recent_iot_things(minutes=timeout_minutes + 5)
             if recent_things:
                 processing_indicators['recent_iot_things'] = recent_things
                 self.logger.info(f"Found {len(recent_things)} recent IoT things")
@@ -302,6 +305,62 @@ class EndToEndTestFramework:
             self.logger.error(f"Failed to verify certificate deployer: {e}")
             return {'verified': False, 'error': str(e)}
             
+    def cleanup_existing_test_data(self):
+        """Clean up existing test data before running test"""
+        self.logger.info("🧹 Cleaning up existing test data before test run")
+        
+        try:
+            # Clean up IoT things that match test patterns
+            response = self.iot_client.list_things(maxResults=100)
+            test_thing_names = []
+            
+            for thing in response.get('things', []):
+                thing_name = thing['thingName']
+                # Look for things that match test certificate patterns
+                if any(pattern in thing_name for pattern in ['0123ff', 'test_', 'microchip_e2e']):
+                    test_thing_names.append(thing_name)
+            
+            # Clean up each test thing
+            for thing_name in test_thing_names:
+                try:
+                    # First, detach and delete certificates
+                    principals_response = self.iot_client.list_thing_principals(thingName=thing_name)
+                    for principal_arn in principals_response.get('principals', []):
+                        if 'cert/' in principal_arn:
+                            cert_id = principal_arn.split('/')[-1]
+                            try:
+                                # Detach certificate from thing
+                                self.iot_client.detach_thing_principal(
+                                    thingName=thing_name,
+                                    principal=principal_arn
+                                )
+                                
+                                # Update certificate to INACTIVE before deletion
+                                self.iot_client.update_certificate(
+                                    certificateId=cert_id,
+                                    newStatus='INACTIVE'
+                                )
+                                
+                                # Delete certificate
+                                self.iot_client.delete_certificate(
+                                    certificateId=cert_id,
+                                    forceDelete=True
+                                )
+                                self.logger.info(f"Deleted certificate {cert_id}")
+                                
+                            except Exception as cert_e:
+                                self.logger.warning(f"Failed to delete certificate {cert_id}: {cert_e}")
+                    
+                    # Delete the thing
+                    self.iot_client.delete_thing(thingName=thing_name)
+                    self.logger.info(f"Deleted IoT thing {thing_name}")
+                    
+                except Exception as thing_e:
+                    self.logger.warning(f"Failed to delete thing {thing_name}: {thing_e}")
+                    
+        except Exception as e:
+            self.logger.warning(f"Failed to cleanup existing test data: {e}")
+
     def cleanup_test_resources(self):
         """Clean up test resources"""
         self.logger.info("🧹 Starting test resource cleanup")
@@ -362,6 +421,9 @@ class ProviderEndToEndTest(EndToEndTestFramework):
         """Run the complete end-to-end test for this provider"""
         
         try:
+            # Step 0: Clean up existing test data for fresh test environment
+            self.cleanup_existing_test_data()
+            
             # Step 1: Upload manifest
             step1 = self.log_step("upload_manifest", f"Upload {self.provider_name} manifest to S3")
             manifest_s3_path = self.upload_manifest(self.provider_name, str(self.manifest_path))
