@@ -315,7 +315,8 @@ class EndToEndTestFramework:
             response = self.s3_client.list_objects_v2(Bucket=verification_bucket)
             objects = response.get('Contents', [])
             
-            verification_certs = [obj['Key'] for obj in objects if obj['Key'].endswith('.cer')]
+            # Accept both .cer and .crt file extensions for verification certificates
+            verification_certs = [obj['Key'] for obj in objects if obj['Key'].endswith(('.cer', '.crt'))]
             
             return {
                 'verified': len(verification_certs) > 0,
