@@ -32,6 +32,8 @@
         "s3:GetBucketPolicy",
         "s3:PutBucketNotification",
         "s3:GetBucketNotification",
+        "s3:PutBucketNotificationConfiguration",
+        "s3:GetBucketNotificationConfiguration",
         "s3:PutBucketTagging",
         "s3:GetBucketTagging",
         "s3:PutBucketVersioning",
@@ -45,7 +47,9 @@
         "s3:DeleteObjectVersion",
         "s3:ListMultipartUploads",
         "s3:AbortMultipartUpload",
-        "s3:PutBucketPublicAccessBlock"
+        "s3:PutBucketPublicAccessBlock",
+        "s3:PutEncryptionConfiguration",
+        "s3:GetEncryptionConfiguration"
       ],
       "Resource": [
         "arn:aws:s3:::thingpress-*",
@@ -53,6 +57,13 @@
         "arn:aws:s3:::aws-sam-cli-managed-*",
         "arn:aws:s3:::aws-sam-cli-managed-*/*"
       ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::cloudformation-custom-resource-response-*/*"
     },
     {
       "Effect": "Allow",
@@ -74,14 +85,37 @@
         "lambda:DeleteEventSourceMapping",
         "lambda:GetEventSourceMapping",
         "lambda:UpdateEventSourceMapping",
-        "lambda:ListEventSourceMappings"
+        "lambda:ListEventSourceMappings",
+        "lambda:PutFunctionConcurrency",
+        "lambda:GetFunctionCodeSigningConfig",
+        "lambda:GetFunctionRecursionConfig",
+        "lambda:GetPolicy",
+        "lambda:GetRuntimeManagementConfig"
       ],
       "Resource": [
         "arn:aws:lambda:*:*:function:Thingpress*",
         "arn:aws:lambda:*:*:function:*thingpress*",
+        "arn:aws:lambda:*:*:function:*Thingpress*",
         "arn:aws:lambda:*:*:layer:Thingpress*",
+        "arn:aws:lambda:*:*:layer:*thingpress*",
+        "arn:aws:lambda:*:*:layer:*Thingpress*",
         "arn:aws:lambda:*:*:event-source-mapping:*"
       ]
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "lambda:GetEventSourceMapping",
+        "lambda:ListEventSourceMappings"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Effect": "Allow",
+      "Action": [
+        "kms:Decrypt"
+      ],
+      "Resource": "*"
     },
     {
       "Effect": "Allow",
@@ -160,7 +194,10 @@
         "iam:UntagRole",
         "iam:ListRoleTags"
       ],
-      "Resource": "arn:aws:iam::*:role/Thingpress*"
+      "Resource": [
+        "arn:aws:iam::*:role/Thingpress*",
+        "arn:aws:iam::*:role/*Thingpress*"
+      ]
     },
     {
       "Effect": "Allow",
@@ -192,7 +229,9 @@
         "dynamodb:Query",
         "dynamodb:Scan",
         "dynamodb:TagResource",
-        "dynamodb:ListTagsOfResource"
+        "dynamodb:ListTagsOfResource",
+        "dynamodb:UpdateTimeToLive",
+        "dynamodb:DescribeTimeToLive"
       ],
       "Resource": "arn:aws:dynamodb:*:*:table/*thingpress*"
     },
@@ -238,7 +277,10 @@
         "cloudformation:CancelUpdateStack",
         "cloudformation:DetectStackDrift",
         "cloudformation:DetectStackResourceDrift",
-        "cloudformation:DescribeStackDriftDetectionStatus"
+        "cloudformation:DescribeStackDriftDetectionStatus",
+        "cloudformation:GetStackPolicy",
+        "cloudformation:SignalResource",
+        "cloudformation:UpdateTerminationProtection"
       ],
       "Resource": "*"
     }

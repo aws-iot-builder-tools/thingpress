@@ -272,9 +272,16 @@ Resources:
       Runtime: python3.13
       Timeout: 300
       MemorySize: 256
+      Layers:
+        - !Ref ThingpressUtilsLayer
       Policies:
         - S3CrudPolicy:
             BucketName: !Ref ThingpressMicrochipVerificationCertsBucket
+        - Statement:
+            - Effect: Allow
+              Action:
+                - s3:PutObject
+              Resource: !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*"
       Environment:
         Variables:
           LOG_LEVEL: INFO
