@@ -10,33 +10,33 @@ import os
 @dataclass
 class CleanupConfig:
     """Configuration for Thingpress cleanup operations"""
-    
+
     # AWS Configuration
     region: str = "us-east-1"
     profile_name: Optional[str] = None
-    
+
     # Resource Identification
     resource_tag_key: str = "created-by"
     resource_tag_value: str = "thingpress"
     stack_name_prefix: str = "thingpress"
-    
+
     # Test-specific patterns for IoT things
-    test_thing_patterns: List[str] = None
-    
+    test_thing_patterns: List[str] | None = None
+
     # Cleanup Behavior
     dry_run: bool = False
     cleanup_iot_resources: bool = True
     cleanup_s3_resources: bool = True
     cleanup_cloudformation_stacks: bool = True
     verify_cleanup: bool = True
-    
+
     # Timing
     verification_wait_seconds: int = 30
     stack_deletion_timeout_minutes: int = 30
-    
+
     # Logging
     verbose: bool = False
-    
+
     def __post_init__(self):
         """Initialize default values after dataclass creation"""
         if self.test_thing_patterns is None:
@@ -45,15 +45,17 @@ class CleanupConfig:
                 'test_',     # Generic test things
                 '_e2e',      # End-to-end test suffix
             ]
-        
+
         # Override from environment variables if present
         self.region = os.getenv('AWS_REGION', self.region)
         self.profile_name = os.getenv('AWS_PROFILE', self.profile_name)
         self.stack_name_prefix = os.getenv('STACK_NAME_PREFIX', self.stack_name_prefix)
         self.dry_run = os.getenv('DRY_RUN', str(self.dry_run)).lower() == 'true'
-    
+
     @classmethod
-    def for_integration_tests(cls, stack_name: str = None, region: str = None) -> 'CleanupConfig':
+    def for_integration_tests(cls,
+                              stack_name: str | None = None,
+                              region: str | None = None) -> 'CleanupConfig':
         """Create configuration optimized for integration tests"""
         return cls(
             region=region or os.getenv('AWS_REGION', 'us-east-1'),
@@ -62,10 +64,14 @@ class CleanupConfig:
             verification_wait_seconds=5,  # Faster verification for tests
             verbose=True,
         )
-    
+
     @classmethod
-    def for_standalone_cleanup(cls, stack_prefix: str = None, region: str = None, dry_run: bool = False) -> 'CleanupConfig':
+    def for_standalone_cleanup(cls,
+                               stack_prefix: str | None = None,
+                               region: str | None = None,
+                               dry_run: bool = False) -> 'CleanupConfig':
         """Create configuration for standalone cleanup script"""
+
         return cls(
             region=region or 'us-east-1',
             stack_name_prefix=stack_prefix or 'thingpress',
