@@ -39,8 +39,8 @@ os.environ["POWERTOOLS_LOG_LEVEL"] = "CRITICAL"
 
 # Mock the idempotency module before importing the main module
 with patch('aws_lambda_powertools.utilities.idempotency.idempotent_function', lambda *args, **kwargs: lambda f: f):
-    from src.bulk_importer.main import get_certificate_fingerprint, process_certificate
-    from src.bulk_importer.main import lambda_handler, certificate_key_generator
+    from bulk_importer.main import get_certificate_fingerprint, process_certificate
+    from bulk_importer.main import lambda_handler, certificate_key_generator
 
 from .model_bulk_importer import LambdaSQSClass
 
@@ -139,15 +139,15 @@ class TestBulkImporter(TestCase):
             c = {'certificate': cert, 'thing': 'test-thing'}
             
             # Mock the get_certificate function to simulate certificate not found
-            with patch('src.bulk_importer.main.get_certificate') as mock_get, \
-                 patch('src.bulk_importer.main.logger'):  # Suppress logger output
+            with patch('bulk_importer.main.get_certificate') as mock_get, \
+                 patch('bulk_importer.main.logger'):  # Suppress logger output
                 mock_get.side_effect = ClientError(
                     {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Not found'}},
                     'get_certificate'
                 )
                 
                 # Mock register_certificate to return a fixed fingerprint
-                with patch('src.bulk_importer.main.register_certificate') as mock_register:
+                with patch('bulk_importer.main.register_certificate') as mock_register:
                     fingerprint = get_certificate_fingerprint(pem_obj)
                     mock_register.return_value = fingerprint
                     
@@ -160,8 +160,8 @@ class TestBulkImporter(TestCase):
         # This test verifies that calling process_certificate multiple times with the same input
         # returns the same result without actually processing it again
         
-        with patch('src.bulk_importer.main.register_certificate') as mock_register, \
-             patch('src.bulk_importer.main.logger'):  # Suppress logger output
+        with patch('bulk_importer.main.register_certificate') as mock_register, \
+             patch('bulk_importer.main.logger'):  # Suppress logger output
             # Mock register_certificate to return a fixed certificate ID
             mock_register.return_value = "test-certificate-id"
             
@@ -169,7 +169,7 @@ class TestBulkImporter(TestCase):
             config = {'certificate': self.local_cert_loaded, 'thing': 'test-thing-idempotent'}
             
             # We need to patch the idempotent_function decorator to simulate its behavior
-            with patch('src.bulk_importer.main.get_certificate') as mock_get:
+            with patch('bulk_importer.main.get_certificate') as mock_get:
                 # First call should try to get the certificate and fail
                 mock_get.side_effect = ClientError(
                     {'Error': {'Code': 'ResourceNotFoundException', 'Message': 'Not found'}},
@@ -201,8 +201,8 @@ class TestBulkImporter(TestCase):
         config = {'certificate': self.local_cert_loaded, 'thing': 'foo'}
         e = { "Records": [{'eventSource': 'aws:sqs', 'body': json.dumps(config)}]}
         os.environ['QUEUE_TARGET']=self.test_sqs_queue_name
-        with patch('src.bulk_importer.main.process_sqs') as mock_process, \
-             patch('src.bulk_importer.main.logger'):  # Suppress logger output
+        with patch('bulk_importer.main.process_sqs') as mock_process, \
+             patch('bulk_importer.main.logger'):  # Suppress logger output
             mock_entry = MagicMock()
             mock_entry.process_sqs.return_value = None
             mock_process.return_value = mock_entry

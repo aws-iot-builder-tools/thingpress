@@ -838,7 +838,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/bulk_importer/
-      Handler: main.lambda_handler
+      Handler: bulk_importer.main.lambda_handler
       Runtime: python3.13
       ReservedConcurrentExecutions: !Ref ConcurrentExecutions
       Timeout: !Ref LambdaTimeout
