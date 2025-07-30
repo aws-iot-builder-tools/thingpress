@@ -37,7 +37,7 @@ sys.path.insert(0, str(project_root))
 # This makes modules directly importable in tests without relative imports
 module_paths = [
     # Add paths to specific modules
-    os.path.join(project_root, "src", "layer_utils"),
+    os.path.join(project_root, "src", "layer_utils", "layer_utils"),
     os.path.join(project_root, "src", "bulk_importer"),
     os.path.join(project_root, "src", "product_verifier"),
     os.path.join(project_root, "src", "provider_espressif"),
