@@ -9,7 +9,7 @@ from inspect import stack
 from io import BytesIO
 from json import dumps
 from logging import getLogger
-
+from types import UnionType
 from boto3 import Session
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -417,7 +417,7 @@ def get_certificate_arn(certificate_id: str, session: Session=default_session) -
         boto_exception(error, f"get_certificate_arn failed on certificate_id {certificate_id}")
         raise error
 
-def register_certificate(certificate: str, tags_or_session=None, session: Session=None) -> str:
+def register_certificate(certificate: str, tags: list=None, session: Session=default_session) -> str:
     """ Register an AWS IoT certificate without a registered CA 
     
     Args:
@@ -428,22 +428,6 @@ def register_certificate(certificate: str, tags_or_session=None, session: Sessio
     Returns:
         Certificate ID
     """
-    # Handle backward compatibility
-    if session is None and hasattr(tags_or_session, 'client'):
-        # Old signature: register_certificate(cert, session)
-        session = tags_or_session
-        tags = None
-    elif isinstance(tags_or_session, list):
-        # New signature: register_certificate(cert, tags, session)
-        tags = tags_or_session
-        if session is None:
-            session = default_session
-    else:
-        # New signature with defaults
-        tags = tags_or_session
-        if session is None:
-            session = default_session
-
     iot_client = session.client('iot')
     try:
         # Register the certificate
@@ -566,7 +550,7 @@ def process_policy(policy_name: str,
     iot_client = session.client('iot')
     iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
 
-def process_thing(thing_name, certificate_id, tags: list = None, session: Session=Session()) -> None:
+def process_thing(thing_name, certificate_id, tags: list|None = None, session: Session=default_session) -> None:
     """Creates the IoT Thing if it does not already exist and attaches certificate
     
     Args:
@@ -813,9 +797,6 @@ def cleanup_thingpress_objects(dry_run: bool = True, session: Session=default_se
         logger.error(error_msg)
 
     return results
-    if value in ("None", ""):
-        return False
-    return True
 
 def boto_errorcode(e: ClientError) -> str:
     """ Consolidate checks on typed dict having optional keys """

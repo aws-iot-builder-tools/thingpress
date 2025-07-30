@@ -18,15 +18,15 @@ from boto3 import Session, _get_default_session
 from cryptography import x509
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import serialization
-from src.layer_utils.layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
-from src.layer_utils.layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, get_thing_arn
-from src.layer_utils.layer_utils.aws_utils import send_sqs_message, send_sqs_message_batch, send_sqs_message_batch_with_retry
-from src.layer_utils.layer_utils.aws_utils import get_queue_depth, calculate_optimal_delay, send_sqs_message_with_throttling, send_sqs_message_with_adaptive_throttling
-from src.layer_utils.layer_utils.aws_utils import get_certificate_arn, register_certificate
-from src.layer_utils.layer_utils.aws_utils import process_thing, process_thing_type, process_policy
-from src.layer_utils.layer_utils.aws_utils import process_thing_group, boto_errorcode
-from src.layer_utils.layer_utils.cert_utils import decode_certificate
-from src.layer_utils.layer_utils.circuit_state import clear_circuits, reset_circuit
+from layer_utils.aws_utils import s3_object, s3_object_bytes, verify_queue
+from layer_utils.aws_utils import get_policy_arn, get_thing_group_arn, get_thing_type_arn, get_thing_arn
+from layer_utils.aws_utils import send_sqs_message, send_sqs_message_batch, send_sqs_message_batch_with_retry
+from layer_utils.aws_utils import get_queue_depth, calculate_optimal_delay, send_sqs_message_with_throttling, send_sqs_message_with_adaptive_throttling
+from layer_utils.aws_utils import get_certificate_arn, register_certificate
+from layer_utils.aws_utils import process_thing, process_thing_type, process_policy
+from layer_utils.aws_utils import process_thing_group, boto_errorcode
+from layer_utils.cert_utils import decode_certificate
+from layer_utils.circuit_state import clear_circuits, reset_circuit
 
 from .model_provider_espressif import LambdaS3Class
 
@@ -158,7 +158,7 @@ class TestAwsUtils(TestCase):
         iot_client.create_policy(policyName=policy_name, policyDocument=policy_document)
 
         cert = decode_certificate(self.local_cert_loaded).decode('ascii')
-        certificate_id = register_certificate(cert, _get_default_session())
+        certificate_id = register_certificate(cert, session=_get_default_session())
         certificate_arn = get_certificate_arn(certificate_id, _get_default_session())
 
         process_policy(policy_name, certificate_arn, _get_default_session())
@@ -362,7 +362,7 @@ class TestAwsUtils(TestCase):
     def test_pos_get_certificate_arn(self):
         """Positive test for get_certificate_arn"""
         cert = decode_certificate(self.local_cert_loaded).decode('ascii')
-        certificate_id = register_certificate(cert, _get_default_session())
+        certificate_id = register_certificate(cert, session=_get_default_session())
         certificate_arn = get_certificate_arn(certificate_id, _get_default_session())
         assert certificate_arn is not None
 
@@ -383,7 +383,7 @@ class TestAwsUtils(TestCase):
         """Positive test case for attaching policy to certificate"""
         iot_client = _get_default_session().client('iot')
         cert = decode_certificate(self.local_cert_loaded).decode('ascii')
-        certificate_id = register_certificate(cert, _get_default_session())
+        certificate_id = register_certificate(cert, session=_get_default_session())
         thing_name = "process_thing"
         iot_client.create_thing(thingName=thing_name)
 
@@ -402,7 +402,7 @@ class TestAwsUtils(TestCase):
     def test_pos_process_thing_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
         cert = decode_certificate(self.local_cert_loaded).decode('ascii')
-        cr = register_certificate(cert, _get_default_session())
+        cr = register_certificate(cert, session=_get_default_session())
 
         # Assume operation success with no raise
         process_thing('my_thing', cr, session=_get_default_session())
@@ -410,7 +410,7 @@ class TestAwsUtils(TestCase):
     def test_pos_process_thing_with_type_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
         cert = decode_certificate(self.local_cert_loaded).decode('ascii')
-        cr = register_certificate(cert, _get_default_session())
+        cr = register_certificate(cert, session=_get_default_session())
 
         # Assume operation success with no raise
         process_thing('my_thing', cr, session=_get_default_session())
@@ -794,7 +794,7 @@ class TestAwsUtils(TestCase):
             mock_client.return_value = mock_iot
 
             with raises(ClientError) as exc:
-                register_certificate(invalid_cert, _get_default_session())
+                register_certificate(invalid_cert, session=_get_default_session())
                 
             assert boto_errorcode(exc.value) == 'InvalidParameterException'
             mock_iot.register_certificate_without_ca.assert_called_once()
