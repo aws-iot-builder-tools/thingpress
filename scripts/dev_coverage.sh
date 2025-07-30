@@ -1,7 +1,7 @@
 #! /bin/bash
 
-COVERAGE_FILE=/tmp/coverage_thingpress.json
-COVERAGE_PERC=/tmp/coverage_thingpress_perc
+COVERAGE_FILE=$(pwd)/coverage_thingpress.json
+COVERAGE_PERC=$(pwd)/coverage_thingpress_perc
 
 pytest --disable-socket -s \
 --cov=$(pwd)/src/bulk_importer \
