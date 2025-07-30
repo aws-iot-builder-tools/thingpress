@@ -36,7 +36,7 @@ jobs:
                   echo ==END_SET=====================================================
                   
                   # Run coverage only on test/unit/src directory to avoid script imports
-                  coverage run --source=src/bulk_importer,src/provider_espressif,src/provider_infineon,src/provider_microchip,src/layer_utils,src/certificate_generator/,src/provider_generated,src/certificate_deployer -m pytest --trace-config test/unit/src/ 
+                  coverage run --source=src/bulk_importer,src/provider_espressif,src/provider_infineon,src/provider_microchip,src/layer_utils,src/certificate_generator/,src/provider_generated,src/certificate_deployer -m pytest test/unit/
                   coverage report -m
                   # Run pylint only on src directory, excluding scripts
                   lintscore=$(pylint -f json2 src/ | python3 -c "import sys, json; print(json.load(sys.stdin)['statistics']['score'])")
