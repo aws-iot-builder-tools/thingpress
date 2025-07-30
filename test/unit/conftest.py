@@ -29,8 +29,8 @@ os.environ["THROTTLING_BASE_DELAY"] = "0"
 os.environ["THROTTLING_BATCH_INTERVAL"] = "1"
 
 # Add the project root directory to the Python path
-project_root = Path(__file__).parent.parent
-print("project_root: %s", str(project_root))
+project_root = Path(__file__).parent.parent.parent
+print("project_root (conftest.py): %s", str(project_root))
 sys.path.insert(0, str(project_root))
 
 # Add specific module directories to the Python path
@@ -58,7 +58,7 @@ try:
     # For example, make src.layer_utils.aws_utils available as just aws_utils
     import src.layer_utils.aws_utils
     sys.modules['aws_utils'] = sys.modules['src.layer_utils.aws_utils']
-    
+
     import src.layer_utils.cert_utils
     sys.modules['cert_utils'] = sys.modules['src.layer_utils.cert_utils']
 except ImportError:
