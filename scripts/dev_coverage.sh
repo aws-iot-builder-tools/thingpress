@@ -14,6 +14,6 @@ pytest --disable-socket -s \
 --cov=$(pwd)/src/provider_microchip \
 --cov=$(pwd)/src/layer_utils \
 --cov-report=json:$COVERAGE_FILE \
-test/unit/src
+test/unit
 
 jq -r .totals.percent_covered_display $COVERAGE_FILE > $COVERAGE_PERC

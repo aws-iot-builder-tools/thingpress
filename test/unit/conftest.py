@@ -30,7 +30,7 @@ os.environ["THROTTLING_BATCH_INTERVAL"] = "1"
 
 # Add the project root directory to the Python path
 project_root = Path(__file__).parent.parent.parent
-print("project_root (conftest.py): %s", str(project_root))
+print("\nproject_root (conftest.py): ", str(project_root))
 sys.path.insert(0, str(project_root))
 
 # Add specific module directories to the Python path
@@ -41,9 +41,9 @@ module_paths = [
     os.path.join(project_root, "src", "bulk_importer"),
     os.path.join(project_root, "src", "product_verifier"),
     os.path.join(project_root, "src", "provider_espressif"),
-    os.path.join(project_root, "src", "provider_generated", "provider_generated"),
-    os.path.join(project_root, "src", "provider_infineon", "provider_infineon"),
-    os.path.join(project_root, "src", "provider_microchip", "provider_microchip"),
+    os.path.join(project_root, "src", "provider_generated"),
+    os.path.join(project_root, "src", "provider_infineon"),
+    os.path.join(project_root, "src", "provider_microchip"),
     os.path.join(project_root, "src", "certificate_generator"),
 ]
 
