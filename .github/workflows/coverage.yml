@@ -27,6 +27,14 @@ jobs:
                   # Set required environment variables for tests
                   export POWERTOOLS_IDEMPOTENCY_TABLE=test-idempotency-table
                   export POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS=3600
+                  echo currentdir ls: $(ls -l)
+                  echo ==BEGIN_ENV====================================================
+                  env
+                  echo ==END_ENV=====================================================
+                  echo ==BEGIN_SET====================================================
+                  set
+                  echo ==END_SET=====================================================
+                  
                   # Run coverage only on test/unit/src directory to avoid script imports
                   coverage run --source=src/bulk_importer,src/provider_espressif,src/provider_infineon,src/provider_microchip,src/layer_utils,src/certificate_generator/,src/provider_generated,src/certificate_deployer -m pytest test/unit/src/
                   coverage report -m
