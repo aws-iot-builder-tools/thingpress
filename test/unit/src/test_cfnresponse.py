@@ -46,7 +46,7 @@ class TestCfnResponse(TestCase):
             self.sample_context,
             SUCCESS,
             self.sample_response_data,
-            physicalResourceId='test-physical-id'
+            physical_resource_id='test-physical-id'
         )
         
         # Verify urlopen was called
@@ -133,7 +133,7 @@ class TestCfnResponse(TestCase):
             self.sample_context,
             SUCCESS,
             self.sample_response_data,
-            noEcho=True
+            no_echo=True
         )
         
         # Get the request data
@@ -156,7 +156,7 @@ class TestCfnResponse(TestCase):
             self.sample_context,
             SUCCESS,
             self.sample_response_data,
-            noEcho=False
+            no_echo=False
         )
         
         # Get the request data

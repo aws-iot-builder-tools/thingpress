@@ -18,7 +18,7 @@ logger = Logger()
 SUCCESS = "SUCCESS"
 FAILED = "FAILED"
 
-def send(event, context, responseStatus, responseData, physicalResourceId=None, noEcho=False):
+def send(event, context, response_status, response_data, physical_resource_id=None, no_echo=False):
     """
     Send a response to CloudFormation regarding the success or failure of a custom resource.
     
@@ -33,37 +33,37 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
     Returns:
         None
     """
-    responseUrl = event['ResponseURL']
+    response_url = event['ResponseURL']
 
     logger.info("Sending CloudFormation response", extra={
-        "response_url": responseUrl,
-        "status": responseStatus
+        "response_url": response_url,
+        "status": response_status
     })
 
-    responseBody = {}
-    responseBody['Status'] = responseStatus
-    responseBody['Reason'] = 'See the details in CloudWatch Log Stream: ' + context.log_stream_name
-    responseBody['PhysicalResourceId'] = physicalResourceId or context.log_stream_name
-    responseBody['StackId'] = event['StackId']
-    responseBody['RequestId'] = event['RequestId']
-    responseBody['LogicalResourceId'] = event['LogicalResourceId']
-    responseBody['NoEcho'] = noEcho
-    responseBody['Data'] = responseData
+    response_body = {}
+    response_body['Status'] = response_status
+    response_body['Reason'] = 'See the details in CloudWatch Log Stream: ' + context.log_stream_name
+    response_body['PhysicalResourceId'] = physical_resource_id or context.log_stream_name
+    response_body['StackId'] = event['StackId']
+    response_body['RequestId'] = event['RequestId']
+    response_body['LogicalResourceId'] = event['LogicalResourceId']
+    response_body['NoEcho'] = no_echo
+    response_body['Data'] = response_data
 
-    json_responseBody = json.dumps(responseBody)
+    json_response_body = json.dumps(response_body)
 
     logger.debug("CloudFormation response body", extra={
-        "response_body": json_responseBody
+        "response_body": json_response_body
     })
 
     headers = {
         'content-type': '',
-        'content-length': str(len(json_responseBody))
+        'content-length': str(len(json_response_body))
     }
 
     try:
-        req = urllib.request.Request(responseUrl,
-                                     data=json_responseBody.encode('utf-8'),
+        req = urllib.request.Request(response_url,
+                                     data=json_response_body.encode('utf-8'),
                                      headers=headers,
                                      method='PUT')
         response = urllib.request.urlopen(req)
@@ -74,7 +74,7 @@ def send(event, context, responseStatus, responseData, physicalResourceId=None, 
     except Exception as e:
         logger.error("Failed to send CloudFormation response", extra={
             "error": str(e),
-            "response_url": responseUrl
+            "response_url": response_url
         })
         # Re-raise the exception so calling code can handle it appropriately
         raise

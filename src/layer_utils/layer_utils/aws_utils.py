@@ -616,7 +616,7 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
         try:
             principals_response = iot_client.list_thing_principals(thingName=thing_name)
             attached_principals = principals_response.get('principals', [])
-            
+
             if certificate_arn in attached_principals:
                 logger.info("Certificate %s already attached to thing %s", certificate_id, thing_name)
             else:
@@ -627,7 +627,7 @@ def process_thing(thing_name, certificate_id, tags: list = None, session: Sessio
             logger.warning("Could not list thing principals for %s: %s. Attempting attachment anyway.", thing_name, str(list_error))
             iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
             logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
-            
+
     except ClientError as error:
         # Log the error but don't fail if certificate is already attached
         if error.response['Error']['Code'] == 'ResourceAlreadyExistsException':
