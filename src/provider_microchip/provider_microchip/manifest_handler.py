@@ -9,7 +9,7 @@ import logging
 import os
 import re
 from base64 import b64decode, b64encode
-from datetime import datetime
+#from datetime import datetime
 from typing import List, Tuple
 
 from boto3 import Session
@@ -37,43 +37,44 @@ def get_verification_certificates(verification_certs_bucket: str, session: Sessi
         List of tuples (cert_name, cert_content) sorted by date, newest first
     """
     s3_client = session.client('s3')
-    
+
     try:
         response = s3_client.list_objects_v2(Bucket=verification_certs_bucket)
         if 'Contents' not in response:
-            logger.error("No verification certificates found in bucket %s", verification_certs_bucket)
+            logger.error("No verification certificates found in bucket %s",
+                         verification_certs_bucket)
             return []
-        
+
         cert_files = []
         cert_pattern = re.compile(r'MCHP_manifest_signer_(\d+)_(.+)\.crt')
-        
+
         for obj in response['Contents']:
             key = obj['Key']
             match = cert_pattern.match(key)
             if match:
                 signer_num = int(match.group(1))
                 date_info = match.group(2)
-                
+
                 # Parse priority: higher signer number = newer
                 # Special case: "noExpiration" gets highest priority
                 if 'noExpiration' in date_info:
                     priority = 9999  # Highest priority
                 else:
                     priority = signer_num
-                
+
                 cert_files.append((key, priority, obj['LastModified']))
-        
+
         # Sort by priority (descending), then by last modified (descending)
         cert_files.sort(key=lambda x: (x[1], x[2]), reverse=True)
-        
+
         # Download certificate contents
         certificates = []
         for cert_name, _, _ in cert_files:
             try:
                 cert_content = s3_object_bytes(
-                    verification_certs_bucket, 
-                    cert_name, 
-                    getvalue=True, 
+                    verification_certs_bucket,
+                    cert_name,
+                    getvalue=True,
                     session=session
                 )
                 certificates.append((cert_name, cert_content))
@@ -81,15 +82,15 @@ def get_verification_certificates(verification_certs_bucket: str, session: Sessi
             except Exception as e:
                 logger.warning("Failed to load certificate %s: %s", cert_name, str(e))
                 continue
-        
+
         if not certificates:
             logger.error("No valid verification certificates could be loaded")
             return []
-        
-        logger.info("Loaded %d verification certificates, will try in order: %s", 
+
+        logger.info("Loaded %d verification certificates, will try in order: %s",
                    len(certificates), [cert[0] for cert in certificates])
         return certificates
-        
+
     except Exception as e:
         logger.error("Failed to list verification certificates: %s", str(e))
         return []
@@ -196,7 +197,9 @@ class ManifestItem:
                 ).decode('ascii')
 
 
-def try_verify_with_certificates(signed_se: dict, certificates: List[Tuple[str, bytes]]) -> Tuple[str, 'ManifestItem']:
+def try_verify_with_certificates(signed_se: dict,
+                                 certificates: List[Tuple[str, bytes]]
+                                 ) -> Tuple[str, 'ManifestItem']:
     """
     Try to verify a signed secure element with available certificates, starting with newest.
     
@@ -211,7 +214,7 @@ def try_verify_with_certificates(signed_se: dict, certificates: List[Tuple[str, 
         ValueError: If verification fails with all certificates
     """
     verification_errors = []
-    
+
     for cert_name, cert_content in certificates:
         try:
             logger.info("Attempting verification with certificate: %s", cert_name)
@@ -223,9 +226,9 @@ def try_verify_with_certificates(signed_se: dict, certificates: List[Tuple[str, 
             verification_errors.append(error_msg)
             logger.warning("❌ Verification failed with %s: %s", cert_name, str(e))
             continue
-    
+
     # If we get here, all certificates failed
-    error_summary = f"Verification failed with all {len(certificates)} certificates. Errors: {'; '.join(verification_errors)}"
+    error_summary = f"Verification failed with all %d{len(certificates)} certificates. Errors: {'; '.join(verification_errors)}"
     logger.error(error_summary)
     raise ValueError(error_summary)
 
@@ -267,14 +270,15 @@ def invoke_export(config, queue_url, session: Session):
 
     while manifest_iterator.index != 0:
         signed_se = next(manifest_iterator)
-        
+
         try:
             # Try verification with certificates in priority order
-            cert_used, manifest_item = try_verify_with_certificates(signed_se, verification_certificates)
-            
+            cert_used, manifest_item = try_verify_with_certificates(signed_se,
+                                                                    verification_certificates)
+
             # Track which certificates are being used
             verification_stats[cert_used] = verification_stats.get(cert_used, 0) + 1
-            
+
             block = manifest_item.get_certificate_chain()
             if len(block) == 0:
                 logger.error("Certificate %s could not be extracted", manifest_item.identifier)
@@ -282,7 +286,8 @@ def invoke_export(config, queue_url, session: Session):
 
             cert_config = config.copy()
             cert_config['certificate'] = str(b64encode(block.encode('ascii')))
-            cert_config['thing'] = manifest_item.identifier  # Set thing name from certificate identifier
+            # Set thing name from certificate identifier
+            cert_config['thing'] = manifest_item.identifier
 
             batch_messages.append(cert_config)
             total_count += 1
@@ -291,7 +296,7 @@ def invoke_export(config, queue_url, session: Session):
             if len(batch_messages) >= batch_size:
                 throttler.send_batch_with_throttling(batch_messages, queue_url, session)
                 batch_messages = []
-                
+
         except ValueError as e:
             logger.error("Failed to verify certificate %s: %s", 
                         signed_se.get('header', {}).get('uniqueId', 'unknown'), str(e))
@@ -310,7 +315,7 @@ def invoke_export(config, queue_url, session: Session):
     # Log verification statistics
     logger.info("Processing completed. Total certificates processed: %d", total_count)
     logger.info("Verification certificate usage: %s", verification_stats)
-    
+
     if total_count == 0:
         logger.warning("No certificates could be processed - all verification attempts failed")
         # Don't raise an exception to maintain backward compatibility with unit tests

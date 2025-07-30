@@ -9,7 +9,6 @@ from inspect import stack
 from io import BytesIO
 from json import dumps
 from logging import getLogger
-from types import UnionType
 from boto3 import Session
 from botocore.config import Config
 from botocore.exceptions import ClientError
@@ -46,7 +45,10 @@ def s3_object(bucket_name: str, object_name: str, fs=BytesIO(), session: Session
         raise error
 
 @with_circuit_breaker('s3_object_bytes')
-def s3_object_bytes(bucket_name: str, object_name: str, getvalue: bool=False, session: Session=default_session) -> bytes | BytesIO:
+def s3_object_bytes(bucket_name: str,
+                    object_name: str,
+                    getvalue: bool=False,
+                    session: Session=default_session) -> bytes | BytesIO:
     """Download an S3 object as byte file-like object"""
     fs = BytesIO()
     s3_object(bucket_name, object_name, fs, session)
@@ -124,7 +126,9 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
             # Handle partial failures
             if 'Failed' in response and response['Failed']:
                 logger.warning(
-                    f"Batch send partial failure: {len(response['Failed'])} messages failed")
+                    "Batch send partial failure: %d messages failed",
+                    len(response['Failed'])
+                    )
 
                 for failure in response['Failed']:
                     failed_msg_idx = int(failure['Id'])
@@ -135,7 +139,11 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
                     })
 
                     logger.error(
-                        f"Failed to send message {failure['Id']}: {failure['Code']} - {failure['Message']}")
+                        "Failed to send message %s: %s - %s",
+                        failure['Id'],
+                        failure['Code'],
+                        failure['Message']
+                        )
 
         except ClientError as error:
             logger.error("SQS batch send failed for batch starting at index %d: %s", i, error)
@@ -176,7 +184,11 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
             break
 
         logger.info(
-            f"Batch send attempt {attempt + 1}/{max_retries} for {len(remaining_messages)} messages")
+            "Batch send attempt %d/%d for %d messages",
+            attempt + 1,
+            max_retries,
+            len(remaining_messages)
+            )
 
         try:
             results = send_sqs_message_batch(remaining_messages, queue_url, session)
@@ -200,7 +212,10 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
                 # Exponential backoff
                 sleep_time = 2 ** attempt
                 logger.info(
-                    f"Retrying {len(remaining_messages)} failed messages after {sleep_time}s delay")
+                    "Retrying %d failed messages after %ds delay",
+                    len(remaining_messages),
+                    sleep_time
+                )
                 time.sleep(sleep_time)
 
         except ClientError as error:
@@ -210,12 +225,19 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
             else:
                 sleep_time = 2 ** attempt
                 logger.warning(
-                    f"Retry attempt {attempt + 1} failed, waiting {sleep_time}s: {error}")
+                    "Retry attempt %d failed, waiting %ds: %s",
+                    attempt + 1,
+                    sleep_time,
+                    error
+                )
                 time.sleep(sleep_time)
 
     if remaining_messages:
         logger.error(
-            f"Failed to send {len(remaining_messages)} messages after {max_retries} attempts")
+            "Failed to send %d messages after %d attempts",
+            len(remaining_messages),
+            max_retries
+        )
 
     return all_results
 
@@ -307,11 +329,15 @@ def send_sqs_message_with_throttling(messages: list, queue_url: str,
             queue_metrics = get_queue_depth(queue_url, session)
             delay = calculate_optimal_delay(queue_metrics['total'], base_delay)
 
-            logger.info("Queue throttling check: depth=%d, delay=%ds", queue_metrics['total'], delay)
+            logger.info("Queue throttling check: depth=%d, delay=%ds",
+                        queue_metrics['total'], delay)
 
             if delay > 0:
                 logger.info(
-                    f"Throttling: waiting {delay} seconds before sending {len(messages)} messages")
+                    "Throttling: waiting %d seconds before sending %d messages",
+                    delay,
+                    len(messages)
+                )
                 time.sleep(delay)
         except Exception as e:
             # If throttling check fails, continue without throttling
@@ -353,12 +379,16 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
                 current_depth = queue_metrics['total']
 
                 logger.info(
-                    f"Adaptive throttling check (batch {batch_num}): queue_depth={current_depth}")
+                    "Adaptive throttling check (batch %d): queue_depth=%d",
+                    batch_num,
+                    current_depth
+                )
 
                 if current_depth > max_queue_depth:
                     # Calculate adaptive delay based on how far over the limit we are
                     excess_ratio = current_depth / max_queue_depth
-                    adaptive_delay = min(60, int(30 * excess_ratio))  # Cap at 60 seconds
+                    # Cap at 60 seconds
+                    adaptive_delay = min(60, int(30 * excess_ratio))
 
                     logger.info("Queue depth (%d) exceeds limit (%d), waiting %ds", 
                               current_depth, max_queue_depth, adaptive_delay)
@@ -417,12 +447,14 @@ def get_certificate_arn(certificate_id: str, session: Session=default_session) -
         boto_exception(error, f"get_certificate_arn failed on certificate_id {certificate_id}")
         raise error
 
-def register_certificate(certificate: str, tags: list=None, session: Session=default_session) -> str:
+def register_certificate(certificate: str,
+                         tags: list|None=None,
+                         session: Session=default_session) -> str:
     """ Register an AWS IoT certificate without a registered CA 
     
     Args:
         certificate: The certificate PEM string
-        tags_or_session: Either tags list or session (for backward compatibility)
+        tags: Resource tags list
         session: Boto3 session (when tags are provided)
         
     Returns:
@@ -550,7 +582,10 @@ def process_policy(policy_name: str,
     iot_client = session.client('iot')
     iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
 
-def process_thing(thing_name, certificate_id, tags: list|None = None, session: Session=default_session) -> None:
+def process_thing(thing_name: str,
+                  certificate_id: str,
+                  tags: list|None = None,
+                  session: Session=default_session) -> None:
     """Creates the IoT Thing if it does not already exist and attaches certificate
     
     Args:
@@ -564,11 +599,11 @@ def process_thing(thing_name, certificate_id, tags: list|None = None, session: S
     iot_client = session.client('iot')
     certificate_arn = get_certificate_arn(certificate_id, session)
 
-    thing_exists = False
+    #thing_exists = False
     try:
         iot_client.describe_thing(thingName=thing_name)
         logger.info("Thing %s already exists", thing_name)
-        thing_exists = True
+        #thing_exists = True
     except ClientError as err_describe:
         boto_exception(err_describe, f"Thing {thing_name} not found. Creating.")
         try:
@@ -602,13 +637,16 @@ def process_thing(thing_name, certificate_id, tags: list|None = None, session: S
             attached_principals = principals_response.get('principals', [])
 
             if certificate_arn in attached_principals:
-                logger.info("Certificate %s already attached to thing %s", certificate_id, thing_name)
+                logger.info("Certificate %s already attached to thing %s",
+                            certificate_id, thing_name)
             else:
                 iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
                 logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
         except ClientError as list_error:
             # If we can't list principals, try to attach anyway (might be a permission issue)
-            logger.warning("Could not list thing principals for %s: %s. Attempting attachment anyway.", thing_name, str(list_error))
+            logger.warning("Could not list thing principals for %s: %s."
+                           "Attempting attachment anyway.",
+                           thing_name, str(list_error))
             iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
             logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
 
