@@ -19,6 +19,7 @@ jobs:
                 pip install -r ./requirements.txt
                 pip install fastjsonschema
                 pip install anybadge
+                pip install jmespath
             - name: 'Run coverage'
               run: |
                   export AWS_DEFAULT_REGION=us-east-1
@@ -30,7 +31,8 @@ jobs:
 
                   # Run coverage only on test/unit/src directory to avoid script imports
                   bash $(pwd)/scripts/dev_coverage.sh
-                  anybadge -l pylint -v $(cat $(pwd)/coverage_thingpress_perc) -o -f .github/linting.svg 2=red 4=orange 8=yellow 10=green
+                  lintscore=$(pylint -f json2 --recursive true --enable-all-extensions src/ | jq -r .statistics.score)
+                  anybadge -l pylint -v $(lintscore) -o -f .github/linting.svg 2=red 4=orange 8=yellow 10=green
             - name: Coverage Badge
               uses: tj-actions/coverage-badge-py@v2
               with:
