@@ -52,43 +52,6 @@ def deploy_certificates(bucket_name, certificates):
         logger.error("Error deploying certificates: %s", str(e))
         return False
 
-def handle_s3_notification_config(event: CloudFormationCustomResourceEvent,
-                                  context: LambdaContext):
-    """
-    Handle S3 bucket notification configuration.
-
-    Args:
-        event (dict): CloudFormation custom resource event
-        context (LambdaContext): Lambda execution context
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    try:
-        bucket_name = event['ResourceProperties']['BucketName']
-        notification_config = event['ResourceProperties'].get('NotificationConfiguration', {})
-
-        if event['RequestType'] == 'Create':
-            # For creation, just apply the notification configuration
-            success = configure_bucket_notifications(bucket_name, notification_config)
-
-        elif event['RequestType'] == 'Update':
-            # For updates, apply the new notification configuration
-            success = configure_bucket_notifications(bucket_name, notification_config)
-
-        elif event['RequestType'] == 'Delete':
-            # For deletion, disable notifications
-            success = configure_bucket_notifications(bucket_name, {})
-
-        else:
-            logger.error("Unsupported request type: %s", event['RequestType'])
-            success = False
-
-        return success
-    except Exception as e:
-        logger.error("Error handling S3 notification config: %s", str(e))
-        return False
-
 def lambda_handler(event: dict, context: LambdaContext):
     """
     Deploy Microchip verifier certificates to S3 bucket or configure S3 notifications.

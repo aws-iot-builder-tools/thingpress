@@ -8,17 +8,14 @@ Tests the Lambda function that deploys Microchip verification certificates
 to S3 buckets as part of CloudFormation custom resources.
 """
 import os
-import json
 import base64
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
-from boto3 import Session, _get_default_session
+from boto3 import _get_default_session
 from moto import mock_aws
-from botocore.exceptions import ClientError
 
 from src.certificate_deployer.certificate_deployer.main import (
     deploy_certificates,
-    handle_s3_notification_config,
     lambda_handler
 )
 import src.certificate_deployer.certificate_deployer.cfnresponse as cfnresponse

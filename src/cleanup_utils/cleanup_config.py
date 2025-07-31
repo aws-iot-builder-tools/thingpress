@@ -3,7 +3,6 @@ Configuration and constants for Thingpress cleanup operations
 """
 
 from dataclasses import dataclass
-from typing import List, Dict, Optional
 import os
 
 
@@ -12,8 +11,8 @@ class CleanupConfig:
     """Configuration for Thingpress cleanup operations"""
 
     # AWS Configuration
-    region: str = "us-east-1"
-    profile_name: Optional[str] = None
+    region: str|None= "us-east-1"
+    profile_name: str | None = None
 
     # Resource Identification
     resource_tag_key: str = "created-by"
@@ -21,7 +20,7 @@ class CleanupConfig:
     stack_name_prefix: str = "thingpress"
 
     # Test-specific patterns for IoT things
-    test_thing_patterns: List[str] | None = None
+    test_thing_patterns: list[str] | None = None
 
     # Cleanup Behavior
     dry_run: bool = False

@@ -56,21 +56,24 @@ def process_certificate(config, session: Session=default_session):
     fingerprint = get_certificate_fingerprint(x509_certificate)
 
     try:
-        response = get_certificate(fingerprint, session)
-        logger.info({
-            "message": "Certificate already found. Returning certificateId in"
-                       "case this is recovering from a broken load",
-            "fingerprint": fingerprint
-        })
-        return response
+        return get_certificate(fingerprint, session)
     except ClientError as error:
         logger.info({
             "message": "Certificate not found in IoT Core. Importing.",
             "fingerprint": fingerprint,
             "error": str(error)
         })
+        # Intentional fall-through
+
+    try:
         return register_certificate(decoded_certificate.decode('ascii'),
                                     get_thingpress_tags(), session)
+    except ClientError as error:
+        logger.error({
+            "message": "Certificate could not be created.",
+            "error": str(error)
+        })
+        raise
 
 def get_thingpress_tags() -> list:
     """Generate standard Thingpress tags for IoT objects

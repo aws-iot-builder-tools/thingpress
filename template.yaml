@@ -281,7 +281,7 @@ Resources:
             - Effect: Allow
               Action:
                 - s3:PutObject
-              Resource: !Sub "arn:aws:s3:::cloudformation-custom-resource-response-${AWS::Region}/*"
+              Resource: !Sub "arn:aws:s3:::*"
       Environment:
         Variables:
           LOG_LEVEL: INFO
