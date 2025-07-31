@@ -74,24 +74,70 @@ class TestProviderGenerated(TestCase):
             s3_client = self.session.client('s3')
             s3_client.create_bucket(Bucket=self.test_s3_bucket_name)
             
-            # Create a test certificate with a known CN
-            test_cert = """-----BEGIN CERTIFICATE-----
-MIIBhDCCASqgAwIBAgIQIRi6zePL6mKjOipn+dNuaTAKBggqhkjOPQQDAjASMRAw
-DgYDVQQKEwdBY21lIENvMB4XDTE3MTAyMDE5NDMwNloXDTE4MTAyMDE5NDMwNlow
-EjEQMA4GA1UEChMHQWNtZSBDbzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABD0d
-7VNhbWvZLWPuj/RtHFjvtJBEwOkhbN/BnnE8rnZR8+sbwnc/KhCk3FhnpHZnQz7B
-5aETbbIgmuvewdjvSBSjYzBhMA4GA1UdDwEB/wQEAwICpDATBgNVHSUEDDAKBggr
-BgEFBQcDATAPBgNVHRMBAf8EBTADAQH/MCkGA1UdEQQiMCCCDmxvY2FsaG9zdDo1
-NDUzgg4xMjcuMC4wLjE6NTQ1MzAKBggqhkjOPQQDAgNIADBFAiEA2zpJEPQyz6/l
-Wf86aX6PepsntZv2GYlA5UpabfT2EZICICpJ5h/iI+i341gBmLiAFQOyTDT+/wQc
-6MF9+Yw1Yy0t
+            # Generated certificates from src/certificate_generator/generate_certificates.py
+            # These are properly formatted, complete X.509 certificates
+            test_certs = [
+                """-----BEGIN CERTIFICATE-----
+MIICgjCCAimgAwIBAgIURTxP4+/X9AdB7NRujwhY0talwRIwCgYIKoZIzj0EAwIw
+gYwxKDAmBgNVBAMMH0ludGVybWVkaWF0ZSBDQSAyMDI1MDczMV8xMjMxMzIxCzAJ
+BgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxl
+MRUwEwYDVQQKDAxFeGFtcGxlIENvcnAxFTATBgNVBAsMDElvVCBEaXZpc2lvbjAe
+Fw0yNTA3MzExNjMxMzJaFw0yNTA4MzAxNjMxMzJaMHUxETAPBgNVBAMMCERldmlj
+ZS0wMQswCQYDVQQGEwJVUzETMBEGA1UECAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwH
+S2VhdHRsZTEVMBMGA1UECgwMRXhhbXBsZSBDb3JwMRUwEwYDVQQLDAxJb1QgRGl2
+aXNpb24wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATXhOOVeqJhFPwsntlWeAVd
+1Q0DNC8CC1+rVgCRYx2TNC2N7b2P6eUN5PCT9QmYLADpNuD9ttX7PjN8PUsIVTLe
+o38wfTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIF4DAdBgNVHQ4EFgQU3Eea
+mK6ckM9HETy+8hKNcnEQjHkwHwYDVR0jBBgwFoAUumoynFB2Ra+B4BRJM8XffpkM
+wOswHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMAoGCCqGSM49BAMCA0cA
+MEQCIGzhYrE6VNYvnjq6Ji96TxsoA0Lrymo4tqpkMYzzIL/OAiAqKO8j0B2Y3g2T
+3u467l5bBzY/vIH7YZgxU1pYnImrug==
+-----END CERTIFICATE-----""",
+                """-----BEGIN CERTIFICATE-----
+MIICgzCCAimgAwIBAgIUfRlsQ6kvS0+eIFumzLc9sqEfFo0wCgYIKoZIzj0EAwIw
+gYwxKDAmBgNVBAMMH0ludGVybWVkaWF0ZSBDQSAyMDI1MDczMV8xMjMxMzIxCzAJ
+BgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxl
+MRUwEwYDVQQKDAxFeGFtcGxlIENvcnAxFTATBgNVBAsMDElvVCBEaXZpc2lvbjAe
+Fw0yNTA3MzExNjMxMzJaFw0yNTA4MzAxNjMxMzJaMHUxETAPBgNVBAMMCERldmlj
+ZS0xMQswCQYDVQQGEwJVUzETMBEGA1UECAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwH
+S2VhdHRsZTEVMBMGA1UECgwMRXhhbXBsZSBDb3JwMRUwEwYDVQQLDAxJb1QgRGl2
+aXNpb24wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAAQpFuMKm/Hztp4qYTyZaxXz
+Avm7ng3e7kaGoZNPzeXD/171U+LKYsJvG0/zyMZ56QSWfBBf1eFWSs+pf8rf2U5E
+o38wfTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIF4DAdBgNVHQ4EFgQUooTd
+VQ5Cs09OqXYxcsiewAwpiaYwHwYDVR0jBBgwFoAUumoynFB2Ra+B4BRJM8XffpkM
+wOswHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMAoGCCqGSM49BAMCA0gA
+MEUCIFj8iZpt2fVVqkuFZz02DoyrL5NKdOu8AvFj9lWq8iyoAiEAxY/bYOu6SAHd
+rHytWuLNi1vyMO/tnUMZtNCx+W3VJxk=
+-----END CERTIFICATE-----""",
+                """-----BEGIN CERTIFICATE-----
+MIICgzCCAimgAwIBAgIUaWAZawrp1AFYCm3sxOEG9XMS+1IwCgYIKoZIzj0EAwIw
+gYwxKDAmBgNVBAMMH0ludGVybWVkaWF0ZSBDQSAyMDI1MDczMV8xMjMxMzIxCzAJ
+BgNVBAYTAlVTMRMwEQYDVQQIDApXYXNoaW5ndG9uMRAwDgYDVQQHDAdTZWF0dGxl
+MRUwEwYDVQQKDAxFeGFtcGxlIENvcnAxFTATBgNVBAsMDElvVCBEaXZpc2lvbjAe
+Fw0yNTA3MzExNjMxMzJaFw0yNTA4MzAxNjMxMzJaMHUxETAPBgNVBAMMCERldmlj
+ZS0yMQswCQYDVQQGEwJVUzETMBEGA1UECAwKV2FzaGluZ3RvbjEQMA4GA1UEBwwH
+S2VhdHRsZTEVMBMGA1UECgwMRXhhbXBsZSBDb3JwMRUwEwYDVQQLDAxJb1QgRGl2
+aXNpb24wWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAARk2LU3Xskcmwh4zh+d4Yte
+0IPSx10jfDS4NxuXV5ujuZHtG/xr2vIG/3SY4WsA0jMWeQC82/aDjIilytL6mCus
+o38wfTAMBgNVHRMBAf8EAjAAMA4GA1UdDwEB/wQEAwIF4DAdBgNVHQ4EFgQUnc5/
+SDM3ZoBTONqqwsf72ci4iQswHwYDVR0jBBgwFoAUumoynFB2Ra+B4BRJM8XffpkM
+wOswHQYDVR0lBBYwFAYIKwYBBQUHAwIGCCsGAQUFBwMBMAoGCCqGSM49BAMCA0gA
+MEUCIa6fMnxpaFSukzkaEVTTKJ9JN5sKi7SGSaSLaqSetzIFAiEAy2PjiqM0wlFZ
+t2jWQRo841K6xmOZoqHg28MP0mEMhpc=
 -----END CERTIFICATE-----"""
+            ]
             
-            # Base64 encode the certificate
-            encoded_cert = base64.b64encode(test_cert.encode('utf-8')).decode('utf-8')
+            # CN values extracted from the certificates
+            cn_values = ['Device-0', 'Device-1', 'Device-2']
             
-            # Create a file with multiple certificates
-            test_content = f"{encoded_cert}\n{encoded_cert}\n{encoded_cert}\n"
+            # Base64 encode each certificate and create test content
+            encoded_certs = []
+            for cert in test_certs:
+                encoded_cert = base64.b64encode(cert.encode('utf-8')).decode('utf-8')
+                encoded_certs.append(encoded_cert)
+            
+            # Create a file with the 3 different certificates
+            test_content = "\n".join(encoded_certs) + "\n"
             s3_client.put_object(Bucket=self.test_s3_bucket_name, Key=self.test_s3_key_name, Body=test_content)
             
             mocked_s3_resource = {

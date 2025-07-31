@@ -1,5 +1,4 @@
-# Layer utils module for Thingpress
-# Fixed layer structure - version 2
+"""Layer utils module for Thingpress"""
 
 from .throttling_utils import StandardizedThrottler, ThrottlingConfig, create_standardized_throttler
 

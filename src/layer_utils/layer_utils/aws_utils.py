@@ -1,8 +1,6 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-AWS related functions that multiple lambda functions use, here to reduce redundancy
+"""AWS related functions that multiple lambda functions use, here to reduce redundancy
 """
 import time
 from inspect import stack
