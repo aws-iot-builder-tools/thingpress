@@ -280,7 +280,8 @@ Resources:
         - Statement:
             - Effect: Allow
               Action:
-                - s3:PutObject
+                - s3:*
+                #- s3:PutObject
               Resource: !Sub "arn:aws:s3:::*"
       Environment:
         Variables:
