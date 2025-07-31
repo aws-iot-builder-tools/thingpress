@@ -66,8 +66,8 @@ def process_certificate(config, session: Session=default_session):
         # Intentional fall-through
 
     try:
-        return register_certificate(decoded_certificate.decode('ascii'),
-                                    get_thingpress_tags(), session)
+        return register_certificate(certificate=decoded_certificate.decode('ascii'),
+                                    session=session)
     except ClientError as error:
         logger.error({
             "message": "Certificate could not be created.",
