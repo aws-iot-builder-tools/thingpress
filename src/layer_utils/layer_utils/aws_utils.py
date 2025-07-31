@@ -466,13 +466,11 @@ def get_certificate_arn(certificate_id: str, session: Session=default_session) -
         raise error
 
 def register_certificate(certificate: str,
-                         tags: list|None=None,
                          session: Session=default_session) -> str:
     """ Register an AWS IoT certificate without a registered CA 
     
     Args:
         certificate: The certificate PEM string
-        tags: Resource tags list
         session: Boto3 session (when tags are provided)
         
     Returns:
@@ -486,19 +484,6 @@ def register_certificate(certificate: str,
             status='ACTIVE')
 
         certificate_id = response.get("certificateId")
-
-        # Apply tags if provided
-        if tags and len(tags) > 0:
-            try:
-                certificate_arn = get_certificate_arn(certificate_id, session)
-                iot_client.tag_resource(
-                    resourceArn=certificate_arn,
-                    tags=tags
-                )
-                logger.info("Applied %d tags to certificate %s", len(tags), certificate_id)
-            except ClientError as tag_error:
-                logger.warning("Failed to tag certificate %s: %s", certificate_id, str(tag_error))
-                # Don't fail the entire operation for tagging issues
 
         return certificate_id
     except ClientError as error:
@@ -602,7 +587,6 @@ def process_policy(policy_name: str,
 
 def process_thing(thing_name: str,
                   certificate_id: str,
-                  tags: list|None = None,
                   session: Session=default_session) -> None:
     """Creates the IoT Thing if it does not already exist and attaches certificate
     
@@ -629,19 +613,6 @@ def process_thing(thing_name: str,
             create_params = {'thingName': thing_name}
             iot_client.create_thing(**create_params)
             logger.info("Created thing %s", thing_name)
-
-            # Apply tags separately if provided
-            if tags and len(tags) > 0:
-                try:
-                    thing_arn = get_thing_arn(thing_name, session)
-                    iot_client.tag_resource(
-                        resourceArn=thing_arn,
-                        tags=tags
-                    )
-                    logger.info("Applied %d tags to thing %s", len(tags), thing_name)
-                except ClientError as tag_error:
-                    logger.warning("Failed to tag thing %s: %s", thing_name, str(tag_error))
-                    # Don't fail the entire operation for tagging issues
 
         except ClientError as err_create:
             boto_exception(err_create, f"Thing {thing_name} creation failed")

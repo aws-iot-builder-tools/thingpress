@@ -96,12 +96,8 @@ def process_sqs(config, session: Session=default_session):
         "certificate_id": certificate_id
     })
 
-    # Create standard Thingpress tags
-    thingpress_tags = get_thingpress_tags()
-
     process_thing(config.get(ImporterMessageKey.THING_NAME.value),
                   certificate_id,
-                  tags=thingpress_tags,
                   session=session)
 
     process_policy(config.get(ImporterMessageKey.POLICY_NAME.value),
