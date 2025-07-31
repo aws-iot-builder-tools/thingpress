@@ -9,126 +9,12 @@ import json
 
 import boto3
 from aws_lambda_powertools import Logger
+from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import CloudFormationCustomResourceEvent
 
 from . import cfnresponse
 
 logger = Logger()
-
-def disable_bucket_notifications(bucket_name):
-    """
-    Disable all notifications on the S3 bucket.
-
-    Args:
-        bucket_name (str): Name of the S3 bucket
-
-    Returns:
-        dict: The previous notification configuration (for restoration)
-    """
-    logger.info("Disabling notifications for bucket %s", bucket_name)
-    s3_client = boto3.client('s3')
-
-    # Get the current notification configuration
-    try:
-        response = s3_client.get_bucket_notification_configuration(
-            Bucket=bucket_name
-        )
-
-        # Store the current configuration for later restoration
-        current_config = {}
-        if 'LambdaFunctionConfigurations' in response:
-            current_config['LambdaFunctionConfigurations'] = (
-                response['LambdaFunctionConfigurations']
-            )
-        if 'TopicConfigurations' in response:
-            current_config['TopicConfigurations'] = response['TopicConfigurations']
-        if 'QueueConfigurations' in response:
-            current_config['QueueConfigurations'] = response['QueueConfigurations']
-
-        # Clear all notifications
-        s3_client.put_bucket_notification_configuration(
-            Bucket=bucket_name,
-            NotificationConfiguration={}
-        )
-
-        logger.info("Successfully disabled notifications for bucket %s", bucket_name)
-        return current_config
-    except Exception as e:
-        logger.error("Error disabling bucket notifications: %s", str(e))
-        # Return empty config if we couldn't get the current one
-        return {}
-
-def configure_bucket_notifications(bucket_name, notification_config=None, lambda_arn=None):
-    """
-    Configure notifications on the S3 bucket.
-
-    Args:
-        bucket_name (str): Name of the S3 bucket
-        notification_config (dict): Notification configuration to apply
-        lambda_arn (str): ARN of the Lambda function for default configuration
-
-    Returns:
-        bool: True if successful, False otherwise
-    """
-    logger.info("Configuring notifications for bucket %s", bucket_name)
-    s3_client = boto3.client('s3')
-
-    try:
-        if notification_config:
-            # Transform the configuration to match S3 API expectations
-            s3_config = {}
-
-            # Handle LambdaFunctionConfigurations
-            if 'LambdaFunctionConfigurations' in notification_config:
-                s3_config['LambdaFunctionConfigurations'] = []
-                for lambda_config in notification_config['LambdaFunctionConfigurations']:
-                    s3_lambda_config = {
-                        'LambdaFunctionArn': lambda_config['LambdaFunctionArn'],
-                        'Events': (lambda_config.get('Events', [lambda_config.get('Event', 's3:ObjectCreated:*')])
-                                 if isinstance(lambda_config.get('Events', lambda_config.get('Event')), list)
-                                 else [lambda_config.get('Events', lambda_config.get('Event', 's3:ObjectCreated:*'))])
-                    }
-
-                    # Handle Filter configuration
-                    if 'Filter' in lambda_config:
-                        s3_lambda_config['Filter'] = lambda_config['Filter']
-
-                    s3_config['LambdaFunctionConfigurations'].append(s3_lambda_config)
-
-            # Handle other configuration types if needed
-            if 'TopicConfigurations' in notification_config:
-                s3_config['TopicConfigurations'] = notification_config['TopicConfigurations']
-            if 'QueueConfigurations' in notification_config:
-                s3_config['QueueConfigurations'] = notification_config['QueueConfigurations']
-
-            # Apply the transformed notification configuration
-            logger.info("Applying notification configuration: %s", json.dumps(s3_config))
-            s3_client.put_bucket_notification_configuration(
-                Bucket=bucket_name,
-                NotificationConfiguration=s3_config
-            )
-        elif lambda_arn:
-            # Apply a default configuration with the provided Lambda ARN
-            s3_client.put_bucket_notification_configuration(
-                Bucket=bucket_name,
-                NotificationConfiguration={
-                    'LambdaFunctionConfigurations': [{
-                        'LambdaFunctionArn': lambda_arn,
-                        'Events': ['s3:ObjectCreated:*']
-                    }]
-                }
-            )
-        else:
-            # Clear all notifications
-            s3_client.put_bucket_notification_configuration(
-                Bucket=bucket_name,
-                NotificationConfiguration={}
-            )
-
-        logger.info("Successfully configured notifications for bucket %s", bucket_name)
-        return True
-    except Exception as e:
-        logger.error("Error configuring bucket notifications: %s", str(e))
-        return False
 
 def deploy_certificates(bucket_name, certificates):
     """
@@ -166,7 +52,8 @@ def deploy_certificates(bucket_name, certificates):
         logger.error("Error deploying certificates: %s", str(e))
         return False
 
-def handle_s3_notification_config(event, context):
+def handle_s3_notification_config(event: CloudFormationCustomResourceEvent,
+                                  context: LambdaContext):
     """
     Handle S3 bucket notification configuration.
 
@@ -202,7 +89,7 @@ def handle_s3_notification_config(event, context):
         logger.error("Error handling S3 notification config: %s", str(e))
         return False
 
-def lambda_handler(event, context):
+def lambda_handler(event: dict, context: LambdaContext):
     """
     Deploy Microchip verifier certificates to S3 bucket or configure S3 notifications.
 
@@ -218,22 +105,9 @@ def lambda_handler(event, context):
         None: Sends response to CloudFormation via cfnresponse
     """
     logger.info("Certificate Deployer: Received event: %s", json.dumps(event))
+    custom_resource_event = CloudFormationCustomResourceEvent(event)
 
     try:
-        # Check if this is a notification configuration request
-        if 'NotificationConfiguration' in event.get('ResourceProperties', {}):
-            # Handle S3 notification configuration
-            success = handle_s3_notification_config(event, context)
-            if success:
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, {
-                    'Message': 'Successfully configured S3 notifications'
-                })
-            else:
-                cfnresponse.send(event, context, cfnresponse.FAILED, {
-                    'Message': 'Failed to configure S3 notifications'
-                })
-            return
-
         # Handle certificate deployment
         bucket_name = event['ResourceProperties']['BucketName']
         certificates = event['ResourceProperties']['Certificates']
@@ -242,12 +116,12 @@ def lambda_handler(event, context):
             success = deploy_certificates(bucket_name, certificates)
 
             if success:
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
                     'Message': (f'Successfully deployed {len(certificates)} '
                               f'certificates to {bucket_name}')
                 })
             else:
-                cfnresponse.send(event, context, cfnresponse.FAILED, {
+                cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
                     'Message': f'Failed to deploy certificates to {bucket_name}'
                 })
 
@@ -255,26 +129,26 @@ def lambda_handler(event, context):
             success = deploy_certificates(bucket_name, certificates)
 
             if success:
-                cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+                cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
                     'Message': (f'Successfully updated {len(certificates)} '
                               f'certificates in {bucket_name}')
                 })
             else:
-                cfnresponse.send(event, context, cfnresponse.FAILED, {
+                cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
                     'Message': f'Failed to update certificates in {bucket_name}'
                 })
 
         elif event['RequestType'] == 'Delete':
             # No need to delete the certificates, as the bucket will be deleted by CloudFormation
-            cfnresponse.send(event, context, cfnresponse.SUCCESS, {
+            cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
                 'Message': 'No action needed for Delete'
             })
         else:
-            cfnresponse.send(event, context, cfnresponse.FAILED, {
+            cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
                 'Message': f'Unsupported request type: {event["RequestType"]}'
             })
     except Exception as e:
         logger.error("Certificate Deployer Error: %s", str(e))
-        cfnresponse.send(event, context, cfnresponse.FAILED, {
+        cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
             'Message': f'Certificate Deployer Error: {str(e)}'
         })
