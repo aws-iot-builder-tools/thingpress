@@ -1,67 +1,45 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-Lambda function to import certificate, construct IoT Thing, and associate
+"""Lambda function to import certificate, construct IoT Thing, and associate
 the Thing, Policy, Certificate, Thing Type, and Thing Group
 """
 import hashlib
-import os
 import random
 from json import loads
 
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.idempotency import idempotent_function
-from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
-    DynamoDBPersistenceLayer
+
 from aws_lambda_powertools.utilities.typing import LambdaContext
+from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
 from layer_utils.aws_utils import (get_certificate, process_policy, process_thing,
                                    process_thing_group, process_thing_type, register_certificate)
 from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
+from layer_utils.aws_utils import ImporterMessageKey, powertools_idempotency_environ
 
 # Initialize Logger and Idempotency
 logger = Logger(service="bulk_importer")
 default_session: Session = Session()
 
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_TABLE") is None:
-    raise ValueError("Environment variable POWERTOOLS_IDEMPOTENCY_TABLE not set.")
-POWERTOOLS_IDEMPOTENCY_TABLE: str = os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"]
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS") is None:
-    POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = 3600
-POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = int(
-    os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS", 3600))
+persistence_layer, idempotency_config = powertools_idempotency_environ()
 
-
-# Initialize persistence layer for idempotency
-persistence_layer = DynamoDBPersistenceLayer(
-    table_name=POWERTOOLS_IDEMPOTENCY_TABLE,
-    key_attr="id",
-    expiry_attr="expiration",
-    status_attr="status",
-    data_attr="data",
-    validation_key_attr="validation"
-)
-
-# Configure idempotency with jitter for high-volume processing
-idempotency_config = IdempotencyConfig(
-    # Use jitter_key_generator for jitter instead of event_key_jitter
-    expires_after_seconds=POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS
-)
-
-def certificate_key_generator(event, context):
+def certificate_key_generator(event: dict, _context):
     """Generate a unique key based on certificate content and thing name"""
-    if isinstance(event, dict) and "certificate" in event and "thing" in event:
-        # Use certificate hash and thing name as the key
-        cert_hash = hashlib.sha256(event["certificate"].encode()).hexdigest()
-        # Add some randomness to prevent hot keys
+    if not ImporterMessageKey.CERTIFICATE.value in event:
+        return None
 
-        jitter = random.random() * 0.3  # 30% jitter
-        jitter_str = f"{jitter:.5f}"
-        return f"{event['thing']}:{cert_hash[:16]}:{jitter_str}"
-    return None
+    if not ImporterMessageKey.THING_NAME.value in event:
+        return None
+
+    # Use certificate hash and thing name as the key
+    cert_hash = hashlib.sha256(event[ImporterMessageKey.CERTIFICATE.value].encode()).hexdigest()
+
+    # Add some randomness to prevent hot keys
+    jitter = random.random() * 0.3  # 30% jitter
+    jitter_str = f"{jitter:.5f}"
+    return f"{event[ImporterMessageKey.THING_NAME.value]}:{cert_hash[:16]}:{jitter_str}"
 
 @idempotent_function(
     persistence_store=persistence_layer,
@@ -69,10 +47,6 @@ def certificate_key_generator(event, context):
     event_key_generator=certificate_key_generator,
     data_keyword_argument="config"
 )
-#TODO with idempotency added, may no longer need call to get_certificate.
-#     in fact doing get_certificate on no cache hit might be detrimental
-#     in the extremely improbable case of finding a non import certificate
-#     with the same fingerprint
 def process_certificate(config, session: Session=default_session):
     """ Imports the certificate to IoT Core """
     payload = config['certificate']
@@ -115,34 +89,46 @@ def process_sqs(config, session: Session=default_session):
 
     logger.info({
         "message": "Processing thing and associations",
-        "thing_name": config.get('thing'),
+        "thing_name": config.get(ImporterMessageKey.THING_NAME.value),
         "certificate_id": certificate_id
     })
 
     # Create standard Thingpress tags
     thingpress_tags = get_thingpress_tags()
 
-    process_thing(config.get('thing'), certificate_id, tags=thingpress_tags, session=session)
-    process_policy(config.get('policy_name'), certificate_id, session)
-    process_thing_group(config.get('thing_group_arn'), config.get('thing'), session)
-    process_thing_type(config.get('thing'), config.get('thing_type_name'), session)
+    process_thing(config.get(ImporterMessageKey.THING_NAME.value),
+                  certificate_id,
+                  tags=thingpress_tags,
+                  session=session)
+
+    process_policy(config.get(ImporterMessageKey.POLICY_NAME.value),
+                   certificate_id,
+                   session=session)
+
+    process_thing_group(config.get(ImporterMessageKey.THING_GROUP_ARN.value),
+                        config.get(ImporterMessageKey.THING_NAME.value),
+                        session=session)
+
+    process_thing_type(config.get(ImporterMessageKey.THING_NAME.value),
+                       config.get(ImporterMessageKey.THING_TYPE_NAME.value),
+                       session=session)
 
     return {
         "certificate_id": certificate_id,
-        "thing_name": config.get('thing')
+        "thing_name": config.get(ImporterMessageKey.THING_NAME.value)
     }
 
 def lambda_handler(event: dict,
                    _context: LambdaContext) -> dict:
     """Lambda function main entry point"""
+    sqs_event = SQSEvent(event)
 
-    for record in event['Records']:
-        if record.get('eventSource') == 'aws:sqs':
-            config = loads(record["body"])
-            logger.info({
-                "message": "Processing SQS message",
-                "thing_name": config.get('thing')
-            })
-            process_sqs(config)
+    for record in sqs_event.records:
+        config = loads(record.body)
+        logger.info({
+            "message": "Processing SQS message",
+            "thing_name": config.get(ImporterMessageKey.THING_NAME.value)
+        })
+        process_sqs(config)
 
     return event

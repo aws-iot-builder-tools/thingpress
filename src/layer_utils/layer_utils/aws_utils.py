@@ -7,12 +7,16 @@ AWS related functions that multiple lambda functions use, here to reduce redunda
 import time
 from inspect import stack
 from io import BytesIO
+from os import environ
 from json import dumps
+from enum import Enum
 from logging import getLogger
 from boto3 import Session
 from botocore.config import Config
 from botocore.exceptions import ClientError
-
+from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
+from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
+    DynamoDBPersistenceLayer
 from .circuit_state import (CircuitOpenError, circuit_is_open, record_failure, reset_circuit,
                             with_circuit_breaker)
 
@@ -21,6 +25,22 @@ logger.setLevel("INFO")
 
 client_cache: dict = {}
 default_session: Session = Session()
+
+# These enums probably deserve their own module
+class ProviderMessageKey(Enum):
+    """SQS message keys expected by providers"""
+    OBJECT_BUCKET = 'bucket'
+    OBJECT_KEY = 'key'
+    THING_GROUP_ARN = 'thing_group_arn'
+    THING_TYPE_NAME = 'thing_type_name'
+    POLICY_NAME = 'policy_name'
+class ImporterMessageKey(Enum):
+    """SQS message keys expected by bulk importer"""
+    CERTIFICATE = 'certificate'
+    THING_NAME = 'thing'
+    THING_GROUP_ARN = 'thing_group_arn'
+    THING_TYPE_NAME = 'thing_type_name'
+    POLICY_NAME = 'policy_name'
 
 def client_config():
     """ Default configuration for each boto3 client """
@@ -835,6 +855,35 @@ def cleanup_thingpress_objects(dry_run: bool = True, session: Session=default_se
         logger.error(error_msg)
 
     return results
+
+def powertools_idempotency_environ():
+    if environ.get("POWERTOOLS_IDEMPOTENCY_TABLE") is None:
+        raise ValueError("Environment variable POWERTOOLS_IDEMPOTENCY_TABLE not set.")
+
+    powertools_idempotency_table: str = environ["POWERTOOLS_IDEMPOTENCY_TABLE"]
+
+    if environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS") is None:
+        POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = 3600
+    else:
+        POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = int(
+            environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS", 3600))
+
+    # Initialize persistence layer for idempotency
+    persistence_layer = DynamoDBPersistenceLayer(
+        table_name=powertools_idempotency_table,
+        key_attr="id",
+        expiry_attr="expiration",
+        status_attr="status",
+        data_attr="data",
+        validation_key_attr="validation"
+    )
+
+    # Configure idempotency with jitter for high-volume processing
+    idempotency_config = IdempotencyConfig(
+        # Use jitter_key_generator for jitter instead of event_key_jitter
+        expires_after_seconds=POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS
+    )
+    return persistence_layer, idempotency_config
 
 def boto_errorcode(e: ClientError) -> str:
     """ Consolidate checks on typed dict having optional keys """

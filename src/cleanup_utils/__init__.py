@@ -1,5 +1,4 @@
-"""
-Thingpress Cleanup Utilities
+"""Thingpress Cleanup Utilities
 
 This package provides unified cleanup functionality for Thingpress resources
 across different environments (integration tests, standalone scripts, etc.).

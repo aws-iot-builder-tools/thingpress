@@ -11,44 +11,21 @@ import os
 from typing import Any, Dict
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
-    DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.cert_utils import get_cn
 from layer_utils.throttling_utils import create_standardized_throttler
+from layer_utils.aws_utils import powertools_idempotency_environ
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_generated")
 default_session: Session = Session()
 
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_TABLE") is None:
-    raise ValueError("Environment variable POWERTOOLS_IDEMPOTENCY_TABLE not set.")
-POWERTOOLS_IDEMPOTENCY_TABLE: str = os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"]
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS") is None:
-    POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = 3600
-POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = int(
-    os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS", 3600))
+persistence_layer, idempotency_config = powertools_idempotency_environ()
 
-# Initialize persistence layer for idempotency
-persistence_layer = DynamoDBPersistenceLayer(
-    table_name=POWERTOOLS_IDEMPOTENCY_TABLE,
-    key_attr="id",
-    expiry_attr="expiration",
-    status_attr="status",
-    data_attr="data",
-    validation_key_attr="validation"
-)
-
-# Configure idempotency
-idempotency_config = IdempotencyConfig(
-    expires_after_seconds=POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS
-)
-
-def file_key_generator(event, context):
+def file_key_generator(event, _context):
     """Generate a unique key based on S3 bucket and key"""
     if isinstance(event, dict) and "bucket" in event and "key" in event:
         # Use bucket and key as the idempotency key

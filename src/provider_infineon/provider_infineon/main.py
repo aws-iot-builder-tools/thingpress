@@ -17,50 +17,16 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
-from layer_utils.aws_utils import boto_exception, verify_queue
-
-# Handle imports for both Lambda and unit test environments
-try:
-    # Try Lambda environment first - flattened structure
-    from provider_infineon.manifest_handler import invoke_export, verify_certtype
-except ImportError:
-    try:
-        # Try unit test environment - nested structure
-        from .manifest_handler import invoke_export, verify_certtype
-    except ImportError:
-        # Last resort - add current directory to path and try again
-        current_dir = os.path.dirname(os.path.abspath(__file__))
-        sys.path.insert(0, current_dir)
-        from manifest_handler import invoke_export, verify_certtype
+from layer_utils.aws_utils import boto_exception, verify_queue, powertools_idempotency_environ
+from provider_infineon.manifest_handler import invoke_export, verify_certtype
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_infineon")
 default_session: Session = Session()
 
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_TABLE") is None:
-    raise ValueError("Environment variable POWERTOOLS_IDEMPOTENCY_TABLE not set.")
-POWERTOOLS_IDEMPOTENCY_TABLE: str = os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"]
-if os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS") is None:
-    POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = 3600
-POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: int = int(
-    os.environ.get("POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS", 3600))
+persistence_layer, idempotency_config = powertools_idempotency_environ()
 
-# Initialize persistence layer for idempotency
-persistence_layer = DynamoDBPersistenceLayer(
-    table_name=POWERTOOLS_IDEMPOTENCY_TABLE,
-    key_attr="id",
-    expiry_attr="expiration",
-    status_attr="status",
-    data_attr="data",
-    validation_key_attr="validation"
-)
-
-# Configure idempotency
-idempotency_config = IdempotencyConfig(
-    expires_after_seconds=POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS
-)
-
-def file_key_generator(event, context):
+def file_key_generator(event, _context):
     """Generate a unique key based on S3 bucket and key"""
     if isinstance(event, dict) and "bucket" in event and "key" in event:
         # Use bucket and key as the idempotency key
