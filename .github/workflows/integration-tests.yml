@@ -82,7 +82,7 @@ jobs:
           echo "🚀 Deploying Thingpress stack for integration testing..."
           echo "Stack name: ${{ env.STACK_NAME }}"
           echo "Region: ${{ env.AWS_REGION }}"
-          
+          sam build --parallel
           # Deploy the stack
           sam deploy \
             --stack-name "${{ env.STACK_NAME }}" \
@@ -139,7 +139,7 @@ jobs:
           # Clean up any test-generated IoT resources, certificates, etc.
           chmod +x scripts/cleanup-integration-test.sh
           ./scripts/cleanup-integration-test.sh \
-            --stack-prefix "thingpress-test" \
+            --stack-prefix "thingpress-integration-test" \
             --region "${{ env.AWS_REGION }}" || true
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
