@@ -12,10 +12,12 @@ import base64
 from unittest import TestCase
 from unittest.mock import patch, MagicMock
 from boto3 import _get_default_session
+from botocore.exceptions import ClientError
 from moto import mock_aws
 
 from src.certificate_deployer.certificate_deployer.main import (
     deploy_certificates,
+    remove_certificates,
     lambda_handler
 )
 import src.certificate_deployer.certificate_deployer.cfnresponse as cfnresponse
@@ -242,3 +244,112 @@ class TestCertificateDeployer(TestCase):
         args = mock_cfn_send.call_args
         
         self.assertEqual(args[0][2], cfnresponse.FAILED)  # status
+
+    def test_remove_certificates_success(self):
+        """Test successful certificate removal"""
+        # Deploy certificates first
+        deploy_certificates(self.test_bucket_name, self.sample_certificates)
+        
+        # Remove certificates
+        certificate_keys = list(self.sample_certificates.keys())
+        result = remove_certificates(self.test_bucket_name, certificate_keys)
+        
+        self.assertTrue(result)
+        
+        # Verify certificates were removed
+        s3_client = self.session.client('s3')
+        for cert_key in certificate_keys:
+            with self.assertRaises(ClientError):
+                s3_client.get_object(Bucket=self.test_bucket_name, Key=cert_key)
+
+    def test_remove_certificates_nonexistent_objects(self):
+        """Test removing certificates that don't exist (should succeed)"""
+        certificate_keys = ["nonexistent1.crt", "nonexistent2.crt"]
+        result = remove_certificates(self.test_bucket_name, certificate_keys)
+        
+        self.assertTrue(result)  # Should succeed even if objects don't exist
+
+    def test_remove_certificates_nonexistent_bucket(self):
+        """Test removing certificates from nonexistent bucket (should fail)"""
+        certificate_keys = list(self.sample_certificates.keys())
+        result = remove_certificates("nonexistent-bucket", certificate_keys)
+        
+        self.assertFalse(result)
+
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
+    def test_lambda_handler_delete_success(self, mock_cfn_send):
+        """Test Lambda handler Delete request with certificate removal"""
+        mock_context = self._create_mock_context()
+        
+        # Deploy certificates first
+        deploy_certificates(self.test_bucket_name, self.sample_certificates)
+        
+        # Create delete event
+        delete_event = self.sample_cfn_event.copy()
+        delete_event['RequestType'] = 'Delete'
+        
+        lambda_handler(delete_event, mock_context)
+        
+        # Verify success response
+        mock_cfn_send.assert_called_once()
+        args = mock_cfn_send.call_args
+        
+        self.assertEqual(args[0][2], cfnresponse.SUCCESS)  # status
+        
+        # Verify certificates were removed
+        s3_client = self.session.client('s3')
+        for cert_key in self.sample_certificates.keys():
+            with self.assertRaises(ClientError):
+                s3_client.get_object(Bucket=self.test_bucket_name, Key=cert_key)
+
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
+    def test_lambda_handler_delete_failure(self, mock_cfn_send):
+        """Test Lambda handler Delete request failure handling"""
+        mock_context = self._create_mock_context()
+        
+        # Create delete event with nonexistent bucket
+        delete_event = self.sample_cfn_event.copy()
+        delete_event['RequestType'] = 'Delete'
+        delete_event['ResourceProperties']['BucketName'] = "nonexistent-bucket"
+        
+        lambda_handler(delete_event, mock_context)
+        
+        # Verify failure response
+        mock_cfn_send.assert_called_once()
+        args = mock_cfn_send.call_args
+        self.assertEqual(args[0][2], cfnresponse.FAILED)
+
+    def test_remove_certificates_empty_list(self):
+        """Test removing empty certificate list"""
+        result = remove_certificates(self.test_bucket_name, [])
+        self.assertTrue(result)  # Should succeed with no certificates to remove
+
+    @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
+    def test_full_lifecycle_create_delete(self, mock_cfn_send):
+        """Test complete Create -> Delete lifecycle"""
+        mock_context = self._create_mock_context()
+        
+        # Test Create
+        lambda_handler(self.sample_cfn_event, mock_context)
+        
+        # Verify certificates were deployed
+        s3_client = self.session.client('s3')
+        for cert_key in self.sample_certificates.keys():
+            response = s3_client.get_object(Bucket=self.test_bucket_name, Key=cert_key)
+            self.assertIsNotNone(response['Body'])
+        
+        # Test Delete
+        delete_event = self.sample_cfn_event.copy()
+        delete_event['RequestType'] = 'Delete'
+        
+        lambda_handler(delete_event, mock_context)
+        
+        # Verify certificates were removed
+        for cert_key in self.sample_certificates.keys():
+            with self.assertRaises(ClientError):
+                s3_client.get_object(Bucket=self.test_bucket_name, Key=cert_key)
+        
+        # Verify both calls succeeded
+        self.assertEqual(mock_cfn_send.call_count, 2)
+        for call in mock_cfn_send.call_args_list:
+            self.assertEqual(call[0][2], cfnresponse.SUCCESS)

@@ -8,6 +8,7 @@ import base64
 import json
 
 import boto3
+from botocore.exceptions import ClientError
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import CloudFormationCustomResourceEvent
@@ -50,6 +51,42 @@ def deploy_certificates(bucket_name, certificates):
         return True
     except Exception as e:
         logger.error("Error deploying certificates: %s", str(e))
+        return False
+
+def remove_certificates(bucket_name, certificate_keys):
+    """
+    Remove certificates from S3 bucket during stack deletion.
+    
+    Args:
+        bucket_name (str): Name of the S3 bucket
+        certificate_keys (list): List of certificate keys to remove (≤10)
+        
+    Returns:
+        bool: True if successful, False otherwise
+    """
+    logger.info("Removing %d certificates from bucket %s", len(certificate_keys), bucket_name)
+    s3_client = boto3.client('s3')
+    
+    try:
+        for cert_key in certificate_keys:
+            try:
+                s3_client.delete_object(Bucket=bucket_name, Key=cert_key)
+                logger.info("Removed certificate: %s", cert_key)
+            except ClientError as e:
+                if e.response['Error']['Code'] == 'NoSuchKey':
+                    # Ignore NoSuchKey - certificate already removed
+                    logger.info("Certificate %s already removed or does not exist", cert_key)
+                else:
+                    logger.error("Failed to remove certificate %s: %s", cert_key, str(e))
+                    return False
+            except Exception as e:
+                logger.error("Failed to remove certificate %s: %s", cert_key, str(e))
+                return False
+                
+        logger.info("Successfully removed certificates from %s", bucket_name)
+        return True
+    except Exception as e:
+        logger.error("Error removing certificates: %s", str(e))
         return False
 
 def lambda_handler(event: dict, context: LambdaContext):
@@ -102,10 +139,20 @@ def lambda_handler(event: dict, context: LambdaContext):
                 })
 
         elif event['RequestType'] == 'Delete':
-            # No need to delete the certificates, as the bucket will be deleted by CloudFormation
-            cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
-                'Message': 'No action needed for Delete'
-            })
+            # Remove certificates before bucket deletion
+            certificates = event['ResourceProperties']['Certificates']
+            certificate_keys = list(certificates.keys())
+            
+            success = remove_certificates(bucket_name, certificate_keys)
+            
+            if success:
+                cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
+                    'Message': f'Successfully removed {len(certificate_keys)} certificates from {bucket_name}'
+                })
+            else:
+                cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
+                    'Message': f'Failed to remove certificates from {bucket_name}'
+                })
         else:
             cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
                 'Message': f'Unsupported request type: {event["RequestType"]}'
