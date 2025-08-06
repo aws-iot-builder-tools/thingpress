@@ -130,20 +130,6 @@ jobs:
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
           THINGPRESS_STACK_NAME: ${{ env.STACK_NAME }}
-      
-      - name: Cleanup test artifacts
-        if: always()
-        run: |
-          echo "🧹 Cleaning up test artifacts and temporary resources..."
-          
-          # Clean up any test-generated IoT resources, certificates, etc.
-          chmod +x scripts/cleanup-integration-test.sh
-          ./scripts/cleanup-integration-test.sh \
-            --stack-prefix "thingpress-integration-test" \
-            --region "${{ env.AWS_REGION }}" || true
-        env:
-          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
-      
       - name: Delete test stack
         if: always() && github.event.inputs.keep_stack != 'true'
         run: |
