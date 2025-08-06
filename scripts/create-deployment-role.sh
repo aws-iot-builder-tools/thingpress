@@ -23,13 +23,14 @@ fi
 # Set role name (can be overridden by environment variable)
 ROLE_NAME="${THINGPRESS_ROLE_NAME:-ThingpressDeploymentRole}"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+CONFIGS_DIR=${SCRIPT_DIR}/configs
 
 echo "Creating IAM role for Thingpress deployment..."
 echo "Role name: $ROLE_NAME"
 
 # Create a temporary copy of the trust policy to avoid modifying the original
 TEMP_TRUST_POLICY=$(mktemp)
-cp "$SCRIPT_DIR/thingpress-trust-policy.json" "$TEMP_TRUST_POLICY"
+cp "$CONFIGS_DIR/thingpress-trust-policy.json" "$TEMP_TRUST_POLICY"
 
 # Replace placeholders in the trust policy
 sed -i "s/\${AWS_ACCOUNT_ID}/$AWS_ACCOUNT_ID/g" "$TEMP_TRUST_POLICY"
@@ -47,7 +48,7 @@ echo "Attaching permissions policy to the role..."
 aws iam put-role-policy \
   --role-name "$ROLE_NAME" \
   --policy-name "ThingpressDeploymentPolicy" \
-  --policy-document "file://$SCRIPT_DIR/thingpress-permissions-policy.json"
+  --policy-document "file://$CONFIGS_DIR/thingpress-permissions-policy.json"
 
 # Clean up temporary file
 rm "$TEMP_TRUST_POLICY"
