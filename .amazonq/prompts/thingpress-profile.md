@@ -86,54 +86,7 @@ You are working on the Thingpress AWS IoT administration tool project. Follow th
    c. Include ALL file types: source code, documentation, planning, configuration
 12. Ask for approval to commit files - MANDATORY for ALL changes.
 
-## Security Checks
-Perform comprehensive security checks to detect hardcoded credentials and API keys:
 
-### Search Patterns
-Search for these patterns across ALL files (excluding .aws-sam/, .git/, __pycache__/):
-- AWS Access Keys: `AKIA[0-9A-Z]{16}`
-- AWS Secret Keys: `[A-Za-z0-9+/]{40}`
-- Bedrock API Keys: `AWS_BEARER_TOKEN_BEDROCK|ABSKQmVkcm9ja0FQSUtleS`
-- OpenAI API Keys: `sk-[a-zA-Z0-9]{32,}`
-- Anthropic API Keys: `sk-ant-[a-zA-Z0-9-]{32,}`
-- Generic API Keys: `api_key.*[=:]\s*['\"][^'\"]{20,}['\"]`
-- Bearer Tokens: `Bearer\s+[A-Za-z0-9+/=]{20,}`
-- Private Keys: `-----BEGIN.*PRIVATE KEY-----`
-
-### File Types to Check
-- Source code: `*.py`, `*.js`, `*.ts`, `*.java`, `*.go`
-- Scripts: `*.sh`, `*.bash`, `*.ps1`, `*.bat`
-- Configuration: `*.json`, `*.yaml`, `*.yml`, `*.env`, `*.config`, `*.ini`
-- Documentation: `*.md`, `*.txt`, `*.rst`
-
-### Exclusions
-- Test artifacts in `test/artifacts/` (legitimate test data)
-- AWS SDK examples with `AKIAIOSFODNN7EXAMPLE` (AWS documentation examples)
-- Test environment variables set to `"testing"`
-
-### Action on Detection
-If ANY hardcoded credentials are found:
-1. STOP the workflow immediately
-2. Create a security report in planning/ directory
-3. List all files containing credentials
-4. Do NOT proceed with deployment or commits
-
-## Git Commit Rules
-- **ALWAYS ASK before committing files - NO EXCEPTIONS**
-- **This applies to ALL file types including:**
-  - Source code changes
-  - Documentation updates (README.md, docs/, etc.)
-  - Planning files (planning/, roadmaps, etc.)
-  - Configuration changes
-  - Test files
-  - Any other modifications
-- **NEVER commit temporary/generated files:**
-  - `pylint_report*.json`
-  - `*.pyc`, `__pycache__/`
-  - `.coverage`, `coverage.xml`
-  - Build artifacts, logs, temp files
-- **Only commit source code changes and documentation**
-- **Ask for confirmation** before running `git add` or `git commit`
 
 ## File Management
 - Use `.gitignore` for temporary files
