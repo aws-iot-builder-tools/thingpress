@@ -165,6 +165,7 @@ Resources:
   # CSV file with vendor defined structure.
   ThingpressEspressifManifestBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub thingpress-espressif-${AWS::StackName}
       BucketEncryption:
@@ -183,6 +184,7 @@ Resources:
   # S3 bucket for generated certificates
   ThingpressGeneratedManifestBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub thingpress-generated-${AWS::StackName}
       BucketEncryption:
@@ -202,6 +204,7 @@ Resources:
   # 7-Zip compressed file having embedded compressed files.
   ThingpressInfineonManifestBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub thingpress-infineon-${AWS::StackName}
       BucketEncryption:
@@ -220,6 +223,7 @@ Resources:
   # S3 Bucket for Microchip verification certificates (separate from manifest bucket)
   ThingpressMicrochipVerificationCertsBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub thingpress-microchip-certs-${AWS::StackName}
       BucketEncryption:
@@ -239,6 +243,7 @@ Resources:
   # JSON file with vendor defined structure.
   ThingpressMicrochipManifestBucket:
     Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
     Properties:
       BucketName: !Sub thingpress-microchip-${AWS::StackName}
       BucketEncryption:
