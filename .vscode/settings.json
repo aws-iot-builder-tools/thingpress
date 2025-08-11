@@ -1,9 +1,7 @@
 {
-    "python.analysis.extraPaths": [
-        "${workspaceFolder}/src/layer_utils"
-    ],
     "python.autoComplete.extraPaths": [
-        "${workspaceFolder}/src/layer_utils"
+        "${workspaceFolder}/src/layer_utils",
+        "${workspaceFolder}/test/integration"
     ],
     "python.envFile": "${workspaceFolder}/.env",
     "python.testing.pytestArgs": [

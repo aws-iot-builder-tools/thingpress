@@ -8,7 +8,8 @@
     ],
     "extraPaths": [
         "src",
-        "src/layer_utils"
+        "src/layer_utils",
+        "test/integration"
     ],
     "pythonVersion": "3.13",
     "typeCheckingMode": "basic",
