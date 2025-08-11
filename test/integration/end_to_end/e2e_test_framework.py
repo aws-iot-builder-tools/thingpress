@@ -10,13 +10,14 @@ Tests the complete deployed Thingpress system by:
 """
 
 import os
-import json
+import sys
 import time
-import boto3
 import logging
-from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Any
+import traceback
+from datetime import datetime
 from pathlib import Path
+import boto3
+from integration.cleanup_utils import ThingpressCleanup, CleanupConfig
 
 # Configure logging
 logging.basicConfig(
@@ -26,23 +27,23 @@ logging.basicConfig(
 
 class EndToEndTestFramework:
     """Framework for end-to-end black-box testing of Thingpress"""
-    
+
     def __init__(self, test_name: str, region: str = 'us-east-1'):
         self.test_name = test_name
         self.region = region
         self.test_id = f"{test_name}-{int(time.time())}"
         self.logger = logging.getLogger(f"e2e.{test_name}")
-        
+
         # AWS clients
         self.s3_client = boto3.client('s3', region_name=region)
         self.iot_client = boto3.client('iot', region_name=region)
         self.cloudformation = boto3.client('cloudformation', region_name=region)
         self.logs_client = boto3.client('logs', region_name=region)
         self.sqs_client = boto3.client('sqs', region_name=region)
-        
+
         # Test resources to cleanup
         self.cleanup_resources = []
-        
+
         # Test results
         self.results = {
             'test_name': test_name,
@@ -54,10 +55,10 @@ class EndToEndTestFramework:
             'iot_things_created': [],
             'certificates_processed': 0
         }
-        
+
         # Get deployed resources
         self.resources = self._get_deployed_resources()
-        
+
     def log_step(self, step_name: str, description: str = ""):
         """Log a test step"""
         step = {
@@ -69,139 +70,142 @@ class EndToEndTestFramework:
             'details': {}
         }
         self.results['steps'].append(step)
-        self.logger.info(f"🔄 Starting step: {step_name} - {description}")
+        self.logger.info("🔄 Starting step: %s - %s", step_name, description)
         return step
-        
-    def complete_step(self, step: Dict, success: bool = True, details: Dict = None):
+
+    def complete_step(self, step: dict, success: bool = True, details: dict | None = None):
         """Complete a test step"""
         end_time = datetime.now()
         start_time = datetime.fromisoformat(step['start_time'])
         duration_ms = (end_time - start_time).total_seconds() * 1000
-        
+
         step['success'] = success
         step['duration_ms'] = duration_ms
         step['end_time'] = end_time.isoformat()
         if details:
             step['details'].update(details)
-            
+
         status = "✅" if success else "❌"
-        self.logger.info(f"{status} Completed step: {step['name']} ({duration_ms:.2f}ms)")
-        
-    def _get_deployed_resources(self) -> Dict[str, str]:
+        self.logger.info("%s Completed step: %s (%d:.2fms)",
+                         status, step['name'], duration_ms)
+
+    def _get_deployed_resources(self) -> dict[str, str]:
         """Get deployed Thingpress resources from CloudFormation stack"""
         try:
             # Allow stack name to be configured via environment variable
             stack_name = os.environ.get('THINGPRESS_STACK_NAME', 'sam-app')
             response = self.cloudformation.describe_stacks(StackName=stack_name)
             outputs = response['Stacks'][0]['Outputs']
-            
+
             resources = {}
             for output in outputs:
                 key = output['OutputKey']
                 value = output['OutputValue']
                 resources[key] = value
-                
-            self.logger.info(f"Found {len(resources)} deployed resources")
+
+            self.logger.info("Found %d deployed resources", len(resources))
             return resources
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to get deployed resources: {e}")
+            self.logger.error("Failed to get deployed resources: %s", e)
             raise
-            
+
     def upload_manifest(self, provider: str, manifest_path: str) -> str:
         """Upload a manifest file to the provider's S3 ingest bucket"""
-        
+
         # Get the ingest bucket for the provider
         bucket_key = f"{provider.title()}IngestPoint"
         if bucket_key not in self.resources:
             raise ValueError(f"Ingest bucket not found for {provider}")
-            
+
         bucket = self.resources[bucket_key]
-        
+
         # Create unique key for this test
         file_extension = Path(manifest_path).suffix
         manifest_key = f"e2e-test/{self.test_id}/manifest{file_extension}"
-        
+
         # Upload the file
         with open(manifest_path, 'rb') as f:
             self.s3_client.upload_fileobj(f, bucket, manifest_key)
-            
+
         # Add to cleanup
         self.cleanup_resources.append(('s3', bucket, manifest_key))
-        
-        self.logger.info(f"Uploaded manifest to s3://{bucket}/{manifest_key}")
+
+        self.logger.info("Uploaded manifest to s3://%s/%s",
+                         bucket, manifest_key)
         return f"s3://{bucket}/{manifest_key}"
-        
-    def wait_for_processing_completion(self, timeout_minutes: int = 10) -> Dict:
+
+    def wait_for_processing_completion(self, timeout_minutes: int = 10) -> dict:
         """Wait for Thingpress processing to complete by monitoring various indicators"""
-        
+
         start_time = time.time()
         timeout_seconds = timeout_minutes * 60
-        
+
         processing_indicators = {
             'recent_iot_things': [],
             'log_activity': False,
             'queue_activity': False,
             'certificates_found': 0
         }
-        
-        self.logger.info(f"Monitoring processing for up to {timeout_minutes} minutes...")
-        
+
+        self.logger.info("Monitoring processing for up to %d minutes...", timeout_minutes)
+
         # Give the system a moment to start processing after manifest upload
         time.sleep(5)
-        
+
         while time.time() - start_time < timeout_seconds:
-            
+
             # Check for recently created IoT things (use longer window for detection)
             recent_things = self._get_recent_iot_things(minutes=timeout_minutes + 5)
             if recent_things:
                 processing_indicators['recent_iot_things'] = recent_things
-                self.logger.info(f"Found {len(recent_things)} recent IoT things")
-                
+                self.logger.info("Found %d recent IoT things", len(recent_things))
+
             # Check for log activity in provider functions
             log_activity = self._check_recent_log_activity()
             if log_activity:
                 processing_indicators['log_activity'] = True
                 self.logger.info("Detected recent log activity in provider functions")
-                
+
             # If we have IoT things, consider processing complete
             if recent_things:
                 processing_indicators['certificates_found'] = len(recent_things)
-                self.logger.info(f"✅ Processing appears complete - {len(recent_things)} IoT things created")
+                self.logger.info("✅ Processing appears complete - %d IoT things created",
+                                 len(recent_things))
                 break
-                
+
             # Wait before next check
             time.sleep(10)
-            
+
         total_wait_time = time.time() - start_time
-        self.logger.info(f"Monitoring completed after {total_wait_time:.1f}s")
-        
+        self.logger.info("Monitoring completed after %d:.1fs", total_wait_time)
+
         return processing_indicators
-        
-    def _get_recent_iot_things(self, minutes: int = 10) -> List[Dict]:
+
+    def _get_recent_iot_things(self, minutes: int = 10) -> list[dict]:
         """Get IoT things created in the last N minutes or matching test patterns"""
         cutoff_time = time.time() - (minutes * 60)
-        
+
         try:
             # Get all things (this might need pagination for large deployments)
             response = self.iot_client.list_things(maxResults=100)
             recent_things = []
-            
+
             for thing in response.get('things', []):
                 thing_name = thing['thingName']
                 creation_date = thing.get('creationDate')
-                
+
                 # Check if thing matches test patterns (from our test manifest)
                 is_test_thing = any(pattern in thing_name for pattern in ['0123', 'test_'])
-                
+
                 # Include if it's recent OR if it matches test patterns
                 is_recent = creation_date and creation_date.timestamp() > cutoff_time
-                
+
                 if is_recent or is_test_thing:
                     # Get additional details about the thing
                     thing_details = self._get_thing_details(thing['thingName'])
                     recent_things.append(thing_details)
-                    
+
             # If we found test things but none were "recent", still return them
             # This handles cases where timestamp detection fails
             if not recent_things:
@@ -212,27 +216,28 @@ class EndToEndTestFramework:
                     if any(pattern in thing_name for pattern in ['0123ff', '0123ee', '0123959']):
                         thing_details = self._get_thing_details(thing['thingName'])
                         test_things.append(thing_details)
-                
+
                 if test_things:
-                    self.logger.info(f"Found {len(test_things)} test things (timestamp detection may have failed)")
+                    self.logger.info("Found %d test things (timestamp detection may have failed)",
+                                     len(test_things))
                     return test_things
-                    
+
             return recent_things
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to get recent IoT things: {e}")
+            self.logger.error("Failed to get recent IoT things: %s", e)
             return []
-            
-    def _get_thing_details(self, thing_name: str) -> Dict:
+
+    def _get_thing_details(self, thing_name: str) -> dict:
         """Get detailed information about an IoT thing"""
         try:
             # Get thing description
             thing_response = self.iot_client.describe_thing(thingName=thing_name)
-            
+
             # Get attached certificates
             principals_response = self.iot_client.list_thing_principals(thingName=thing_name)
             certificates = principals_response.get('principals', [])
-            
+
             # Get policies for each certificate
             policies = []
             for cert_arn in certificates:
@@ -242,7 +247,7 @@ class EndToEndTestFramework:
                     policies.extend(cert_policies)
                 except:
                     pass  # Best effort
-                    
+
             return {
                 'thingName': thing_name,
                 'thingType': thing_response.get('thingTypeName'),
@@ -251,11 +256,11 @@ class EndToEndTestFramework:
                 'policies': list(set(policies)),  # Remove duplicates
                 'creationDate': thing_response.get('creationDate').isoformat() if thing_response.get('creationDate') else None
             }
-            
+
         except Exception as e:
             self.logger.error(f"Failed to get details for thing {thing_name}: {e}")
             return {'thingName': thing_name, 'error': str(e)}
-            
+
     def _check_recent_log_activity(self) -> bool:
         """Check for recent log activity in Thingpress Lambda functions"""
         try:
@@ -267,16 +272,16 @@ class EndToEndTestFramework:
                 self.resources.get('GeneratedProviderFunction'),
                 self.resources.get('BulkImporterFunction')
             ]
-            
+
             recent_activity = False
             cutoff_time = int((time.time() - 300) * 1000)  # Last 5 minutes
-            
+
             for function_name in provider_functions:
                 if not function_name:
                     continue
-                    
+
                 log_group = f"/aws/lambda/{function_name}"
-                
+
                 try:
                     # Get recent log streams
                     streams_response = self.logs_client.describe_log_streams(
@@ -285,92 +290,89 @@ class EndToEndTestFramework:
                         descending=True,
                         limit=5
                     )
-                    
+
                     for stream in streams_response.get('logStreams', []):
                         if stream.get('lastEventTime', 0) > cutoff_time:
                             recent_activity = True
                             break
-                            
+
                     if recent_activity:
                         break
-                        
+
                 except Exception as e:
-                    self.logger.debug(f"Could not check logs for {function_name}: {e}")
-                    
+                    self.logger.debug("Could not check logs for %s: %s",
+                                      function_name, e)
+
             return recent_activity
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to check log activity: {e}")
+            self.logger.error("Failed to check log activity: %s",e )
             return False
-            
-    def verify_certificate_deployer_integration(self) -> Dict:
+
+    def verify_certificate_deployer_integration(self) -> dict:
         """Verify that certificate deployer has created verification certificates"""
         try:
             # Check the Microchip verification certificates bucket
             verification_bucket = self.resources.get('MicrochipVerificationCertsBucket')
             if not verification_bucket:
                 return {'verified': False, 'error': 'Verification bucket not found'}
-                
+
             # List objects in verification bucket
             response = self.s3_client.list_objects_v2(Bucket=verification_bucket)
             objects = response.get('Contents', [])
-            
+
             # Accept both .cer and .crt file extensions for verification certificates
             verification_certs = [obj['Key'] for obj in objects if obj['Key'].endswith(('.cer', '.crt'))]
-            
+
             return {
                 'verified': len(verification_certs) > 0,
                 'verification_bucket': verification_bucket,
                 'verification_certificates': verification_certs,
                 'total_objects': len(objects)
             }
-            
+
         except Exception as e:
-            self.logger.error(f"Failed to verify certificate deployer: {e}")
+            self.logger.error("Failed to verify certificate deployer: %s", e)
             return {'verified': False, 'error': str(e)}
-            
+
     def cleanup_existing_test_data(self):
         """Clean up existing test data before running test using unified cleanup module"""
         self.logger.info("🧹 Cleaning up existing test data before test run")
-        
+
         try:
             # Import the unified cleanup module
-            import sys
-            import os
             sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
-            
-            from cleanup_utils import ThingpressCleanup, CleanupConfig
-            
+
             # Create configuration for integration test cleanup
             cleanup_config = CleanupConfig.for_integration_tests(
                 stack_name=os.getenv('THINGPRESS_STACK_NAME', 'thingpress'),
                 region=self.region
             )
-            
+
             # Initialize cleanup with our existing AWS clients
             cleanup = ThingpressCleanup(cleanup_config)
-            
+
             # Override the clients to use our existing ones (to maintain session consistency)
             cleanup.iot_client = self.iot_client
             cleanup.s3_client = self.s3_client
-            
+
             # Perform test-specific cleanup (only IoT resources, no stacks)
             cleanup_results = cleanup.cleanup_test_resources_only()
-            
+
             # Log results
             things_deleted = cleanup_results.get('iot_things_deleted', [])
             certs_deleted = cleanup_results.get('iot_certificates_deleted', [])
             errors = cleanup_results.get('errors', [])
-            
+
             if things_deleted:
                 self.logger.info(f"Deleted {len(things_deleted)} IoT things: {things_deleted[:3]}{'...' if len(things_deleted) > 3 else ''}")
-            
+
             if certs_deleted:
                 self.logger.info(f"Deleted {len(certs_deleted)} certificates: {certs_deleted[:3]}{'...' if len(certs_deleted) > 3 else ''}")
-            
+
             if errors:
                 self.logger.warning(f"Cleanup encountered {len(errors)} errors: {errors[:2]}{'...' if len(errors) > 2 else ''}")
-                
+
         except ImportError as e:
             self.logger.warning(f"Could not import unified cleanup module, falling back to legacy cleanup: {e}")
             self._legacy_cleanup_existing_test_data()
@@ -381,18 +383,18 @@ class EndToEndTestFramework:
     def _legacy_cleanup_existing_test_data(self):
         """Legacy cleanup method as fallback"""
         self.logger.info("Using legacy cleanup method")
-        
+
         try:
             # Clean up IoT things that match test patterns
             response = self.iot_client.list_things(maxResults=100)
             test_thing_names = []
-            
+
             for thing in response.get('things', []):
                 thing_name = thing['thingName']
                 # Look for things that match test certificate patterns
                 if any(pattern in thing_name for pattern in ['0123ff', 'test_', 'microchip_e2e']):
                     test_thing_names.append(thing_name)
-            
+
             # Clean up each test thing
             for thing_name in test_thing_names:
                 try:
@@ -407,151 +409,156 @@ class EndToEndTestFramework:
                                     thingName=thing_name,
                                     principal=principal_arn
                                 )
-                                
+
                                 # Update certificate to INACTIVE before deletion
                                 self.iot_client.update_certificate(
                                     certificateId=cert_id,
                                     newStatus='INACTIVE'
                                 )
-                                
+
                                 # Delete certificate
                                 self.iot_client.delete_certificate(
                                     certificateId=cert_id,
                                     forceDelete=True
                                 )
-                                self.logger.info(f"Deleted certificate {cert_id}")
-                                
+                                self.logger.info("Deleted certificate %s", cert_id)
+
                             except Exception as cert_e:
-                                self.logger.warning(f"Failed to delete certificate {cert_id}: {cert_e}")
-                    
+                                self.logger.warning("Failed to delete certificate %s: %s",
+                                                    cert_id, cert_e)
+
                     # Delete the thing
                     self.iot_client.delete_thing(thingName=thing_name)
-                    self.logger.info(f"Deleted IoT thing {thing_name}")
-                    
+                    self.logger.info("Deleted IoT thing %s", thing_name)
+
                 except Exception as thing_e:
-                    self.logger.warning(f"Failed to delete thing {thing_name}: {thing_e}")
-                    
+                    self.logger.warning("Failed to delete thing %s: %s", thing_name, thing_e)
+
         except Exception as e:
-            self.logger.warning(f"Legacy cleanup failed: {e}")
+            self.logger.warning("Legacy cleanup failed: %s", e)
 
     def cleanup_test_resources(self):
         """Clean up test resources"""
         self.logger.info("🧹 Starting test resource cleanup")
-        
+
         for resource_type, *args in self.cleanup_resources:
             try:
                 if resource_type == 's3':
                     bucket, key = args
                     self.s3_client.delete_object(Bucket=bucket, Key=key)
-                    self.logger.info(f"Deleted s3://{bucket}/{key}")
+                    self.logger.info("Deleted s3://%s/%s", bucket, key)
                 elif resource_type == 'iot_thing':
                     thing_name = args[0]
                     # Note: In a real cleanup, we'd also detach policies and certificates
                     # For now, we'll leave test IoT things for inspection
-                    self.logger.info(f"IoT thing {thing_name} left for inspection")
-                    
+                    self.logger.info("IoT thing %s left for inspection", thing_name)
+
             except Exception as e:
-                self.logger.warning(f"Failed to cleanup {resource_type} {args}: {e}")
-                
-    def finalize_test(self, success: bool = True, error: str = None):
+                self.logger.warning("Failed to cleanup %s %s: %s", resource_type, args, e)
+
+    def finalize_test(self, success: bool = True, error: str | None = None):
         """Finalize test results"""
         self.results['end_time'] = datetime.now().isoformat()
         self.results['success'] = success
         if error:
             self.results['error'] = error
-            
+
         # Calculate total duration
         start_time = datetime.fromisoformat(self.results['start_time'])
         end_time = datetime.fromisoformat(self.results['end_time'])
         total_duration = (end_time - start_time).total_seconds() * 1000
         self.results['total_duration_ms'] = total_duration
-        
+
         # Cleanup resources
         self.cleanup_test_resources()
-        
+
         # Log final result
         status = "🎉 PASSED" if success else "❌ FAILED"
-        self.logger.info(f"{status} Test {self.test_name} completed in {total_duration:.2f}ms")
-        
+        self.logger.info("%s Test %s completed in %d:.2fms",
+                         status, self.test_name, total_duration)
+
         if error:
-            self.logger.error(f"Error: {error}")
-            
+            self.logger.error("Error: %s", error)
+
         return self.results
 
 
 class ProviderEndToEndTest(EndToEndTestFramework):
     """Base class for provider-specific end-to-end tests"""
-    
+
     def __init__(self, provider_name: str, manifest_path: str, region: str = 'us-east-1'):
         super().__init__(f"{provider_name}_e2e", region)
         self.provider_name = provider_name
         self.manifest_path = Path(manifest_path)
-        
+
         if not self.manifest_path.exists():
             raise FileNotFoundError(f"Test manifest not found: {manifest_path}")
-            
-    def run_test(self, timeout_minutes: int = 10) -> Dict:
+
+    def run_test(self, timeout_minutes: int = 10) -> dict:
         """Run the complete end-to-end test for this provider"""
-        
+
         try:
             # Step 0: Clean up existing test data for fresh test environment
             self.cleanup_existing_test_data()
-            
+
             # Step 1: Upload manifest
             step1 = self.log_step("upload_manifest", f"Upload {self.provider_name} manifest to S3")
             manifest_s3_path = self.upload_manifest(self.provider_name, str(self.manifest_path))
             self.complete_step(step1, True, {'manifest_path': manifest_s3_path})
-            
+
             # Step 2: Wait for processing
-            step2 = self.log_step("wait_processing", f"Wait for {self.provider_name} processing to complete")
+            step2 = self.log_step("wait_processing",
+                                  f"Wait for {self.provider_name} processing to complete")
             processing_results = self.wait_for_processing_completion(timeout_minutes)
-            
+
             certificates_found = processing_results.get('certificates_found', 0)
             iot_things = processing_results.get('recent_iot_things', [])
-            
+
             if certificates_found > 0:
                 self.results['certificates_processed'] = certificates_found
                 self.results['iot_things_created'] = [thing['thingName'] for thing in iot_things]
-                
+
             self.complete_step(step2, certificates_found > 0, {
                 'certificates_processed': certificates_found,
                 'iot_things_created': len(iot_things),
                 'processing_indicators': processing_results
             })
-            
+
             # Step 3: Verify certificate deployer (for Microchip)
             if self.provider_name.lower() == 'microchip':
-                step3 = self.log_step("verify_cert_deployer", "Verify certificate deployer integration")
+                step3 = self.log_step("verify_cert_deployer",
+                                      "Verify certificate deployer integration")
                 cert_deployer_results = self.verify_certificate_deployer_integration()
-                self.complete_step(step3, cert_deployer_results.get('verified', False), cert_deployer_results)
-            
+                self.complete_step(step3, cert_deployer_results.get('verified', False),
+                                   cert_deployer_results)
+
             # Step 4: Validate IoT thing configuration
             step4 = self.log_step("validate_iot_config", "Validate IoT thing configuration")
             validation_results = self._validate_iot_things(iot_things)
             self.complete_step(step4, validation_results.get('valid', False), validation_results)
-            
+
             # Determine overall success
             overall_success = (
-                certificates_found > 0 and 
+                certificates_found > 0 and
                 validation_results.get('valid', False)
             )
-            
+
             self.finalize_test(success=overall_success)
             return self.results
-            
+
         except Exception as e:
-            self.logger.error(f"Test failed: {e}")
-            import traceback
+            self.logger.error("Test failed: %s",e)
             self.logger.error(traceback.format_exc())
             self.finalize_test(success=False, error=str(e))
             return self.results
-            
-    def _validate_iot_things(self, iot_things: List[Dict]) -> Dict:
+
+    def _validate_iot_things(self, iot_things: list[dict]) -> dict:
         """Validate that IoT things are properly configured"""
-        
+        success_threshold = 1.0  # 100% of things should have certificates
+
         if not iot_things:
             return {'valid': False, 'error': 'No IoT things to validate'}
-            
+
         validation_results = {
             'valid': True,
             'total_things': len(iot_things),
@@ -559,7 +566,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
             'things_with_policies': 0,
             'validation_details': []
         }
-        
+
         for thing in iot_things:
             thing_validation = {
                 'thing_name': thing['thingName'],
@@ -568,20 +575,19 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                 'certificate_count': len(thing.get('certificates', [])),
                 'policy_count': len(thing.get('policies', []))
             }
-            
+
             if thing_validation['has_certificates']:
                 validation_results['things_with_certificates'] += 1
-                
+
             if thing_validation['has_policies']:
                 validation_results['things_with_policies'] += 1
-                
+
             validation_results['validation_details'].append(thing_validation)
-            
+
         # Consider validation successful if most things have certificates
-        success_threshold = 0.8  # 80% of things should have certificates
         certificate_success_rate = validation_results['things_with_certificates'] / validation_results['total_things']
-        
+
         validation_results['certificate_success_rate'] = certificate_success_rate
         validation_results['valid'] = certificate_success_rate >= success_threshold
-        
+
         return validation_results
