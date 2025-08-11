@@ -1,0 +1,16 @@
+## Git Commit Rules
+- **ALWAYS ASK before committing files - NO EXCEPTIONS**
+- **This applies to ALL file types including:**
+  - Source code changes
+  - Documentation updates (README.md, docs/, etc.)
+  - Planning files (planning/, roadmaps, etc.)
+  - Configuration changes
+  - Test files
+  - Any other modifications
+- **NEVER commit temporary/generated files:**
+  - `pylint_report*.json`
+  - `*.pyc`, `__pycache__/`
+  - `.coverage`, `coverage.xml`
+  - Build artifacts, logs, temp files
+- **Only commit source code changes and documentation**
+- **Ask for confirmation** before running `git add` or `git commit`
