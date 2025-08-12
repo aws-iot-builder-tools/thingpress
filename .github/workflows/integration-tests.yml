@@ -124,7 +124,7 @@ jobs:
           echo "🧪 Running integration tests against deployed stack..."
           echo "Testing providers: ${{ github.event.inputs.provider }}"
           echo "Stack name: ${{ env.STACK_NAME }}"
-          
+          export PYTHONPATH=$(pwd)/test/integration
           python test/integration/run_e2e_tests.py \
             --providers ${{ github.event.inputs.provider }} \
             --output-file "integration-test-results.json"
