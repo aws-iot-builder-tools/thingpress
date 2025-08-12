@@ -101,7 +101,7 @@ class EndToEndTestRunner:
                 # Verify SHA value
                 manifest_file = f"{self.project_root}/test/artifacts/{provider_data[KEY_FILE]}"
 
-                if verify_sha256(file, provider_data[KEY_BSHA256]):
+                if verify_sha256(manifest_file, provider_data[KEY_BSHA256]):
                     print("success - sha checksum match")
                 else:
                     raise ValueError("SHA256 manifest verification failed for {provider}")
