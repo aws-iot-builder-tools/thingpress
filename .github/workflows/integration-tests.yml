@@ -72,6 +72,7 @@ jobs:
           chmod +x scripts/cleanup-integration-test.sh
           ./scripts/cleanup-integration-test.sh \
             --stack-prefix "thingpress-integration-test" \
+            --no-dry-run \
             --region "${{ env.AWS_REGION }}" || true
         env:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
@@ -167,6 +168,7 @@ jobs:
           # Run comprehensive cleanup to ensure no resources are left behind
           ./scripts/cleanup-integration-test.sh \
             --stack-prefix "thingpress-integration-test" \
+            --no-dry-run \
             --region "${{ env.AWS_REGION }}" || true
           
           echo "✅ Final cleanup verification completed"
