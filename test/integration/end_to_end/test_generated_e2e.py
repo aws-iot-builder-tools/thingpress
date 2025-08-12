@@ -8,21 +8,18 @@ Tests the complete Generated provider workflow:
 4. Check end-to-end workflow completion
 """
 
-from pathlib import Path
 from integration.end_to_end.e2e_test_framework import ProviderEndToEndTest
 
 class GeneratedEndToEndTest(ProviderEndToEndTest):
     """End-to-end test for Generated provider"""
 
-    def __init__(self):
-        project_root = Path(__file__).parent.parent.parent.parent
-        manifest_path = f"{project_root}/test/artifacts/certificates_test.txt"
-        super().__init__('generated', manifest_path)
+    def __init__(self, manifest_path, manifest_cert_count):
+        super().__init__('generated', manifest_path, manifest_cert_count)
 
 
-def run_generated_e2e_test():
+def run_generated_e2e_test(manifest_path, manifest_cert_count):
     """Run the Generated provider end-to-end test"""
-    test = GeneratedEndToEndTest()
+    test = GeneratedEndToEndTest(manifest_path, manifest_cert_count)
     results = test.run_test(timeout_minutes=15)
 
     # Print summary
@@ -66,6 +63,6 @@ def run_generated_e2e_test():
     return results['success']
 
 
-if __name__ == "__main__":
-    success = run_generated_e2e_test()
-    exit(0 if success else 1)
+#if __name__ == "__main__":
+#    success = run_generated_e2e_test()
+#    exit(0 if success else 1)

@@ -486,10 +486,12 @@ class EndToEndTestFramework:
 class ProviderEndToEndTest(EndToEndTestFramework):
     """Base class for provider-specific end-to-end tests"""
 
-    def __init__(self, provider_name: str, manifest_path: str, region: str = 'us-east-1'):
+    def __init__(self, provider_name: str, manifest_path: str,
+                 manifest_cert_count: int, region: str = 'us-east-1'):
         super().__init__(f"{provider_name}_e2e", region)
         self.provider_name = provider_name
         self.manifest_path = Path(manifest_path)
+        self.manifest_cert_count = manifest_cert_count
 
         if not self.manifest_path.exists():
             raise FileNotFoundError(f"Test manifest not found: {manifest_path}")

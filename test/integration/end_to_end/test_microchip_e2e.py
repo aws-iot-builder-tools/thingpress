@@ -9,21 +9,17 @@ Tests the complete Microchip provider workflow:
 5. Check end-to-end workflow completion
 """
 
-import sys
-from pathlib import Path
 from integration.end_to_end.e2e_test_framework import ProviderEndToEndTest
 
 class MicrochipEndToEndTest(ProviderEndToEndTest):
     """End-to-end test for Microchip provider"""
 
-    def __init__(self):
-        project_root = Path(__file__).parent.parent.parent.parent
-        manifest_path = f"{project_root}/test/artifacts/ECC608C-TNGTLSU-B.json"
-        super().__init__('microchip', manifest_path)
+    def __init__(self, manifest_path, manifest_cert_count):
+        super().__init__('microchip', manifest_path, manifest_cert_count)
 
-def run_microchip_e2e_test():
+def run_microchip_e2e_test(manifest_path, manifest_cert_count):
     """Run the Microchip provider end-to-end test"""
-    test = MicrochipEndToEndTest()
+    test = MicrochipEndToEndTest(manifest_path, manifest_cert_count)
     results = test.run_test(timeout_minutes=15)  # Longer timeout for full processing
 
     # Print summary
@@ -72,8 +68,3 @@ def run_microchip_e2e_test():
     print("="*70)
 
     return results['success']
-
-
-if __name__ == "__main__":
-    success = run_microchip_e2e_test()
-    sys.exit(0 if success else 1)

@@ -11,8 +11,11 @@ import sys
 import json
 import time
 import argparse
+import hashlib
 from datetime import datetime
 from typing import List, Dict
+import yaml
+from pathlib import Path
 
 # Import test modules
 from integration.end_to_end.test_microchip_e2e import run_microchip_e2e_test
@@ -20,12 +23,30 @@ from integration.end_to_end.test_espressif_e2e import run_espressif_e2e_test
 from integration.end_to_end.test_infineon_e2e import run_infineon_e2e_test
 from integration.end_to_end.test_generated_e2e import run_generated_e2e_test
 
+KEY_PROVIDERS = 'providers'
+KEY_PROVIDER = 'provider'
+KEY_BSHA256 = 'bSHA256'
+KEY_FILE = 'file'
+KEY_COUNT = 'count'
+
+def calculate_file_sha256(file_path):
+    sha256_hash = hashlib.sha256()
+    with open(file_path, "rb") as f:
+        for chunk in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(chunk)
+    return sha256_hash.hexdigest()
+
+def verify_sha256(file_path, expected_hash):
+    actual_hash = calculate_file_sha256(file_path)
+    return actual_hash == expected_hash
+
 class EndToEndTestRunner:
     """Runs and manages end-to-end integration tests"""
 
     def __init__(self):
         self.test_results = {}
         self.start_time = datetime.now()
+        self.project_root = Path(__file__).parent.parent.parent
 
     def run_all_tests(self, providers: List[str] | None = None) -> Dict:
         """Run end-to-end tests for specified providers"""
@@ -63,9 +84,34 @@ class EndToEndTestRunner:
             print(f"\n🧪 Testing {provider.upper()} Provider End-to-End...")
             print("-" * 50)
 
+            artifacts_config= f"{self.project_root}/test/artifacts/test_artifacts.yml"
+            with open(artifacts_config, 'r', encoding='UTF-8') as file:
+                data = yaml.safe_load(file)
+                if not KEY_PROVIDERS in data:
+                    print("This is not a provider config file")
+                    raise ValueError("Woops")
+
+                for datapoint in data[KEY_PROVIDERS]:
+                    try:
+                        if datapoint[KEY_PROVIDER] == provider:
+                            provider_data = datapoint
+                            break
+                    except KeyError as k:
+                        raise KeyError("The config file has malformed keys") from k
+                # Verify SHA value
+                manifest_file = f"{self.project_root}/test/artifacts/{provider_data[KEY_FILE]}"
+
+                if verify_sha256(file, provider_data[KEY_BSHA256]):
+                    print("success - sha checksum match")
+                else:
+                    raise ValueError("SHA256 manifest verification failed for {provider}")
+                manifest_cert_count = provider_data[KEY_COUNT]
+
+
             test_start = time.time()
             try:
-                success = test_functions[provider]()
+                success = test_functions[provider](manifest_path=manifest_file,
+                                                   manifest_cert_count=manifest_cert_count)
                 test_duration = (time.time() - test_start) * 1000
 
                 self.test_results[provider] = {

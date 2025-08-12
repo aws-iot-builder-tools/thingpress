@@ -1,0 +1,21 @@
+# Note that various processes (like integration tests) use these values
+# to cross check successful runs.
+# SHA values are cross checked to ensure that manifests are not modified,
+# which could skew certificate counts, rising false negatives
+providers:
+  - provider: microchip
+    file: ECC608C-TNGTLSU-B.json
+    count: 10
+    bSHA256: 1e4691f8604d8a1be3a39aebe1ffb4a75e22d6c69ab48f329d4b284a364b40d5
+  - provider: espressif
+    file: manifest-espressif.csv
+    count: 7
+    bSHA256: da5b057f0f442bc7e12afc6e13b3c2bc4ea6febcdf5ef978f666334db9544260
+  - provider: infineon
+    file: manifest-infineon.7z
+    count: 400
+    bSHA256: b16ea54e130c4726fb2b5ab9323365acb21d1bb594efeb2062d590669f201648
+  - provider: generated
+    file: certificates_test.txt
+    count: 3
+    bSHA256: 59251b86c79e138661415cbefcca010f0a31ede85594c90db9b4fbae50b29aeb

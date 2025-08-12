@@ -8,20 +8,17 @@ Tests the complete Infineon provider workflow:
 4. Check end-to-end workflow completion
 """
 
-from pathlib import Path
 from integration.end_to_end.e2e_test_framework import ProviderEndToEndTest
 
 class InfineonEndToEndTest(ProviderEndToEndTest):
     """End-to-end test for Infineon provider"""
 
-    def __init__(self):
-        project_root = Path(__file__).parent.parent.parent.parent
-        manifest_path = f"{project_root}/test/artifacts/manifest-infineon.7z"
-        super().__init__('infineon', manifest_path)
+    def __init__(self, manifest_path, manifest_cert_count):
+        super().__init__('infineon', manifest_path, manifest_cert_count)
 
-def run_infineon_e2e_test():
+def run_infineon_e2e_test(manifest_path, manifest_cert_count):
     """Run the Infineon provider end-to-end test"""
-    test = InfineonEndToEndTest()
+    test = InfineonEndToEndTest(manifest_path, manifest_cert_count)
     results = test.run_test(timeout_minutes=20)  # Longer timeout for 7z processing
 
     # Print summary
@@ -63,8 +60,3 @@ def run_infineon_e2e_test():
     print("="*70)
 
     return results['success']
-
-
-if __name__ == "__main__":
-    success = run_infineon_e2e_test()
-    exit(0 if success else 1)
