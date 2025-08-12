@@ -6,14 +6,14 @@ set -e
 
 # Configuration
 STACK_NAME_PREFIX="${STACK_NAME_PREFIX:-thingpress}"
-DRY_RUN="${DRY_RUN:-false}"
+DRY_RUN="${DRY_RUN:-true}"
 REGION="${AWS_REGION:-us-east-1}"
 
 # Parse command line arguments first
 while [[ $# -gt 0 ]]; do
     case $1 in
-        --dry-run)
-            DRY_RUN="true"
+        --no-dry-run)
+            DRY_RUN="false"
             shift
             ;;
         --stack-prefix)
@@ -25,10 +25,13 @@ while [[ $# -gt 0 ]]; do
             shift 2
             ;;
         --help)
-            echo "Usage: $0 [--dry-run] [--stack-prefix PREFIX] [--region REGION]"
-            echo "  --dry-run: Show what would be deleted without actually deleting"
+            echo "NOTE THIS IS A VERY DESTRUCTIVE SCRIPT, DRY_RUN IS DEFAULT"
+            echo "Usage: $0 [--no-dry-run] [--stack-prefix PREFIX] [--region REGION]"
+            echo "  --no-dry-run: Run the cleanup for reals"
             echo "  --stack-prefix: CloudFormation stack name prefix (default: thingpress)"
             echo "  --region: AWS region (default: us-east-1)"
+            echo ""
+            echo "to switch profile, export AWS_PROFILE to command"
             exit 0
             ;;
         *)
@@ -62,7 +65,7 @@ cleanup_iot_resources() {
     
     # Clean up IoT Things
     echo "  📱 Cleaning up IoT Things..."
-    local things=$(aws iot list-things --region "$REGION" --query 'things[?contains(attributes.`created-by`, `thingpress`)].thingName' --output text 2>/dev/null || echo "")
+    local things=$(aws iot list-things --region "$REGION" --query 'things[].thingName' --output text 2>/dev/null || echo "")
     if [ -n "$things" ]; then
         for thing in $things; do
             echo "    Removing IoT Thing: $thing"
@@ -83,10 +86,11 @@ cleanup_iot_resources() {
     
     # Clean up IoT Certificates (that are not attached to things)
     echo "  📜 Cleaning up IoT Certificates..."
-    local certificates=$(aws iot list-certificates --region "$REGION" --query 'certificates[?status==`INACTIVE`].certificateId' --output text 2>/dev/null || echo "")
+    local certificates=$(aws iot list-certificates --region "$REGION" --query 'certificates[].certificateId' --output text 2>/dev/null || echo "")
     for cert_id in $certificates; do
         # Check if certificate has thingpress tag (this is a simplified check)
         echo "    Removing inactive certificate: $cert_id"
+        execute_or_print "aws iot update-certificate --certificate-id '$cert_id' --new-status INACTIVE --region '$REGION'"
         execute_or_print "aws iot delete-certificate --certificate-id '$cert_id' --region '$REGION'"
     done
 }
@@ -223,10 +227,10 @@ main() {
     cleanup_iot_resources
     
     # Step 2: Clean up S3 buckets and their contents
-    cleanup_s3_resources
+    #cleanup_s3_resources
     
     # Step 3: Delete CloudFormation stacks
-    cleanup_cloudformation_stacks
+    #cleanup_cloudformation_stacks
     
     # Step 4: Verify cleanup
     if [ "$DRY_RUN" = "false" ]; then
