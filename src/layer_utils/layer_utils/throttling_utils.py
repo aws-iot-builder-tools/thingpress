@@ -8,7 +8,7 @@ to ensure optimal performance and avoid API rate limiting.
 import logging
 import os
 import time
-from typing import Any, Dict, Optional
+from typing import Optional
 
 from boto3 import Session
 
@@ -31,7 +31,7 @@ class ThrottlingConfig:
 class StandardizedThrottler:
     """Standardized throttling implementation for all vendor providers."""
 
-    def __init__(self, config: Optional[ThrottlingConfig] = None):
+    def __init__(self, config: ThrottlingConfig|None = None):
         self.config = config or ThrottlingConfig()
         self.batch_count = 0
 
@@ -118,7 +118,7 @@ class StandardizedThrottler:
         # Send the batch
         return send_sqs_message_batch_with_retry(batch_messages, queue_url, session)
 
-    def get_throttling_stats(self) -> Dict[str, Any]:
+    def get_throttling_stats(self) -> dict[str, str|int]:
         """Get current throttling statistics."""
         return {
             "total_batches_processed": self.batch_count,

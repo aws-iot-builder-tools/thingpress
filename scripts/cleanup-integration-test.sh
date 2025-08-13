@@ -81,7 +81,7 @@ cleanup_iot_resources() {
             execute_or_print "aws iot delete-thing --thing-name '$thing' --region '$REGION'"
         done
     else
-        echo "    No IoT Things found with thingpress tag"
+        echo "    No IoT Things found."
     fi
     
     # Clean up IoT Certificates (that are not attached to things)

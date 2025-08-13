@@ -1,6 +1,9 @@
 {
     "include": [
-        "src"
+        "src",
+        "src/layer_utils",
+        "test/integration"
+ 
     ],
     "exclude": [
         "**/__pycache__",

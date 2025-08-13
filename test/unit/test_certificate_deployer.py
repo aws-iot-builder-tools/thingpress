@@ -274,7 +274,7 @@ class TestCertificateDeployer(TestCase):
         certificate_keys = list(self.sample_certificates.keys())
         result = remove_certificates("nonexistent-bucket", certificate_keys)
         
-        self.assertFalse(result)
+        self.assertTrue(result)
 
     @patch('src.certificate_deployer.certificate_deployer.cfnresponse.send')
     def test_lambda_handler_delete_success(self, mock_cfn_send):
@@ -317,7 +317,8 @@ class TestCertificateDeployer(TestCase):
         # Verify failure response
         mock_cfn_send.assert_called_once()
         args = mock_cfn_send.call_args
-        self.assertEqual(args[0][2], cfnresponse.FAILED)
+        # If the bucket does not exist, then there is nothing to clean.
+        self.assertEqual(args[0][2], cfnresponse.SUCCESS)
 
     def test_remove_certificates_empty_list(self):
         """Test removing empty certificate list"""

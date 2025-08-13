@@ -1,8 +1,6 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-Lambda function to deploy Microchip verifier certificates to S3 bucket.
+"""Lambda function to deploy Microchip verifier certificates to S3 bucket.
 """
 import base64
 import json
@@ -18,8 +16,7 @@ from . import cfnresponse
 logger = Logger()
 
 def deploy_certificates(bucket_name, certificates):
-    """
-    Deploy certificates to the S3 bucket.
+    """Deploy certificates to the S3 bucket.
 
     Args:
         bucket_name (str): Name of the S3 bucket
@@ -54,44 +51,46 @@ def deploy_certificates(bucket_name, certificates):
         return False
 
 def remove_certificates(bucket_name, certificate_keys):
-    """
-    Remove certificates from S3 bucket during stack deletion.
-    
+    """Remove certificates from S3 bucket during stack deletion.
+
     Args:
         bucket_name (str): Name of the S3 bucket
         certificate_keys (list): List of certificate keys to remove (≤10)
-        
+
     Returns:
         bool: True if successful, False otherwise
     """
     logger.info("Removing %d certificates from bucket %s", len(certificate_keys), bucket_name)
     s3_client = boto3.client('s3')
-    
-    try:
-        for cert_key in certificate_keys:
-            try:
-                s3_client.delete_object(Bucket=bucket_name, Key=cert_key)
+
+    # This routine does not fail when a certificate is not found. If the certificate is not
+    # found, then it assumes the job is done. Also, if the bucket is not found 
+    for cert_key in certificate_keys:
+        try:
+            if s3_client.delete_object(Bucket=bucket_name, Key=cert_key):
                 logger.info("Removed certificate: %s", cert_key)
-            except ClientError as e:
-                if e.response['Error']['Code'] == 'NoSuchKey':
-                    # Ignore NoSuchKey - certificate already removed
-                    logger.info("Certificate %s already removed or does not exist", cert_key)
-                else:
-                    logger.error("Failed to remove certificate %s: %s", cert_key, str(e))
-                    return False
-            except Exception as e:
+        except ClientError as e:
+            if 'Error' in e.response:
+                if 'Code' in e.response['Error']:
+                    if e.response['Error']['Code'] == 'NoSuchKey':
+                        # Ignore NoSuchKey - certificate already removed
+                        logger.info("Certificate %s already removed or does not exist", cert_key)
+                    if e.response['Error']['Code'] == 'NoSuchBucket':
+                        # Ignore NoSuchBucket - whole bucket already removed
+                        logger.info("Bucket %s already removed or does not exist", bucket_name)
+                    else:
+                        # Signals hard failure, some other boto error occurred
+                        return False
+            else:
+                # This signals a hard failure
                 logger.error("Failed to remove certificate %s: %s", cert_key, str(e))
                 return False
-                
-        logger.info("Successfully removed certificates from %s", bucket_name)
-        return True
-    except Exception as e:
-        logger.error("Error removing certificates: %s", str(e))
-        return False
 
-def lambda_handler(event: dict, context: LambdaContext):
-    """
-    Deploy Microchip verifier certificates to S3 bucket or configure S3 notifications.
+    logger.info("Successfully removed certificates from %s", bucket_name)
+    return True
+
+def lambda_handler(event: dict, context: LambdaContext) -> None:
+    """Deploy Microchip verifier certificates to S3 bucket or configure S3 notifications.
 
     This function is used as a CloudFormation custom resource to either:
     1. Deploy Microchip verifier certificates to an S3 bucket
@@ -100,9 +99,6 @@ def lambda_handler(event: dict, context: LambdaContext):
     Args:
         event (dict): CloudFormation custom resource event
         context (LambdaContext): Lambda execution context
-
-    Returns:
-        None: Sends response to CloudFormation via cfnresponse
     """
     logger.info("Certificate Deployer: Received event: %s", json.dumps(event))
     custom_resource_event = CloudFormationCustomResourceEvent(event)
@@ -113,12 +109,11 @@ def lambda_handler(event: dict, context: LambdaContext):
         certificates = event['ResourceProperties']['Certificates']
 
         if event['RequestType'] == 'Create':
-            success = deploy_certificates(bucket_name, certificates)
 
-            if success:
+            if success:= deploy_certificates(bucket_name, certificates):
                 cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
                     'Message': (f'Successfully deployed {len(certificates)} '
-                              f'certificates to {bucket_name}')
+                                f'certificates to {bucket_name}: {success}')
                 })
             else:
                 cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
@@ -126,12 +121,11 @@ def lambda_handler(event: dict, context: LambdaContext):
                 })
 
         elif event['RequestType'] == 'Update':
-            success = deploy_certificates(bucket_name, certificates)
 
-            if success:
+            if success:= deploy_certificates(bucket_name, certificates):
                 cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
                     'Message': (f'Successfully updated {len(certificates)} '
-                              f'certificates in {bucket_name}')
+                                f'certificates in {bucket_name}: {success}')
                 })
             else:
                 cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {
@@ -142,12 +136,11 @@ def lambda_handler(event: dict, context: LambdaContext):
             # Remove certificates before bucket deletion
             certificates = event['ResourceProperties']['Certificates']
             certificate_keys = list(certificates.keys())
-            
-            success = remove_certificates(bucket_name, certificate_keys)
-            
-            if success:
+
+            if success:= remove_certificates(bucket_name, certificate_keys):
                 cfnresponse.send(custom_resource_event, context, cfnresponse.SUCCESS, {
-                    'Message': f'Successfully removed {len(certificate_keys)} certificates from {bucket_name}'
+                    'Message': f'Successfully removed {len(certificate_keys)} '
+                               f'certificates from {bucket_name}: {success}'
                 })
             else:
                 cfnresponse.send(custom_resource_event, context, cfnresponse.FAILED, {

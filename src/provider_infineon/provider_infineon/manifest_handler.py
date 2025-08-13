@@ -25,7 +25,7 @@ def verify_certtype(option: str) -> bool:
         case _:
             raise ValueError("Bad cert type code.")
 
-def verify_certificate_set(files: list[py7zr.FileInfo], option: str) -> str:
+def verify_certificate_set(files: list[py7zr.FileInfo], option: str) -> str|None:
     """Ensure that the bundlke exists in the payload"""
     if verify_certtype(option) is False or files is None:
         return None
