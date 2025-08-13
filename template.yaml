@@ -458,7 +458,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_generated/
-      Handler: main.lambda_handler
+      Handler: provider_generated.main.lambda_handler
       Runtime: python3.13
       MemorySize: 256
       Timeout: !Ref LambdaTimeout
@@ -657,7 +657,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       CodeUri: src/provider_espressif/
-      Handler: main.lambda_handler
+      Handler: provider_espressif.main.lambda_handler
       Runtime: python3.13
       Timeout: 900
       MemorySize: !Ref LambdaMemorySize
