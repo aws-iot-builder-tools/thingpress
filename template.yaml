@@ -181,15 +181,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .csv
-            Function: !GetAtt ThingpressProductVerifierFunction.Arn
   
   # S3 bucket for generated certificates
   ThingpressGeneratedManifestBucket:
@@ -210,15 +201,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .txt
-            Function: !GetAtt ThingpressProductVerifierFunction.Arn
   
   # S3 Bucket to receive Infineon manifest payload which is a
   # 7-Zip compressed file having embedded compressed files.
@@ -240,15 +222,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .7z
-            Function: !GetAtt ThingpressProductVerifierFunction.Arn
   
   # S3 Bucket for Microchip verification certificates (separate from manifest bucket)
   ThingpressMicrochipVerificationCertsBucket:
@@ -290,15 +263,6 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-      NotificationConfiguration:
-        LambdaConfigurations:
-          - Event: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: suffix
-                    Value: .json
-            Function: !GetAtt ThingpressProductVerifierFunction.Arn
 
   # Certificate deployer Lambda function
   ThingpressCertificateDeployerFunction:
@@ -337,35 +301,35 @@ Resources:
         MCHP_manifest_signer_3_Aug-13-2020_Aug-13-2023.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4akNDQVd5Z0F3SUJBZ0lRZHZiam1vRnZFUUNPV1VZY1dCNjNuREFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQXpNQjRYRFRJd01EZ3hNekUyTkRReU9Wb1hEVEl6TURneE16RTJORFF5T1Zvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdNekJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCT2VRYlF3M1JSK0V1TXBJMWxCRAptcm10WlI1cFgzempuejU3eDlvNm1XdWRJUmdNdFh1TzdQUzVNT0ducXp0eGdyVUs3RVQ2OXVBalFqQzVUNC83CnEyV2pVREJPTUIwR0ExVWREZ1FXQkJTRjhLeXBWajY1QTFRazBwTDRzb1A5eVJqN1VUQWZCZ05WSFNNRUdEQVcKZ0JTRjhLeXBWajY1QTFRazBwTDRzb1A5eVJqN1VUQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGdBTUVVQ0lRRFRGYmkyRVJCTnNLNW8xQTJ0MGFidERzNzgvS2FxL1FVY0hFbmxCK2owb1FJZ1Q3amVUU1R3CmUzUnpvMmVteXRnZXQ2Vm9nT1dsTU1WRGU5K3pkVVQ0cmNZPQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
         MCHP_manifest_signer_4_Jul-18-2023_Jul-18-2026.crt: "LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUJ4ekNDQVd5Z0F3SUJBZ0lRZjZQR0I0NEloZlhCV1VycVVLZEc3akFLQmdncWhrak9QUVFEQWpBOE1TRXcKSHdZRFZRUUtEQmhOYVdOeWIyTm9hWEFnVkdWamFHNXZiRzluZVNCSmJtTXhGekFWQmdOVkJBTU1Ea3h2WnlCVAphV2R1WlhJZ01EQTBNQjRYRFRJek1EY3hPREU0TXpjMU1Wb1hEVEkyTURjeE9ERTRNemMxTVZvd1BERWhNQjhHCkExVUVDZ3dZVFdsamNtOWphR2x3SUZSbFkyaHViMnh2WjNrZ1NXNWpNUmN3RlFZRFZRUUREQTVNYjJjZ1UybG4KYm1WeUlEQXdOREJaTUJNR0J5cUdTTTQ5QWdFR0NDcUdTTTQ5QXdFSEEwSUFCQVR4aU9jbEdpb1RtTS81UkQ2bwo1dW96SkkyK29ZSU5uZmYybFZ3M004U25wSGREcFg3TXREU3o2bGNEclpHUlR1amwvQ2tvOWZMYVlBSHJyNUUzClRSU2pVREJPTUIwR0ExVWREZ1FXQkJTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQWZCZ05WSFNNRUdEQVcKZ0JTUEVSdFhVOXhraVpsWWEvSUNNT3ZkRnJISzVUQU1CZ05WSFJNQkFmOEVBakFBTUFvR0NDcUdTTTQ5QkFNQwpBMGtBTUVZQ0lRQ25DQUJlOGlRWmdTMkt6NDc2dUtRQmk0NTJDMUdlTEFvNStBOHFkQ0lCVXdJaEFPNGthUUwrCjZvb1NjcmdpbTA0V1lEcC9ZZ3JwTUNuYjY1VmpYRkNGdFRBRQotLS0tLUVORCBDRVJUSUZJQ0FURS0tLS0tCg=="
         
-  # Allow Espressif bucket event to invoke the product provider function
-  ThingpressProductVerifierInvokeFromEspressifPerm:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
-      SourceArn: !GetAtt ThingpressEspressifManifestBucket.Arn
-
-  # Allow Infineon bucket event to invoke the product provider function
-  ThingpressProductVerifierInvokeFromInfineonPerm:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
-      SourceArn: !GetAtt ThingpressInfineonManifestBucket.Arn
-
-  # Allow Microchip bucket event to invoke the product provider function
-  ThingpressProductVerifierInvokeFromMicrochipPerm:
-    Type: AWS::Lambda::Permission
-    Properties:
-      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
-      Action: lambda:InvokeFunction
-      Principal: s3.amazonaws.com
-      SourceAccount: !Ref AWS::AccountId
-      SourceArn: !GetAtt ThingpressMicrochipManifestBucket.Arn
+#  # Allow Espressif bucket event to invoke the product provider function
+#  ThingpressProductVerifierInvokeFromEspressifPerm:
+#    Type: AWS::Lambda::Permission
+#    Properties:
+#      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
+#      Action: lambda:InvokeFunction
+#      Principal: s3.amazonaws.com
+#      SourceAccount: !Ref AWS::AccountId
+#      SourceArn: !GetAtt ThingpressEspressifManifestBucket.Arn
+#
+#  # Allow Infineon bucket event to invoke the product provider function
+#  ThingpressProductVerifierInvokeFromInfineonPerm:
+#    Type: AWS::Lambda::Permission
+#    Properties:
+#      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
+#      Action: lambda:InvokeFunction
+#      Principal: s3.amazonaws.com
+#      SourceAccount: !Ref AWS::AccountId
+#      SourceArn: !GetAtt ThingpressInfineonManifestBucket.Arn
+#
+#  # Allow Microchip bucket event to invoke the product provider function
+#  ThingpressProductVerifierInvokeFromMicrochipPerm:
+#    Type: AWS::Lambda::Permission
+#    Properties:
+#      FunctionName: !GetAtt ThingpressProductVerifierFunction.Arn
+#      Action: lambda:InvokeFunction
+#      Principal: s3.amazonaws.com
+#      SourceAccount: !Ref AWS::AccountId
+#      SourceArn: !GetAtt ThingpressMicrochipManifestBucket.Arn
 
   # Invoked on S3 event, the product provider evaluates configuration
   # prior to passing along normalized configuration (object ARN resolution,
@@ -417,6 +381,47 @@ Resources:
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType
+      Events:
+        EV1:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressInfineonManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .7z
+        EV2:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressEspressifManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .csv
+        EV3:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressGeneratedManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .txt
+        EV4:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressMicrochipManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .json
 
   # Dead letter queue for Generated provider
   ThingpressGeneratedProviderDLQ:
