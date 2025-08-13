@@ -242,7 +242,7 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
         # Collect failed messages for retry
         failed_messages = []
         for result in results:
-            if not 'Failed' in result and not result['Failed']:
+            if not 'Failed' in result:
                 break
             for failure in result['Failed']:
                 failed_msg_idx = int(failure['Id'])
