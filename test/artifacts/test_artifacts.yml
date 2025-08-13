@@ -17,5 +17,5 @@ providers:
     bSHA256: b16ea54e130c4726fb2b5ab9323365acb21d1bb594efeb2062d590669f201648
   - provider: generated
     file: certificates_test.txt
-    count: 3
-    bSHA256: 59251b86c79e138661415cbefcca010f0a31ede85594c90db9b4fbae50b29aeb
+    count: 100
+    bSHA256: bc6e93da1e6148462b5746d6ffc0b044b2d2217c0f19b3e525555ceac3a4b781
