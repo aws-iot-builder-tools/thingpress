@@ -13,7 +13,7 @@ providers:
     bSHA256: da5b057f0f442bc7e12afc6e13b3c2bc4ea6febcdf5ef978f666334db9544260
   - provider: infineon
     file: manifest-infineon.7z
-    count: 400
+    count: 200
     bSHA256: b16ea54e130c4726fb2b5ab9323365acb21d1bb594efeb2062d590669f201648
   - provider: generated
     file: certificates_test.txt
