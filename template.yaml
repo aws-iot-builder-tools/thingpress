@@ -67,17 +67,17 @@ Parameters:
       
   DLQRetentionPeriod:
     Type: Number
-    Default: 1209600
+    Default: '1209600'
     Description: Retention period for Dead Letter Queues in seconds (default 14 days)
     
   QueueVisibilityTimeout:
     Type: Number
-    Default: 900
+    Default: '900'
     Description: Visibility timeout for SQS queues in seconds (default 15 minutes)
     
   IdempotencyExpirySeconds:
     Type: Number
-    Default: 3600
+    Default: '3600'
     Description: Expiry time for idempotency records in seconds (default 1 hour)
     
   # SQS Throttling Configuration
@@ -89,40 +89,40 @@ Parameters:
     
   ThrottlingBaseDelay:
     Type: Number
-    Default: 30
-    MinValue: 0
-    MaxValue: 300
+    Default: '30'
+    MinValue: '0'
+    MaxValue: '300'
     Description: Base delay in seconds for throttling calculations (0-300 seconds)
     
   ThrottlingBatchInterval:
     Type: Number
-    Default: 3
-    MinValue: 1
-    MaxValue: 10
+    Default: '3'
+    MinValue: '1'
+    MaxValue: '10'
     Description: Apply throttling delay every N batches (e.g., 3 = every third batch)
     
   MaxQueueDepth:
     Type: Number
-    Default: 1000
-    MinValue: 100
-    MaxValue: 10000
+    Default: '1000'
+    MinValue: '100'
+    MaxValue: '10000'
     Description: Maximum queue depth before aggressive throttling kicks in
     
   ProviderConcurrencyLimit:
     Type: Number
-    Default: 5
-    MinValue: 1
-    MaxValue: 100
+    Default: '5'
+    MinValue: '1'
+    MaxValue: '100'
     Description: Maximum concurrent executions for provider functions (throttling)
     
   LambdaMemorySize:
     Type: Number
-    Default: 2048
+    Default: '2048'
     Description: Memory size for Lambda functions in MB (default 2048 MB)
     
   LambdaTimeout:
     Type: Number
-    Default: 300
+    Default: '300'
     Description: Timeout for Lambda functions in seconds (default 5 minutes)
 
 Conditions:
@@ -181,7 +181,16 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .csv
+            Function: !GetAtt ThingpressProductVerifierFunction.Arn
+  
   # S3 bucket for generated certificates
   ThingpressGeneratedManifestBucket:
     Type: AWS::S3::Bucket
@@ -201,7 +210,16 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .txt
+            Function: !GetAtt ThingpressProductVerifierFunction.Arn
+  
   # S3 Bucket to receive Infineon manifest payload which is a
   # 7-Zip compressed file having embedded compressed files.
   ThingpressInfineonManifestBucket:
@@ -222,7 +240,16 @@ Resources:
         BlockPublicPolicy: true
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
-        
+      NotificationConfiguration:
+        LambdaConfigurations:
+          - Event: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: suffix
+                    Value: .7z
+            Function: !GetAtt ThingpressProductVerifierFunction.Arn
+  
   # S3 Bucket for Microchip verification certificates (separate from manifest bucket)
   ThingpressMicrochipVerificationCertsBucket:
     Type: AWS::S3::Bucket
