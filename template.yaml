@@ -67,7 +67,7 @@ Parameters:
       
   DLQRetentionPeriod:
     Type: Number
-    Default: '1209600'
+    Default: 1209600
     Description: Retention period for Dead Letter Queues in seconds (default 14 days)
     
   QueueVisibilityTimeout:
@@ -417,37 +417,6 @@ Resources:
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType
-      Events:
-        EV1:
-          Type: S3
-          Properties:
-            Bucket: !Ref ThingpressInfineonManifestBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: Suffix
-                    Value: .7z
-        EV2:
-          Type: S3
-          Properties:
-            Bucket: !Ref ThingpressEspressifManifestBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: Suffix
-                    Value: .csv
-        EV3:
-          Type: S3
-          Properties:
-            Bucket: !Ref ThingpressGeneratedManifestBucket
-            Events: s3:ObjectCreated:*
-            Filter:
-              S3Key:
-                Rules:
-                  - Name: Suffix
-                    Value: .txt
 
   # Dead letter queue for Generated provider
   ThingpressGeneratedProviderDLQ:
