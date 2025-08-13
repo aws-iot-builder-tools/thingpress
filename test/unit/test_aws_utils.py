@@ -157,7 +157,7 @@ class TestAwsUtils(TestCase):
         policy_document = json.dumps(IOT_POLICY)
         iot_client.create_policy(policyName=policy_name, policyDocument=policy_document)
 
-        cert = decode_certificate(self.local_cert_loaded).decode('ascii')
+        cert = decode_certificate(self.local_cert_loaded)
         certificate_id = register_certificate(cert, session=_get_default_session())
         certificate_arn = get_certificate_arn(certificate_id, _get_default_session())
 
@@ -361,7 +361,7 @@ class TestAwsUtils(TestCase):
 
     def test_pos_get_certificate_arn(self):
         """Positive test for get_certificate_arn"""
-        cert = decode_certificate(self.local_cert_loaded).decode('ascii')
+        cert = decode_certificate(self.local_cert_loaded)
         certificate_id = register_certificate(cert, session=_get_default_session())
         certificate_arn = get_certificate_arn(certificate_id, _get_default_session())
         assert certificate_arn is not None
@@ -382,7 +382,7 @@ class TestAwsUtils(TestCase):
     def test_pos_process_thing(self):
         """Positive test case for attaching policy to certificate"""
         iot_client = _get_default_session().client('iot')
-        cert = decode_certificate(self.local_cert_loaded).decode('ascii')
+        cert = decode_certificate(self.local_cert_loaded)
         certificate_id = register_certificate(cert, session=_get_default_session())
         thing_name = "process_thing"
         iot_client.create_thing(thingName=thing_name)
@@ -401,7 +401,7 @@ class TestAwsUtils(TestCase):
 
     def test_pos_process_thing_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
-        cert = decode_certificate(self.local_cert_loaded).decode('ascii')
+        cert = decode_certificate(self.local_cert_loaded)
         cr = register_certificate(cert, session=_get_default_session())
 
         # Assume operation success with no raise
@@ -409,7 +409,7 @@ class TestAwsUtils(TestCase):
 
     def test_pos_process_thing_with_type_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
-        cert = decode_certificate(self.local_cert_loaded).decode('ascii')
+        cert = decode_certificate(self.local_cert_loaded)
         cr = register_certificate(cert, session=_get_default_session())
 
         # Assume operation success with no raise

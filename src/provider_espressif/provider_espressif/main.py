@@ -21,6 +21,7 @@ from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.aws_utils import powertools_idempotency_environ
 from layer_utils.throttling_utils import create_standardized_throttler
+from layer_utils.cert_utils import format_certificate
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_espressif")
@@ -66,6 +67,7 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
     for row in reader_list:
         cert_config = config.copy()
         cert_config['thing'] = row['MAC']
+#        cert_config['certificate'] = base64.b64encode(row['cert'].encode('ascii'))
         cert_config['certificate'] = str(base64.b64encode(row['cert'].encode('ascii')))
 
         batch_messages.append(cert_config)

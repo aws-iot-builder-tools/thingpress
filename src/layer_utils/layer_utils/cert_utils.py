@@ -81,9 +81,9 @@ def get_cn(cert_data: str | bytes) -> str:
 
     return cn
 
-def decode_certificate(b64_encoded_cert: str) -> bytes:
+def decode_certificate(b64_encoded_cert: str) -> str:
     """A decoding mechanism that is required when receiving a certificate via SQS message"""
-    return b64decode(literal_eval(b64_encoded_cert))
+    return b64decode(literal_eval(b64_encoded_cert)).decode('ascii')
 
 def get_certificate_fingerprint(certificate: x509.Certificate) -> str:
     """Retrieve the certificate fingerprint"""

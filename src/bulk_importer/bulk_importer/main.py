@@ -52,7 +52,7 @@ def process_certificate(config, session: Session=default_session):
     payload = config['certificate']
 
     decoded_certificate = decode_certificate(payload)
-    x509_certificate = load_certificate(decoded_certificate)
+    x509_certificate = load_certificate(decoded_certificate.encode('ascii'))
     fingerprint = get_certificate_fingerprint(x509_certificate)
 
     try:
@@ -66,7 +66,7 @@ def process_certificate(config, session: Session=default_session):
         # Intentional fall-through
 
     try:
-        return register_certificate(certificate=decoded_certificate.decode('ascii'),
+        return register_certificate(certificate=decoded_certificate,
                                     session=session)
     except ClientError as error:
         logger.error({

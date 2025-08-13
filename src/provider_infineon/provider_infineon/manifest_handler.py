@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: MIT-0
 """
 import io
+import base64
 
 import py7zr
 import py7zr.io as py7io
@@ -66,7 +67,8 @@ def send_certificates(manifest_archive: io.BytesIO,
 
     for x in szf.list():
         j = fcty.get(filename = x.filename).read().decode('ascii')
-        k = format_certificate(j)
+        #k = format_certificate(j)
+        k = str(base64.b64encode(j.encode("ascii")))
         l = get_cn(j)
 
         cert_config = config.copy()

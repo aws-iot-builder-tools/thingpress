@@ -18,7 +18,7 @@ from moto import mock_aws
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
-from src.provider_espressif.main import lambda_handler, invoke_export
+from src.provider_espressif.provider_espressif.main import lambda_handler, invoke_export
 from .model_provider_espressif import LambdaS3Class, LambdaSQSClass
 
 @mock_aws(config={
