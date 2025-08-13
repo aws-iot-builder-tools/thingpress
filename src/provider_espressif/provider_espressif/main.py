@@ -66,7 +66,7 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
     for row in reader_list:
         cert_config = config.copy()
         cert_config['thing'] = row['MAC']
-        cert_config['certificate'] = base64.b64encode(row['cert'].encode('ascii')).decode('ascii')
+        cert_config['certificate'] = str(base64.b64encode(row['cert'].encode('ascii')))
 
         batch_messages.append(cert_config)
         total_count += 1
