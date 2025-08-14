@@ -153,13 +153,17 @@ class EndToEndTestFramework:
         # Give the system a moment to start processing after manifest upload
         time.sleep(5)
 
-        while (time.time() - start_time < timeout_seconds) or (len(processing_indicators['recent_iot_things']) == manifest_cert_count):
+        while (time.time() - start_time < timeout_seconds):
 
             # Check for recently created IoT things (use longer window for detection)
             recent_things = self._get_recent_iot_things(start_time, manifest_cert_count)
             if recent_things:
                 processing_indicators['recent_iot_things'] = recent_things
                 self.logger.info("Found %d recent IoT things", len(recent_things))
+
+            if len(recent_things) == manifest_cert_count:
+                self.logger.info("🎉 All things discovered!")
+                break
 
             # Check for log activity in provider functions
             log_activity = self._check_recent_log_activity()
