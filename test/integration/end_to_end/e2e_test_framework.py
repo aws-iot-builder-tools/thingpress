@@ -192,22 +192,11 @@ class EndToEndTestFramework:
             recent_things = []
 
             for thing in response.get('things', []):
-                creation_date = thing.get('creationDate')
-
-                if creation_date is not None:
-                    print(f"creation_date: {creation_date}")
-                    print(f"creation_date.timestamp(): {creation_date.timestamp()}")
-                else:
-                    print("INFO creation_date is NoneType")
-                print(f"begin_time: {begin_time}")
-                is_recent = creation_date and (creation_date.timestamp() > begin_time)
-
-                if is_recent:
-                    # Get additional details about the thing
-                    # TODO: This is ok for now but inefficient, we should get details only
-                    #       when the test completes
-                    thing_details = self._get_thing_details(thing['thingName'])
-                    recent_things.append(thing_details)
+                # Get additional details about the thing
+                # TODO: This is ok for now but inefficient, we should get details only
+                #       when the test completes
+                thing_details = self._get_thing_details(thing['thingName'])
+                recent_things.append(thing_details)
 
             return recent_things
 
