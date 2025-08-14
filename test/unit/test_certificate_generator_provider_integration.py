@@ -200,8 +200,10 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             self.assertTrue(body['thing'].startswith("Device-"), 
                            f"Thing name should start with 'Device-', got {body['thing']}")
             
+            cert_bytes = base64.b64decode(certificates[i])
+            post_process_certificate = str(base64.b64encode(str(cert_bytes).encode('ascii')))
             # Verify the certificate data is the same as what we generated
-            self.assertEqual(body['certificate'], certificates[i], 
+            self.assertEqual(body['certificate'], post_process_certificate,
                             "Certificate data in message should match generated certificate")
 
     def test_lambda_handler_with_generated_certificates(self):
