@@ -122,10 +122,7 @@ class ThingpressCleanup:
 
                 for thing in things:
                     thing_name = thing['thingName']
-
-                    # Check if thing should be cleaned up
-                    if self._should_cleanup_thing(thing_name, thing):
-                        self._cleanup_single_iot_thing(thing_name)
+                    self._cleanup_single_iot_thing(thing_name)
 
         except ClientError as e:
             error_msg = f"Failed to list IoT things: {e}"
@@ -144,53 +141,12 @@ class ThingpressCleanup:
 
                 for thing in things:
                     thing_name = thing['thingName']
-
-                    # Check if thing matches test patterns
-                    if self._matches_test_patterns(thing_name):
-                        self._cleanup_single_iot_thing(thing_name)
+                    self._cleanup_single_iot_thing(thing_name)
 
         except ClientError as e:
             error_msg = f"Failed to list test IoT things: {e}"
             self.logger.error(error_msg)
             self.cleanup_results['errors'].append(error_msg)
-
-    def _should_cleanup_thing(self, thing_name: str, thing_data: Dict) -> bool:
-        """Determine if an IoT thing should be cleaned up
-        
-        Args:
-            thing_name: Name of the IoT thing
-            thing_data: Thing data from list_things API
-            
-        Returns:
-            True if thing should be cleaned up
-        """
-        # Check test patterns first
-        if self._matches_test_patterns(thing_name):
-            return True
-
-        # Check thing attributes for thingpress tag
-        attributes = thing_data.get('attributes', {})
-        if attributes.get(self.config.resource_tag_key) == self.config.resource_tag_value:
-            return True
-
-        # Check thing tags (requires additional API call)
-        try:
-            thing_arn = thing_data.get('thingArn')
-            if thing_arn:
-                tags_response = self.iot_client.list_tags_for_resource(resourceArn=thing_arn)
-                tags = {tag['Key']: tag['Value'] for tag in tags_response.get('tags', [])}
-
-                if tags.get(self.config.resource_tag_key) == self.config.resource_tag_value:
-                    return True
-        except ClientError:
-            # If we can't check tags, fall back to pattern matching
-            pass
-
-        return False
-
-    def _matches_test_patterns(self, thing_name: str) -> bool:
-        """Check if thing name matches test patterns"""
-        return any(pattern in thing_name for pattern in self.config.test_thing_patterns)
 
     def _cleanup_single_iot_thing(self, thing_name: str):
         """Clean up a single IoT thing and its associated resources"""
