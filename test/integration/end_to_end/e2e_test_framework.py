@@ -194,11 +194,13 @@ class EndToEndTestFramework:
             for thing in response.get('things', []):
                 creation_date = thing.get('creationDate')
 
-                # Include if it's recent OR if it matches test patterns
-                print(f"creation_date: {creation_date}")
-                print(f"creation_date.timestamp(): {creation_date.timestamp()}")
+                if creation_date is not None:
+                    print(f"creation_date: {creation_date}")
+                    print(f"creation_date.timestamp(): {creation_date.timestamp()}")
+                else:
+                    print("INFO creation_date is NoneType")
                 print(f"begin_time: {begin_time}")
-                is_recent = creation_date and creation_date.timestamp() > begin_time
+                is_recent = creation_date and (creation_date.timestamp() > begin_time)
 
                 if is_recent:
                     # Get additional details about the thing
