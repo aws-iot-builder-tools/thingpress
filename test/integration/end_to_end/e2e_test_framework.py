@@ -135,7 +135,7 @@ class EndToEndTestFramework:
                          bucket, manifest_key)
         return f"s3://{bucket}/{manifest_key}"
 
-    def wait_for_processing_completion(self, timeout_minutes: int = 10) -> dict:
+    def wait_for_processing_completion(self, timeout_minutes: int = 10, manifest_cert_count: int = 1000) -> dict:
         """Wait for Thingpress processing to complete by monitoring various indicators"""
 
         start_time = time.time()
@@ -153,10 +153,10 @@ class EndToEndTestFramework:
         # Give the system a moment to start processing after manifest upload
         time.sleep(5)
 
-        while time.time() - start_time < timeout_seconds:
+        while (time.time() - start_time < timeout_seconds) or processing_indicators['recent_iot_things'] == manifest_cert_count:
 
             # Check for recently created IoT things (use longer window for detection)
-            recent_things = self._get_recent_iot_things(minutes=timeout_minutes + 5)
+            recent_things = self._get_recent_iot_things(start_time, manifest_cert_count)
             if recent_things:
                 processing_indicators['recent_iot_things'] = recent_things
                 self.logger.info("Found %d recent IoT things", len(recent_things))
@@ -182,45 +182,27 @@ class EndToEndTestFramework:
 
         return processing_indicators
 
-    def _get_recent_iot_things(self, minutes: int = 10) -> list[dict]:
+    def _get_recent_iot_things(self, begin_time: float = 10.0, max_expected: int=1000) -> list[dict]:
         """Get IoT things created in the last N minutes or matching test patterns"""
-        cutoff_time = time.time() - (minutes * 60)
+#        cutoff_time = time.time() - (minutes * 60)
 
         try:
             # Get all things (this might need pagination for large deployments)
-            response = self.iot_client.list_things(maxResults=100)
+            response = self.iot_client.list_things(maxResults=max_expected)
             recent_things = []
 
             for thing in response.get('things', []):
-                thing_name = thing['thingName']
                 creation_date = thing.get('creationDate')
 
-                # Check if thing matches test patterns (from our test manifest)
-                is_test_thing = any(pattern in thing_name for pattern in ['0123', 'test_'])
-
                 # Include if it's recent OR if it matches test patterns
-                is_recent = creation_date and creation_date.timestamp() > cutoff_time
+                is_recent = creation_date and creation_date.timestamp() > begin_time
 
-                if is_recent or is_test_thing:
+                if is_recent:
                     # Get additional details about the thing
+                    # TODO: This is ok for now but inefficient, we should get details only
+                    #       when the test completes
                     thing_details = self._get_thing_details(thing['thingName'])
                     recent_things.append(thing_details)
-
-            # If we found test things but none were "recent", still return them
-            # This handles cases where timestamp detection fails
-            if not recent_things:
-                # Look specifically for things that match our test certificate patterns
-                test_things = []
-                for thing in response.get('things', []):
-                    thing_name = thing['thingName']
-                    if any(pattern in thing_name for pattern in ['0123ff', '0123ee', '0123959']):
-                        thing_details = self._get_thing_details(thing['thingName'])
-                        test_things.append(thing_details)
-
-                if test_things:
-                    self.logger.info("Found %d test things (timestamp detection may have failed)",
-                                     len(test_things))
-                    return test_things
 
             return recent_things
 
@@ -511,7 +493,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
             # Step 2: Wait for processing
             step2 = self.log_step("wait_processing",
                                   f"Wait for {self.provider_name} processing to complete")
-            processing_results = self.wait_for_processing_completion(timeout_minutes)
+            processing_results = self.wait_for_processing_completion(timeout_minutes, self.manifest_cert_count)
 
             certificates_found = processing_results.get('certificates_found', 0)
             iot_things = processing_results.get('recent_iot_things', [])

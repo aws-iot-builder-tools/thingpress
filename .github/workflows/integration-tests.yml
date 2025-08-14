@@ -14,12 +14,12 @@ on:
       cleanup:
         description: 'Clean up resources after tests'
         required: true
-        default: 'true'
+        default: true
         type: boolean
       keep_stack:
         description: 'Keep the test stack after completion (for debugging)'
         required: false
-        default: 'false'
+        default: false
         type: boolean
 
 jobs:
@@ -132,7 +132,7 @@ jobs:
           AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
           THINGPRESS_STACK_NAME: ${{ env.STACK_NAME }}
       - name: Delete test stack
-        if: always() && github.event.inputs.keep_stack != 'true'
+        if: always() && github.event.inputs.keep_stack != true
         run: |
           echo "🗑️ Deleting integration test stack..."
           echo "Stack name: ${{ env.STACK_NAME }}"
