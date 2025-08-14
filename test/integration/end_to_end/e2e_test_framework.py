@@ -153,7 +153,7 @@ class EndToEndTestFramework:
         # Give the system a moment to start processing after manifest upload
         time.sleep(5)
 
-        while (time.time() - start_time < timeout_seconds) or processing_indicators['recent_iot_things'] == manifest_cert_count:
+        while (time.time() - start_time < timeout_seconds) or len(processing_indicators['recent_iot_things']) == manifest_cert_count:
 
             # Check for recently created IoT things (use longer window for detection)
             recent_things = self._get_recent_iot_things(start_time, manifest_cert_count)
@@ -168,11 +168,11 @@ class EndToEndTestFramework:
                 self.logger.info("Detected recent log activity in provider functions")
 
             # If we have IoT things, consider processing complete
-            if recent_things:
-                processing_indicators['certificates_found'] = len(recent_things)
-                self.logger.info("✅ Processing appears complete - %d IoT things created",
-                                 len(recent_things))
-                break
+            #if recent_things:
+            #    processing_indicators['certificates_found'] = len(recent_things)
+            #    self.logger.info("✅ Processing appears complete - %d IoT things created",
+            #                     len(recent_things))
+            #    break
 
             # Wait before next check
             time.sleep(10)
@@ -184,8 +184,8 @@ class EndToEndTestFramework:
 
     def _get_recent_iot_things(self, begin_time: float = 10.0, max_expected: int=1000) -> list[dict]:
         """Get IoT things created in the last N minutes or matching test patterns"""
-#        cutoff_time = time.time() - (minutes * 60)
-
+        print("begin_time: {begin_time}")
+        print("max_expected: {max_expected}")
         try:
             # Get all things (this might need pagination for large deployments)
             response = self.iot_client.list_things(maxResults=max_expected)
@@ -195,6 +195,9 @@ class EndToEndTestFramework:
                 creation_date = thing.get('creationDate')
 
                 # Include if it's recent OR if it matches test patterns
+                print("creation_date: {creation_date}")
+                print("creation_date.timestamp(): {creation_date.timestamp()}")
+                print("begin_time: {begin_time}")
                 is_recent = creation_date and creation_date.timestamp() > begin_time
 
                 if is_recent:
