@@ -17,6 +17,7 @@ import traceback
 from datetime import datetime
 from pathlib import Path
 import boto3
+from botocore.exceptions import ClientError
 from integration.cleanup_utils import ThingpressCleanup, CleanupConfig
 
 # Configure logging
@@ -156,13 +157,14 @@ class EndToEndTestFramework:
         while (time.time() - start_time < timeout_seconds):
 
             # Check for recently created IoT things (use longer window for detection)
-            recent_things = self._get_recent_iot_things(start_time, manifest_cert_count)
+            recent_things = self._get_iot_things(manifest_cert_count)
+            recent_certificates = self._get_iot_certificates(manifest_cert_count)
             if recent_things:
                 processing_indicators['recent_iot_things'] = recent_things
                 self.logger.info("Found %d recent IoT things", len(recent_things))
 
-            if len(recent_things) == manifest_cert_count:
-                self.logger.info("🎉 All things discovered!")
+            if len(recent_things) == manifest_cert_count and len(recent_certificates) == manifest_cert_count:
+                self.logger.info("🎉 All things and certificates discovered!")
                 break
 
             # Check for log activity in provider functions
@@ -186,27 +188,44 @@ class EndToEndTestFramework:
 
         return processing_indicators
 
-    def _get_recent_iot_things(self, begin_time: float = 10.0, max_expected: int=1000) -> list[dict]:
-        """Get IoT things created in the last N minutes or matching test patterns"""
-        print(f"begin_time: {begin_time}")
-        print(f"max_expected: {max_expected}")
+    def _get_iot_things(self, max_expected: int=1000) -> list[dict]:
+        """Get IoT things created"""
+        things = []
         try:
             # Get all things (this might need pagination for large deployments)
             response = self.iot_client.list_things(maxResults=max_expected)
-            recent_things = []
-
-            for thing in response.get('things', []):
-                # Get additional details about the thing
-                # TODO: This is ok for now but inefficient, we should get details only
-                #       when the test completes
-                thing_details = self._get_thing_details(thing['thingName'])
-                recent_things.append(thing_details)
-
-            return recent_things
-
-        except Exception as e:
+        except ClientError as e:
             self.logger.error("Failed to get recent IoT things: %s", e)
             return []
+
+        for thing in response.get('things', []):
+            # Get additional details about the thing
+            # TODO: This is ok for now but inefficient, we should get details only
+            #       when the test completes
+            thing_details = self._get_thing_details(thing['thingName'])
+            things.append(thing_details)
+
+        return things
+
+    def _get_iot_certificates(self, max_expected: int=1000) -> list[dict]:
+        """Get IoT certificates created"""
+        certificates = []
+        try:
+            # Get all things (this might need pagination for large deployments)
+            response = self.iot_client.list_certificates(pageSize=max_expected)
+        except ClientError as e:
+            self.logger.error("Failed to get recent IoT things: %s", e)
+            return []
+
+        for certificate in response.get('certificates', []):
+            # Get additional details about the thing
+            # TODO: This is ok for now but inefficient, we should get details only
+            #       when the test completes
+            certificate_details = {"certificate": certificate['certificateId']}
+            certificates.append(certificate_details)
+
+        return certificates
+
 
     def _get_thing_details(self, thing_name: str) -> dict:
         """Get detailed information about an IoT thing"""
