@@ -157,13 +157,21 @@ class EndToEndTestFramework:
         while (time.time() - start_time < timeout_seconds):
 
             # Check for recently created IoT things (use longer window for detection)
-            recent_things = self._get_iot_things(manifest_cert_count)
-            recent_certificates = self._get_iot_certificates(manifest_cert_count)
-            if recent_things:
-                processing_indicators['recent_iot_things'] = recent_things
-                self.logger.info("Found %d recent IoT things", len(recent_things))
 
-            if len(recent_things) == manifest_cert_count and len(recent_certificates) == manifest_cert_count:
+            things = self._get_iot_things(manifest_cert_count)
+            certificates = self._get_iot_certificates(manifest_cert_count)
+            things_completed = False
+            certificates_completed = False
+            if things:
+                processing_indicators['iot_things'] = things
+                self.logger.info("Found %d recent IoT things", len(things))
+                things_completed = len(things) == manifest_cert_count 
+            if certificates:
+                processing_indicators['iot_certificates'] = certificates
+                self.logger.info("Found %d recent IoT certificates", len(certificates))
+                certificates_completed = len(certificates) == manifest_cert_count
+
+            if things_completed and certificates_completed:
                 self.logger.info("🎉 All things and certificates discovered!")
                 break
 
@@ -172,13 +180,6 @@ class EndToEndTestFramework:
             if log_activity:
                 processing_indicators['log_activity'] = True
                 self.logger.info("Detected recent log activity in provider functions")
-
-            # If we have IoT things, consider processing complete
-            #if recent_things:
-            #    processing_indicators['certificates_found'] = len(recent_things)
-            #    self.logger.info("✅ Processing appears complete - %d IoT things created",
-            #                     len(recent_things))
-            #    break
 
             # Wait before next check
             time.sleep(10)
@@ -512,15 +513,15 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                                   f"Wait for {self.provider_name} processing to complete")
             processing_results = self.wait_for_processing_completion(timeout_minutes, self.manifest_cert_count)
 
-            certificates_found = processing_results.get('certificates_found', 0)
-            iot_things = processing_results.get('recent_iot_things', [])
+            iot_certificates = processing_results.get('iot_certificates', [])
+            iot_things = processing_results.get('iot_things', [])
 
-            if certificates_found > 0:
-                self.results['certificates_processed'] = certificates_found
+            if len(iot_certificates) > 0:
+                self.results['certificates_processed'] = len(iot_certificates)
                 self.results['iot_things_created'] = [thing['thingName'] for thing in iot_things]
 
-            self.complete_step(step2, certificates_found > 0, {
-                'certificates_processed': certificates_found,
+            self.complete_step(step2, len(iot_certificates) > 0, {
+                'certificates_processed': len(iot_certificates),
                 'iot_things_created': len(iot_things),
                 'processing_indicators': processing_results
             })
@@ -540,7 +541,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
 
             # Determine overall success
             overall_success = (
-                certificates_found > 0 and
+                len(iot_certificates) > 0 and
                 validation_results.get('valid', False)
             )
 
