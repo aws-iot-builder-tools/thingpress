@@ -81,7 +81,7 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
         # Store the certificate
         cert_bytes = base64.b64decode(line)
         cert_config['thing'] = get_cn(cert_bytes)
-        cert_config['certificate'] = str(base64.b64encode(str(cert_bytes).encode('ascii')))
+        cert_config['certificate'] = str(base64.b64encode(cert_bytes))
         # Convert bytes to string for get_cn function
         #cert_string = cert_bytes.decode('utf-8')
         #cert_config['thing'] = get_cn(cert_string)
