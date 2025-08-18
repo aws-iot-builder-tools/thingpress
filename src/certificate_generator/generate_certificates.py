@@ -262,10 +262,13 @@ def certificate_to_pem(cert: Certificate) -> bytes:
     """Convert a certificate to PEM format."""
     return cert.public_bytes(encoding=serialization.Encoding.PEM)
 
+
 def create_certificate_chain(end_entity_cert: Certificate,
                             intermediate_ca: Certificate,
                             root_ca: Certificate) -> bytes:
-    """Create a certificate chain in PEM format."""
+    """Create a certificate chain in PEM format.
+    used for client connections when running demo
+    """
     return (
         certificate_to_pem(end_entity_cert) +
         certificate_to_pem(intermediate_ca) +
@@ -304,12 +307,12 @@ def generate_batch(start_idx: int, count: int, args: argparse.Namespace,
         )
 
         # Create certificate chain
-        cert_chain = create_certificate_chain(end_entity_cert, intermediate_ca, root_ca)
+        #cert_chain = create_certificate_chain(end_entity_cert, intermediate_ca, root_ca)
 
         # Base64 encode the certificate chain
-        encoded_chain = base64.b64encode(cert_chain).decode('utf-8')
+        encoded_certificate = base64.b64encode(certificate_to_pem(end_entity_cert)).decode('utf-8')
 
-        results.append(encoded_chain)
+        results.append(encoded_certificate)
 
     return results
 
