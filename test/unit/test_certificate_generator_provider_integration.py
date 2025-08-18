@@ -8,21 +8,17 @@ processed by provider_generated and prepared for sending to an SQS queue.
 
 import os
 import base64
-import tempfile
 import json
-from pathlib import Path
 from unittest import TestCase
-import pytest
 
 from boto3 import _get_default_session
 from moto import mock_aws
-from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from aws_lambda_powertools.utilities.typing import LambdaContext
 
 # Import the modules under test
 from src.certificate_generator.generate_certificates import (
     create_root_ca, create_intermediate_ca, create_end_entity_cert,
-    create_certificate_chain
+    certificate_to_pem
 )
 from src.provider_generated.provider_generated.main import (
     process_certificate_file, lambda_handler
@@ -57,10 +53,10 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
         self.test_s3_bucket_name = "test-certificate-bucket"
         self.test_s3_key_name = "certificates_test.txt"
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
-        
+
         s3_client = self.session.client('s3')
         s3_client.create_bucket(Bucket=self.test_s3_bucket_name)
-        
+
         mocked_s3_resource = {
             "resource": self.session.resource('s3'),
             "bucket_name": self.test_s3_bucket_name
@@ -75,7 +71,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             "queue_name": self.test_sqs_queue_name
         }
         self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
-        
+
         # Set environment variables for Lambda
         os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
 
@@ -94,7 +90,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             org="Test Corp",
             org_unit="IoT Division"
         )
-        
+
         # Create intermediate CA
         int_cert, int_key = create_intermediate_ca(
             common_name="Test Intermediate CA",
@@ -110,7 +106,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             root_ca=root_cert,
             root_ca_key=root_key
         )
-        
+
         # Generate end-entity certificates with predictable CNs
         certificates = []
         for i in range(count):
@@ -129,14 +125,15 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
                 intermediate_ca=int_cert,
                 intermediate_ca_key=int_key
             )
-            
+
             # Create certificate chain
-            cert_chain = create_certificate_chain(end_cert, int_cert, root_cert)
-            
+            #cert_chain = create_certificate_chain(end_cert, int_cert, root_cert)
+
             # Base64 encode the certificate chain
-            encoded_chain = base64.b64encode(cert_chain).decode('utf-8')
+            #encoded_chain = base64.b64encode(certificate_to_pem(end_cert)).decode('utf-8')
+            encoded_chain = base64.b64encode(certificate_to_pem(end_cert)).decode('ascii')
             certificates.append(encoded_chain)
-        
+
         return certificates
 
     def test_certificate_generator_to_provider_generated_integration(self):
@@ -146,7 +143,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
         """
         # Generate test certificates
         certificates = self.generate_test_certificates(count=3)
-        
+
         # Create a certificate file in S3
         s3_client = self.session.client('s3')
         s3_client.put_object(
@@ -154,19 +151,19 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             Key=self.test_s3_key_name,
             Body='\n'.join(certificates)
         )
-        
+
         # Create config for processing
         config = {
             'bucket': self.test_s3_bucket_name,
             'key': self.test_s3_key_name
         }
-        
+
         # Process the certificate file
         count = process_certificate_file(config, self.test_sqs_queue_name, self.session)
-        
+
         # Verify that all certificates were processed
         self.assertEqual(count, 3, "Expected 3 certificates to be processed")
-        
+
         # Check that messages were sent to the queue
         sqs_client = self.session.client("sqs")
         sqs_queue_url = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)['QueueUrl']
@@ -176,32 +173,33 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
         )
         self.assertEqual(queue_attrs['Attributes']['ApproximateNumberOfMessages'], '3',
                          "Expected 3 messages in the queue")
-        
+
         # Receive messages from the queue and verify their content
         messages = sqs_client.receive_message(
             QueueUrl=sqs_queue_url,
             MaxNumberOfMessages=10
         )
-        
+
         self.assertIn('Messages', messages, "Expected messages in the queue")
         self.assertEqual(len(messages['Messages']), 3, "Expected 3 messages in the queue")
-        
+
         # Verify each message contains the expected data
         for i, message in enumerate(messages['Messages']):
             body = json.loads(message['Body'])
-            
+
             # Check that the message contains the required fields
             self.assertIn('certificate', body, "Message should contain certificate data")
             self.assertIn('thing', body, "Message should contain thing name")
             self.assertIn('bucket', body, "Message should contain bucket name")
             self.assertIn('key', body, "Message should contain key name")
-            
+
             # Verify the thing name matches the expected pattern
-            self.assertTrue(body['thing'].startswith("Device-"), 
+            self.assertTrue(body['thing'].startswith("Device-"),
                            f"Thing name should start with 'Device-', got {body['thing']}")
-            
-            cert_bytes = base64.b64decode(certificates[i])
-            post_process_certificate = str(base64.b64encode(str(cert_bytes).encode('ascii')))
+
+            cert_bytes:bytes = base64.b64decode(certificates[i])
+            cert_str:str = cert_bytes.decode('ascii')
+            post_process_certificate = str(base64.b64encode(cert_str.encode('ascii')))
             # Verify the certificate data is the same as what we generated
             self.assertEqual(body['certificate'], post_process_certificate,
                             "Certificate data in message should match generated certificate")
@@ -212,7 +210,7 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
         """
         # Generate test certificates
         certificates = self.generate_test_certificates(count=3)
-        
+
         # Create a certificate file in S3
         s3_client = self.session.client('s3')
         s3_client.put_object(
@@ -220,13 +218,13 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
             Key=self.test_s3_key_name,
             Body='\n'.join(certificates)
         )
-        
+
         # Create event with S3 notification
         event_body = {
             'bucket': self.test_s3_bucket_name,
             'key': self.test_s3_key_name
         }
-        
+
         event = {
             "Records": [
                 {
@@ -235,13 +233,13 @@ class TestCertificateGeneratorProviderIntegration(TestCase):
                 }
             ]
         }
-        
+
         # Call the Lambda handler
         result = lambda_handler(event, LambdaContext())  # Pass raw dict like AWS sends
-        
+
         # Verify the result
         self.assertEqual(result, event, "Lambda handler should return the original event")
-        
+
         # Check that messages were sent to the queue
         sqs_client = self.session.client("sqs")
         sqs_queue_url = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)['QueueUrl']
