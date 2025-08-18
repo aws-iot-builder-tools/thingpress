@@ -340,9 +340,6 @@ class EndToEndTestFramework:
         self.logger.info("🧹 Cleaning up existing test data before test run")
 
         try:
-            # Import the unified cleanup module
-            sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..', '..', 'src'))
-
             # Create configuration for integration test cleanup
             cleanup_config = CleanupConfig.for_integration_tests(
                 stack_name=os.getenv('THINGPRESS_STACK_NAME', 'thingpress'),
