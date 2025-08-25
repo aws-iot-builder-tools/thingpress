@@ -14,7 +14,7 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
-from layer_utils.aws_utils import (get_certificate, process_policy, process_thing,
+from layer_utils.aws_utils import (get_certificate, process_policy, process_thing, get_thing_arn,
                                    process_thing_group, process_thing_type, register_certificate)
 from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
 from layer_utils.aws_utils import ImporterMessageKey, powertools_idempotency_environ, get_certificate_arn
@@ -109,8 +109,9 @@ def process_sqs(config, session: Session=default_session):
                    certificate_arn=certificate_arn,
                    session=session)
 
+    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value, session), session=session)
     process_thing_group(thing_group_arn=config.get(ImporterMessageKey.THING_GROUP_ARN.value),
-                        thing_arn=config.get(ImporterMessageKey.THING_NAME.value),
+                        thing_arn=thing_arn,
                         session=session)
 
     process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
