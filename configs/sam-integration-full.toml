@@ -1,0 +1,6 @@
+version = 0.1
+[default.deploy.parameters]
+resolve_s3 = true
+capabilities = "CAPABILITY_IAM"
+parameter_overrides = "IamUserArn=\"None\" IoTPolicy=\"BasicTestPolicy\" IoTThingGroup=\"BasicTestGroup\" IoTThingType=\"BasicTestType\" InfineonCertBundleType=\"E0E0\" ConcurrentExecutions=\"10\" DLQRetentionPeriod=\"1209600\" QueueVisibilityTimeout=\"900\" IdempotencyExpirySeconds=\"3600\" AutoThrottlingEnabled=\"true\" ThrottlingBaseDelay=\"30\" ThrottlingBatchInterval=\"3\" MaxQueueDepth=\"1000\" ProviderConcurrencyLimit=\"5\" LambdaMemorySize=\"2048\" LambdaTimeout=\"300\""
+image_repositories = []

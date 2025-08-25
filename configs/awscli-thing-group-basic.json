@@ -1,0 +1,12 @@
+{
+    "thingGroupName": "BasicTestGroup",
+    "thingGroupProperties": {
+        "thingGroupDescription": "Thingpress basic test group",
+        "attributePayload": {
+            "attributes": {
+                "KeyName": "BasicAttribute"
+            },
+            "merge": true
+        }
+    }
+}
