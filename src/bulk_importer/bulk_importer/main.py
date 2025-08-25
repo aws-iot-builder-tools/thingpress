@@ -17,7 +17,7 @@ from botocore.exceptions import ClientError
 from layer_utils.aws_utils import (get_certificate, process_policy, process_thing,
                                    process_thing_group, process_thing_type, register_certificate)
 from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
-from layer_utils.aws_utils import ImporterMessageKey, powertools_idempotency_environ
+from layer_utils.aws_utils import ImporterMessageKey, powertools_idempotency_environ, get_certificate_arn
 
 # Initialize Logger and Idempotency
 logger = Logger(service="bulk_importer")
@@ -47,7 +47,7 @@ def certificate_key_generator(event: dict, _context):
     event_key_generator=certificate_key_generator,
     data_keyword_argument="config"
 )
-def process_certificate(config, session: Session=default_session):
+def process_certificate(config, session: Session=default_session) -> tuple[str,str]:
     """ Imports the certificate to IoT Core """
     payload = config['certificate']
 
@@ -56,7 +56,9 @@ def process_certificate(config, session: Session=default_session):
     fingerprint = get_certificate_fingerprint(x509_certificate)
 
     try:
-        return get_certificate(fingerprint, session)
+        certificate_id = get_certificate(fingerprint, session)
+        certificate_arn = get_certificate_arn(certificate_id, session)
+        return certificate_id, certificate_arn
     except ClientError as error:
         logger.info({
             "message": "Certificate not found in IoT Core. Importing.",
@@ -66,8 +68,10 @@ def process_certificate(config, session: Session=default_session):
         # Intentional fall-through
 
     try:
-        return register_certificate(certificate=decoded_certificate,
+        certificate_id = register_certificate(certificate=decoded_certificate,
                                     session=session)
+        certificate_arn = get_certificate_arn(certificate_id, session)
+        return certificate_id, certificate_arn
     except ClientError as error:
         logger.error({
             "message": "Certificate could not be created.",
@@ -88,28 +92,29 @@ def get_thingpress_tags() -> list:
 
 def process_sqs(config, session: Session=default_session):
     """Main processing function to procedurally run through processing steps."""
-    certificate_id = process_certificate(config=config, session=session)
+    certificate_id, certificate_arn = process_certificate(config=config, session=session)
 
     logger.info({
         "message": "Processing thing and associations",
         "thing_name": config.get(ImporterMessageKey.THING_NAME.value),
-        "certificate_id": certificate_id
+        "certificate_id": certificate_id,
+        "certificate_arn": certificate_arn
     })
 
     process_thing(config.get(ImporterMessageKey.THING_NAME.value),
-                  certificate_id,
+                  certificate_arn=certificate_arn,
                   session=session)
 
-    process_policy(config.get(ImporterMessageKey.POLICY_NAME.value),
-                   certificate_id,
+    process_policy(policy_name=config.get(ImporterMessageKey.POLICY_NAME.value),
+                   certificate_arn=certificate_arn,
                    session=session)
 
-    process_thing_group(config.get(ImporterMessageKey.THING_GROUP_ARN.value),
-                        config.get(ImporterMessageKey.THING_NAME.value),
+    process_thing_group(thing_group_arn=config.get(ImporterMessageKey.THING_GROUP_ARN.value),
+                        thing_arn=config.get(ImporterMessageKey.THING_NAME.value),
                         session=session)
 
-    process_thing_type(config.get(ImporterMessageKey.THING_NAME.value),
-                       config.get(ImporterMessageKey.THING_TYPE_NAME.value),
+    process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                       thing_type_name=config.get(ImporterMessageKey.THING_TYPE_NAME.value),
                        session=session)
 
     return {

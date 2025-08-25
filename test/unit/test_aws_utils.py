@@ -384,11 +384,12 @@ class TestAwsUtils(TestCase):
         iot_client = _get_default_session().client('iot')
         cert = decode_certificate(self.local_cert_loaded)
         certificate_id = register_certificate(cert, session=_get_default_session())
+        certificate_arn = get_certificate_arn(certificate_id, _get_default_session())
         thing_name = "process_thing"
         iot_client.create_thing(thingName=thing_name)
 
         # Assume operation success with no raise
-        process_thing(thing_name, certificate_id, session=_get_default_session())
+        process_thing(thing_name, certificate_arn=certificate_arn, session=_get_default_session())
 
     def test_pos_process_thing_with_type(self):
         """ Positive test case for attaching policy to certificate """
@@ -403,17 +404,17 @@ class TestAwsUtils(TestCase):
         """Positive test case for attaching policy to certificate"""
         cert = decode_certificate(self.local_cert_loaded)
         cr = register_certificate(cert, session=_get_default_session())
-
+        cr_arn = get_certificate_arn(cr, _get_default_session())
         # Assume operation success with no raise
-        process_thing('my_thing', cr, session=_get_default_session())
+        process_thing('my_thing', cr_arn, session=_get_default_session())
 
     def test_pos_process_thing_with_type_no_prev_thing(self):
         """Positive test case for attaching policy to certificate"""
         cert = decode_certificate(self.local_cert_loaded)
         cr = register_certificate(cert, session=_get_default_session())
-
+        cr_arn = get_certificate_arn(cr, _get_default_session())
         # Assume operation success with no raise
-        process_thing('my_thing', cr, session=_get_default_session())
+        process_thing('my_thing', cr_arn, session=_get_default_session())
 
         # Assume operation success with no raise
         process_thing_type('my_thing', self.thing_type_name, _get_default_session())

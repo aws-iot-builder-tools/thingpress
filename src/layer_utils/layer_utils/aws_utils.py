@@ -595,10 +595,14 @@ def process_policy(policy_name: str,
     if policy_name is None:
         return
     iot_client = session.client('iot')
-    iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
+    try:
+        iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
+    except ClientError as err:
+        boto_exception(err, f"Policy {policy_name} failed to attach to principal {certificate_arn}.")
+        raise err
 
 def process_thing(thing_name: str,
-                  certificate_id: str,
+                  certificate_arn: str,
                   session: Session=default_session) -> None:
     """Creates the IoT Thing if it does not already exist and attaches certificate
 
@@ -611,7 +615,6 @@ def process_thing(thing_name: str,
     """
     logger.info("Processing thing %s.", thing_name)
     iot_client = session.client('iot')
-    certificate_arn = get_certificate_arn(certificate_id, session)
 
     try:
         iot_client.describe_thing(thingName=thing_name)
@@ -634,25 +637,25 @@ def process_thing(thing_name: str,
                         "Attempting attachment anyway.",
                         thing_name, str(list_error))
         iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
-        logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
+        logger.info("Attached certificate %s to thing %s", certificate_arn, thing_name)
 
     attached_principals = principals_response.get('principals', [])
 
     if certificate_arn in attached_principals:
         logger.info("Certificate %s already attached to thing %s",
-                    certificate_id, thing_name)
+                    certificate_arn, thing_name)
         return
 
     try:
         iot_client.attach_thing_principal(thingName=thing_name, principal=certificate_arn)
     except ClientError as error:
         if boto_errorcode(error) == 'ResourceAlreadyExistsException':
-            logger.info("Certificate %s already attached to thing %s", certificate_id, thing_name)
+            logger.info("Certificate %s already attached to thing %s", certificate_arn, thing_name)
         else:
             boto_exception(error, f"Certificate attachment failed for thing {thing_name}")
             raise error
 
-    logger.info("Attached certificate %s to thing %s", certificate_id, thing_name)
+    logger.info("Attached certificate %s to thing %s", certificate_arn, thing_name)
 
 def process_thing_type(thing_name: str,
                        thing_type_name: str|None,

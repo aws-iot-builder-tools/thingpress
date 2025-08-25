@@ -147,11 +147,14 @@ class TestBulkImporter(TestCase):
                 )
                 
                 # Mock register_certificate to return a fixed fingerprint
-                with patch('bulk_importer.main.register_certificate') as mock_register:
+                with patch('bulk_importer.main.register_certificate') as mock_register, \
+                             patch('bulk_importer.main.get_certificate_arn') as mock_arn:
+
                     fingerprint = get_certificate_fingerprint(pem_obj)
                     mock_register.return_value = fingerprint
-                    
-                    r = process_certificate(c, _get_default_session())
+                    mock_arn.return_value = "test-certificate-arn"
+
+                    r, arn = process_certificate(c, _get_default_session())
                     self.assertEqual(r, fingerprint)
                     mock_register.assert_called_once()
 
@@ -161,10 +164,12 @@ class TestBulkImporter(TestCase):
         # returns the same result without actually processing it again
         
         with patch('bulk_importer.main.register_certificate') as mock_register, \
+             patch('bulk_importer.main.get_certificate_arn') as mock_arn, \
              patch('bulk_importer.main.logger'):  # Suppress logger output
             # Mock register_certificate to return a fixed certificate ID
             mock_register.return_value = "test-certificate-id"
-            
+            mock_arn.return_value = "test-certificate-arn"
+
             # First call should process normally
             config = {'certificate': self.local_cert_loaded, 'thing': 'test-thing-idempotent'}
             
