@@ -24,7 +24,7 @@ on:
 
 jobs:
   integration-tests:
-    name: Manual Integration Tests
+    name: Manual Integration Tests - FULL
     runs-on: ubuntu-latest
     permissions:
       id-token: write
