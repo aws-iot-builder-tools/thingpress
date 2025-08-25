@@ -1,4 +1,4 @@
-name: Manual Integration Tests
+name: Manual Integration Tests - FULL
 
 on:
   workflow_dispatch:
