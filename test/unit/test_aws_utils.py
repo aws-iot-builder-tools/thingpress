@@ -67,16 +67,23 @@ class TestAwsUtils(TestCase):
         clear_circuits()
         self.aws_session = _get_default_session()
         self.test_s3_bucket_name = "unit_test_s3_bucket"
-        self.test_s3_object_content = None
         os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
         s3_client = client('s3', region_name="us-east-1")
         s3_client.create_bucket(Bucket = self.test_s3_bucket_name )
         with open('./test/artifacts/manifest-espressif.csv', 'rb') as data:
             s3_client.put_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv", Body=data)
             self.test_s3_object_content = s3_client.get_object(Bucket=self.test_s3_bucket_name, Key="manifest.csv")['Body']
-        mocked_s3_resource = resource("s3")
+#        mocked_s3_resource = resource("s3")
         mocked_s3_resource = { "resource" : resource('s3'),
                                "bucket_name" : self.test_s3_bucket_name }
+
+        # set the content the same as we download and process the raw object.
+        res = mocked_s3_resource['resource'].Object(bucket_name=self.test_s3_bucket_name, key="manifest.csv")
+        fs = io.BytesIO()
+        res.download_fileobj(fs)
+        self.test_s3_object_content: bytes = fs.getvalue()
+
+
         self.mocked_s3_class = LambdaS3Class(mocked_s3_resource)
 
         self.queue_url = _get_default_session().client('sqs').create_queue(QueueName='test-queue')['QueueUrl']
@@ -112,8 +119,9 @@ class TestAwsUtils(TestCase):
     def test_pos_s3_filebuf_bytes(self):
         """Basic pos test case for byte buffer handling"""
         # The bytes should equal to the object in the bucket
-        v = s3_object_bytes("unit_test_s3_bucket", "manifest.csv", getvalue=True, session=_get_default_session())
-        assert v == self.test_s3_object_content.read()
+        v: bytes = s3_object_bytes("unit_test_s3_bucket",
+                                   "manifest.csv", session=_get_default_session())
+        assert v == bytes(self.test_s3_object_content)
 
     def test_pos_get_policy_arn(self):
         """Positive test case to return policy arn"""

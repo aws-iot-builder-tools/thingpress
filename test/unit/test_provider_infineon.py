@@ -140,7 +140,7 @@ class TestProviderInfineon(TestCase):
                                    "E0E5")
 
     def test_invoke_export(self):
-        o = s3_object_bytes(self.test_s3_bucket_name, self.artifact, False, self.session)
+        o = io.BytesIO(s3_object_bytes(self.test_s3_bucket_name, self.artifact, self.session))
         assert isinstance(o, io.BytesIO) is True
         x1 = select_certificate_set(o, "E0E0")
         config = {

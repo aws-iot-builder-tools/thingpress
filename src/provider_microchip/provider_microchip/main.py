@@ -1,8 +1,6 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-Lambda function to import Microchip manifest
+"""Lambda function to import Microchip manifest
 """
 import json
 import os
@@ -29,8 +27,7 @@ except ImportError:
 default_session: Session = Session()
 
 def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
-    """
-    Process Microchip certificate manifests from SQS messages and forward to target queue.
+    """Process Microchip certificate manifests from SQS messages and forward to target queue.
     
     This Lambda function processes SQS messages containing S3 bucket and object information
     for Microchip certificate manifests. For each manifest:

@@ -1,9 +1,7 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
+"""Product Verifier Function (S3 Event Handler)
 
-Product Verifier Function (S3 Event Handler)
-============================================
 This function handles S3 events and routes manifests to appropriate SQS queues.
 It verifies S3 uploads and does NOT process certificates directly - that's done by
 vendor-specific providers.
@@ -31,8 +29,7 @@ MICROCHIP_BUCKET_PREFIX = "thingpress-microchip-"
 GENERATED_BUCKET_PREFIX = "thingpress-generated-"
 
 def get_provider_queue(bucket_name: str) -> str:
-    """
-    Returns the queue related to the prefix of a given bucket
+    """Returns the queue related to the prefix of a given bucket
     The cfn stack prescribes the environment variable value.
     See the cfn template for more detail.
     """
@@ -48,8 +45,7 @@ def get_provider_queue(bucket_name: str) -> str:
 
 def lambda_handler(event,
                    context: LambdaContext) -> dict: # pylint: disable=unused-argument
-    """
-    Lambda function main entry point. Verifies the S3 object can be read and resolves
+    """Lambda function main entry point. Verifies the S3 object can be read and resolves
     inputs prior to forwarding to vendor handler queue.
 
     This lambda function expects invocation by S3 event. There should be only one
@@ -110,8 +106,6 @@ def lambda_handler(event,
         raise e
 
     for record in records_list:
-        # TODO: verify s3 object, for now assume it is reachable
-        # v_object = verify_s3_object(bucket, record.s3.get_object.key)
         config['key'] = record.s3.get_object.key
 
         # Log the provider type based on the bucket name
