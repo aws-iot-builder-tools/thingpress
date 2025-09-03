@@ -9,7 +9,7 @@ import base64
 import csv
 import json
 import os
-from io import StringIO, BytesIO
+from io import StringIO
 
 from aws_lambda_powertools import Logger
 from aws_lambda_powertools.utilities.typing import LambdaContext
@@ -17,6 +17,7 @@ from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
 from layer_utils.aws_utils import powertools_idempotency_environ
+from layer_utils.aws_utils import ProviderMessageKey
 from layer_utils.throttling_utils import create_standardized_throttler
 
 # Initialize Logger and Idempotency
@@ -29,7 +30,7 @@ def file_key_generator(event, _context):
     """Generate a unique key based on S3 bucket and key"""
     if isinstance(event, dict) and "bucket" in event and "key" in event:
         # Use bucket and key as the idempotency key
-        return f"{event['bucket']}:{event['key']}"
+        return f"{event[ProviderMessageKey.OBJECT_BUCKET]}:{event[ProviderMessageKey.OBJECT_KEY.value]}"
     return None
 
 def invoke_export(config: dict, queue_url: str, session: Session=default_session):
@@ -40,9 +41,8 @@ def invoke_export(config: dict, queue_url: str, session: Session=default_session
         "key": config['key']
     })
 
-    manifest_bytes = s3_object_bytes(config['bucket'],
-                                     config['key'],
-#                                     getvalue=True,
+    manifest_bytes = s3_object_bytes(config[ProviderMessageKey.OBJECT_BUCKET.value],
+                                     config[ProviderMessageKey.OBJECT_KEY.value],
                                      session=session)
 
     reader_list = csv.DictReader(StringIO(manifest_bytes.decode()))
