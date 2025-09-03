@@ -1,4 +1,4 @@
 boto3==1.39.12
 aws_lambda_powertools==3.19.0
 cryptography==45.0.5
-python-jose==3.4.0
+python-jose==3.5.0
