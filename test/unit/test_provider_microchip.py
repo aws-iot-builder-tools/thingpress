@@ -11,7 +11,7 @@ import os
 import json
 from collections.abc import Iterator
 from unittest import TestCase
-from boto3 import resource, client, Session, _get_default_session
+from boto3 import Session, _get_default_session
 from moto import mock_aws
 #from types_boto3_s3.service_resource import S3ServiceResource
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
@@ -116,7 +116,7 @@ class TestProviderMicrochip(TestCase):
 
     def test_iter(self):
         """ Ensure that the class can effectively return an iterator """
-        o = s3_object_bytes(self.test_s3_bucket_name, self.o_manifest_tlsu_b, True, self.session)
+        o = s3_object_bytes(self.test_s3_bucket_name, self.o_manifest_tlsu_b, self.session)
         x = get_iterator(o)
         assert isinstance(x, Iterator) is True
 

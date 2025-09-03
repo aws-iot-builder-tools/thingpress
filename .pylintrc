@@ -1,2 +1,3 @@
 [MASTER]
-init-hook='import sys; sys.path.append(".")
+init-hook='import sys; sys.path.append(".")'
+source-roots=./src/layer_utils

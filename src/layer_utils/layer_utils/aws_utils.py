@@ -71,14 +71,15 @@ def s3_object(bucket_name: str, object_name: str, fs=BytesIO(), session: Session
 @with_circuit_breaker('s3_object_bytes')
 def s3_object_bytes(bucket_name: str,
                     object_name: str,
-                    getvalue: bool=False,
-                    session: Session=default_session) -> bytes | BytesIO:
+#                    getvalue: bool=False,
+                    session: Session=default_session) -> bytes:
     """Download an S3 object as byte file-like object"""
     fs = BytesIO()
-    s3_object(bucket_name, object_name, fs, session)
-    if getvalue is True:
-        return fs.getvalue()
-    return BytesIO(fs.getvalue())
+    fs = s3_object(bucket_name, object_name, fs, session)
+    return fs.getvalue()
+#    if getvalue is True:
+#        return fs.getvalue()
+#    return BytesIO(fs.getvalue())
 
 @with_circuit_breaker('sqs_send_message')
 def send_sqs_message(config, queue_url, session: Session=default_session):

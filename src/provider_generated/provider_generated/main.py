@@ -59,7 +59,9 @@ def process_certificate_file(config: Dict[str, Any], queue_url: str,
     })
 
     # Get the file content from S3
-    file_content = s3_object_bytes(config['bucket'], config['key'], getvalue=True,
+    file_content = s3_object_bytes(config['bucket'],
+                                   config['key'],
+#                                   getvalue=True,
                                    session=session).decode()
 
     # Process certificates in batches for optimal SQS throughput

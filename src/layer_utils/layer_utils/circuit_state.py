@@ -1,8 +1,6 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-Circuit breaker pattern implementation for AWS API calls
+"""Circuit breaker pattern implementation for AWS API calls
 Please see the following url for conceptual overview
 https://martinfowler.com/bliki/CircuitBreaker.html
 """
@@ -20,8 +18,7 @@ _circuit_states : dict = {}
 _circuit_lock : Lock = Lock()
 
 class CircuitState:
-    """
-    Represents the state of a circuit breaker for a specific operation.
+    """Represents the state of a circuit breaker for a specific operation.
     
     Attributes:
         is_open (bool): Whether the circuit is currently open (failing fast)
@@ -38,8 +35,7 @@ class CircuitState:
         self.timeout : int = 60   # Seconds to wait before trying again
 
 def circuit_is_open(operation_name: str):
-    """
-    Check if the circuit is open for a specific operation
+    """Check if the circuit is open for a specific operation
     
     Args:
         operation_name (str): The name of the operation to check
@@ -65,8 +61,7 @@ def circuit_is_open(operation_name: str):
 # Move to half-open state by allowing one request through
 
 def record_failure(operation_name: str):
-    """
-    Record a failure for the circuit breaker
+    """Record a failure for the circuit breaker
     
     Args:
         operation_name (str): The name of the operation that failed
@@ -85,14 +80,14 @@ def record_failure(operation_name: str):
         # Open the circuit if we exceed the threshold
         if circuit.failure_count >= circuit.threshold:
             circuit.is_open = True
-            logger.error("🚨 CIRCUIT BREAKER OPENED for %s after %d failures - failing fast for %d seconds",
+            logger.error("🚨 CIRCUIT BREAKER OPENED for %s after %d failures - " \
+                         "failing fast for %d seconds",
                         operation_name, circuit.threshold, circuit.timeout)
             logger.error("Circuit state: failures=%d, threshold=%d, timeout=%ds",
                         circuit.failure_count, circuit.threshold, circuit.timeout)
 
 def reset_circuit(operation_name):
-    """
-    Reset the circuit after a successful operation
+    """Reset the circuit after a successful operation
     
     Args:
         operation_name (str): The name of the operation that succeeded
@@ -111,8 +106,7 @@ class CircuitOpenError(Exception):
     """Exception raised when a circuit is open"""
 
 def with_circuit_breaker(operation_name, fallback_function=None):
-    """
-    Decorator to apply circuit breaker pattern to a function
+    """Decorator to apply circuit breaker pattern to a function
     
     Args:
         operation_name (str): Name of the operation for the circuit breaker

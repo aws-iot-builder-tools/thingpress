@@ -9,8 +9,6 @@ import logging
 import os
 import re
 from base64 import b64decode, b64encode
-#from datetime import datetime
-from typing import List, Tuple
 
 from boto3 import Session
 from cryptography import x509
@@ -29,7 +27,7 @@ verification_algorithms = [
 ]
 
 
-def get_verification_certificates(verification_certs_bucket: str, session: Session) -> List[Tuple[str, bytes]]:
+def get_verification_certificates(verification_certs_bucket: str, session: Session) -> list[tuple[str, bytes]]:
     """
     Get all Microchip verification certificates from S3 bucket, sorted by date (newest first).
     
@@ -74,7 +72,7 @@ def get_verification_certificates(verification_certs_bucket: str, session: Sessi
                 cert_content = s3_object_bytes(
                     verification_certs_bucket,
                     cert_name,
-                    getvalue=True,
+#                    getvalue=True,
                     session=session
                 )
                 certificates.append((cert_name, cert_content))
@@ -198,10 +196,11 @@ class ManifestItem:
 
 
 def try_verify_with_certificates(signed_se: dict,
-                                 certificates: List[Tuple[str, bytes]]
-                                 ) -> Tuple[str, 'ManifestItem']:
+                                 certificates: list[tuple[str, bytes]]
+                                 ) -> tuple[str, 'ManifestItem']:
     """
-    Try to verify a signed secure element with available certificates, starting with newest.
+    Try to verify a signed secure element with available verification certificates,
+    starting with newest.
     
     Args:
         signed_se: The signed secure element data
@@ -216,11 +215,9 @@ def try_verify_with_certificates(signed_se: dict,
     verification_errors = []
 
     for cert_name, cert_content in certificates:
+        logger.info("Attempting verification with certificate: %s", cert_name)
         try:
-            logger.info("Attempting verification with certificate: %s", cert_name)
-            manifest_item = ManifestItem(signed_se, cert_content)
-            logger.info("✅ Successfully verified with certificate: %s", cert_name)
-            return cert_name, manifest_item
+            return cert_name, ManifestItem(signed_se, cert_content)
         except Exception as e:
             error_msg = f"Certificate {cert_name}: {str(e)}"
             verification_errors.append(error_msg)
@@ -228,10 +225,10 @@ def try_verify_with_certificates(signed_se: dict,
             continue
 
     # If we get here, all certificates failed
-    error_summary = f"Verification failed with all %d{len(certificates)} certificates. Errors: {'; '.join(verification_errors)}"
+    error_summary = f"Verification failed with all %d{len(certificates)} certificates." \
+                    f"Errors: {'; '.join(verification_errors)}"
     logger.error(error_summary)
     raise ValueError(error_summary)
-
 
 def invoke_export(config, queue_url, session: Session):
     """Main procedure with intelligent verification certificate selection"""
@@ -240,7 +237,7 @@ def invoke_export(config, queue_url, session: Session):
     # Load manifest file
     manifest_file = s3_object_bytes(config['bucket'],
                                     config['key'],
-                                    getvalue=True,
+    #                                getvalue=True,
                                     session=session)
 
     # Ensure manifest_file is properly decoded for json.loads

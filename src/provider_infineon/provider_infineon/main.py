@@ -1,18 +1,12 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
-
-Lambda function to decompose Infineon based certificate manifest(s) and begin
-the import processing pipeline
+"""Lambda function to decompose Infineon based certificate manifest(s) and begin
+   the import processing pipeline
 """
 import json
 import os
-import sys
 
 from aws_lambda_powertools import Logger
-from aws_lambda_powertools.utilities.idempotency.config import IdempotencyConfig
-from aws_lambda_powertools.utilities.idempotency.persistence.dynamodb import \
-    DynamoDBPersistenceLayer
 from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
@@ -33,12 +27,6 @@ def file_key_generator(event, _context):
         return f"{event['bucket']}:{event['key']}"
     return None
 
-#@idempotent_function(
-#    persistence_store=persistence_layer,
-#    config=idempotency_config,
-#    event_key_generator=file_key_generator,
-#    data_keyword_argument="config"
-#)
 def process_infineon_manifest(config, queue_url, cert_type, session=default_session):
     """Process Infineon manifest with idempotency"""
     logger.info({
@@ -101,7 +89,6 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     try:
         verify_certtype(cert_type)
     except ValueError as error:
-        # TODO write a general exception logging mechanism for not boto calls, and have the boto exception code call that
         logger.error({
             "message": "Certificate type verification failed",
             "cert_type": cert_type,

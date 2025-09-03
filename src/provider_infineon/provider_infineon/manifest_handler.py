@@ -9,7 +9,7 @@ import py7zr
 import py7zr.io as py7io
 from boto3 import Session
 from layer_utils.aws_utils import s3_object_bytes
-from layer_utils.cert_utils import format_certificate, get_cn
+from layer_utils.cert_utils import get_cn
 from layer_utils.throttling_utils import create_standardized_throttler
 
 default_session: Session = Session()
@@ -97,7 +97,6 @@ def invoke_export(config, queue_url, cert_type, session: Session=default_session
     """
     manifest_bytes = s3_object_bytes(config['bucket'],
                                     config['key'],
-                                    getvalue=False,
                                     session=session)
-    x = select_certificate_set(manifest_bytes, cert_type)
+    x = select_certificate_set(io.BytesIO(manifest_bytes), cert_type)
     return send_certificates(x, config, queue_url=queue_url, session=session)
