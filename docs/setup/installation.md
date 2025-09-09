@@ -15,46 +15,36 @@ This guide covers the complete installation and setup process for Thingpress, in
 
 ## Step 1: Prepare AWS IoT Objects
 
-Before starting, you must identify the AWS IoT objects you will use at scale:
+Before starting, you must identify the AWS IoT objects you will use. 
 
-- **Required:** AWS IoT Policy. This policy must be created in AWS IoT Core
+These objects must be created in IoT Core prior to running an import job. The import job will halt on the product validation stage if you define an object but it does not exist in IoT Core.
+
+See the project root README.md for links to each type of object.
+
+- **Optional but virtually mandatory:** AWS IoT Policy 
 - **Optional but highly recommended:** AWS IoT Thing Type
 - **Optional but highly recommended:** AWS IoT Thing Group
 
-## Step 2: Build and Deploy Thingpress
+## Step 2: Prepare to Build and Deploy Thingpress
 
-These steps assume you are building and installing the tool on a GNU/Linux operating system such as a local workstation or EC2 instance with the appropriate policy and/or IAM programmatic credential.
+These steps assume you are building and installing the tool on a GNU/Linux operating system such as a local workstation or EC2 instance with the appropriate policy and/or IAM credential.
 
 1. **Clone the thingpress repository**
    ```bash
    git clone https://github.com/awslabs/thingpress thingpress
    cd thingpress
    ```
-   
-2. **Install python module dependencies**
+2. **Install Python 3.13**. You will want to use pyenv on top of your system python. See https://github.com/pyenv/pyenv for installation instructions. Then invoke `pyenv install 3.13` and then `pyenv local 3.13`.
+
+3. **Install python module dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Build Lambda functions**
-   ```bash
-   cd scripts
-   ./build.sh
-   ```
-   
-   > **Note:** VPN may interfere with Docker operation during this process.
 
-4. **Create deployment S3 bucket**
-   ```bash
-   aws s3api create-bucket --acl private --bucket <my_unique_s3_bucket>
-   ```
+## Step 3: Build and Deploy Thingpress
 
-5. **Package the application**
-   ```bash
-   ./package.sh <my_unique_s3_bucket>
-   ```
-
-## Step 3: Vendor-Specific Configuration
+These steps assume you are building and installing the tool on a GNU/Linux operating system such as a local workstation or EC2 instance with the appropriate policy and/or IAM credential.
 
 Choose your hardware vendor and follow the vendor-specific deployment instructions:
 
@@ -87,6 +77,8 @@ After completing your vendor-specific deployment, return here to verify your ins
 
 3. **Test with a small manifest file** (follow your vendor's upload process)
 
+   Small manifests are available in test/artifacts. You can use these to verify that the objects you configured get attached / used as expected.
+
 4. **Monitor processing in CloudWatch Logs**
    - Navigate to CloudWatch → Log groups
    - Look for log groups with your stack name prefix
@@ -117,4 +109,4 @@ If you encounter issues:
 
 ---
 
-**Need help?** Refer to the vendor-specific documentation linked above or check the troubleshooting section.
+**Need help?** Refer to the vendor-specific documentation linked above or check the troubleshooting section, or enter an issue on the Github project.
