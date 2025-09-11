@@ -11,7 +11,7 @@ from unittest import TestCase
 from unittest.mock import patch, MagicMock
 from urllib.error import URLError
 
-from src.certificate_deployer.certificate_deployer.cfnresponse import send, SUCCESS, FAILED
+from src.certificate_deployer.certificate_deployer.cfnresponse import CfnResponse, SUCCESS, FAILED
 
 
 class TestCfnResponse(TestCase):
@@ -40,14 +40,16 @@ class TestCfnResponse(TestCase):
         mock_response.status = 200
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
-        
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            self.sample_response_data,
-            physical_resource_id='test-physical-id'
-        )
+
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.physical_resource_id = 'test-physical-id'
+        response.status = True
+        response.data = self.sample_response_data
+        response.send()
         
         # Verify urlopen was called
         mock_urlopen.assert_called_once()
@@ -78,13 +80,15 @@ class TestCfnResponse(TestCase):
         mock_response.status = 200
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
-        
-        send(
-            self.sample_event,
-            self.sample_context,
-            FAILED,
-            {'Error': 'Test error occurred'}
-        )
+
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = False
+        response.data = {'Error': 'Test error occurred'}
+        response.send()
         
         # Verify urlopen was called
         mock_urlopen.assert_called_once()
@@ -105,12 +109,16 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            self.sample_response_data
-        )
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.physical_resource_id = self.sample_context.log_stream_name
+
+        response.status = True
+        response.data = self.sample_response_data
+        response.send()
         
         # Get the request data
         call_args = mock_urlopen.call_args
@@ -128,13 +136,15 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            self.sample_response_data,
-            no_echo=True
-        )
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = True
+        response.data = self.sample_response_data
+        response.no_echo = True
+        response.send()
         
         # Get the request data
         call_args = mock_urlopen.call_args
@@ -151,14 +161,16 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            self.sample_response_data,
-            no_echo=False
-        )
-        
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = True
+        response.data = self.sample_response_data
+        response.no_echo = False
+        response.send()
+
         # Get the request data
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
@@ -173,12 +185,14 @@ class TestCfnResponse(TestCase):
         
         # Should raise the exception (proper error handling)
         with self.assertRaises(URLError):
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data
-            )
+            response = CfnResponse()
+            response.response_url = self.sample_event["ResponseURL"]
+            response.stack_id = self.sample_event["StackId"]
+            response.request_id = self.sample_event["RequestId"]
+            response.logical_resource_id = self.sample_event["LogicalResourceId"]
+            response.status = True
+            response.data = self.sample_response_data
+            response.send()
 
     @patch('urllib.request.urlopen')
     def test_send_handles_general_exception(self, mock_urlopen):
@@ -187,12 +201,14 @@ class TestCfnResponse(TestCase):
         
         # Should raise the exception (proper error handling)
         with self.assertRaises(Exception):
-            send(
-                self.sample_event,
-                self.sample_context,
-                SUCCESS,
-                self.sample_response_data
-            )
+            response = CfnResponse()
+            response.response_url = self.sample_event["ResponseURL"]
+            response.stack_id = self.sample_event["StackId"]
+            response.request_id = self.sample_event["RequestId"]
+            response.logical_resource_id = self.sample_event["LogicalResourceId"]
+            response.status = True
+            response.data = self.sample_response_data
+            response.send()
 
     @patch('urllib.request.urlopen')
     def test_send_request_headers(self, mock_urlopen):
@@ -202,12 +218,14 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            self.sample_response_data
-        )
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = True
+        response.data = self.sample_response_data
+        response.send()
         
         # Get the request that was made
         call_args = mock_urlopen.call_args
@@ -225,12 +243,14 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            {}
-        )
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = True
+        response.data = {}
+        response.send()
         
         # Get the request data
         call_args = mock_urlopen.call_args
@@ -247,12 +267,14 @@ class TestCfnResponse(TestCase):
         mock_response.reason = 'OK'
         mock_urlopen.return_value = mock_response
         
-        send(
-            self.sample_event,
-            self.sample_context,
-            SUCCESS,
-            None
-        )
+        response = CfnResponse()
+        response.response_url = self.sample_event["ResponseURL"]
+        response.stack_id = self.sample_event["StackId"]
+        response.request_id = self.sample_event["RequestId"]
+        response.logical_resource_id = self.sample_event["LogicalResourceId"]
+        response.status = True
+        response.data = None
+        response.send()
         
         # Get the request data
         call_args = mock_urlopen.call_args

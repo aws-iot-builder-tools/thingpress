@@ -14,10 +14,23 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
-from layer_utils.aws_utils import (get_certificate, process_policy, process_thing, get_thing_arn,
-                                   process_thing_group, process_thing_type, register_certificate)
-from layer_utils.cert_utils import decode_certificate, get_certificate_fingerprint, load_certificate
-from layer_utils.aws_utils import ImporterMessageKey, powertools_idempotency_environ, get_certificate_arn
+
+from layer_utils.aws_utils import (
+    get_certificate,
+    get_thing_arn,
+    process_policy,
+    process_thing,
+    process_thing_group,
+    process_thing_type,
+    register_certificate)
+from layer_utils.cert_utils import (
+    decode_certificate,
+    get_certificate_fingerprint,
+    load_certificate)
+from layer_utils.aws_utils import (
+    ImporterMessageKey,
+    powertools_idempotency_environ,
+    get_certificate_arn)
 
 # Initialize Logger and Idempotency
 logger = Logger(service="bulk_importer")
@@ -57,27 +70,24 @@ def process_certificate(config, session: Session=default_session) -> tuple[str,s
 
     try:
         certificate_id = get_certificate(fingerprint, session)
-        certificate_arn = get_certificate_arn(certificate_id, session)
-        return certificate_id, certificate_arn
     except ClientError as error:
         logger.info({
             "message": "Certificate not found in IoT Core. Importing.",
             "fingerprint": fingerprint,
             "error": str(error)
         })
-        # Intentional fall-through
+        try:
+            certificate_id = register_certificate(certificate=decoded_certificate,
+                                        session=session)
+        except ClientError as import_error:
+            logger.error({
+                "message": "Certificate could not be created.",
+                "error": str(import_error)
+            })
+            raise
 
-    try:
-        certificate_id = register_certificate(certificate=decoded_certificate,
-                                    session=session)
-        certificate_arn = get_certificate_arn(certificate_id, session)
-        return certificate_id, certificate_arn
-    except ClientError as error:
-        logger.error({
-            "message": "Certificate could not be created.",
-            "error": str(error)
-        })
-        raise
+    certificate_arn = get_certificate_arn(certificate_id, session)
+    return certificate_id, certificate_arn
 
 def get_thingpress_tags() -> list:
     """Generate standard Thingpress tags for IoT objects
@@ -109,7 +119,8 @@ def process_sqs(config, session: Session=default_session):
                    certificate_arn=certificate_arn,
                    session=session)
 
-    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value, session), session=session)
+    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value, session),
+                              session=session)
     process_thing_group(thing_group_arn=config.get(ImporterMessageKey.THING_GROUP_ARN.value),
                         thing_arn=thing_arn,
                         session=session)

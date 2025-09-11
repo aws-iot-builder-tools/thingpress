@@ -1,6 +1,6 @@
-"""
 # Copyright Amazon.com, Inc. or its affiliates. All Rights Reserved.
 # SPDX-License-Identifier: MIT-0
+"""The manifest_handler has all operations specific to mangling the manifest file.
 """
 import io
 import base64
@@ -8,7 +8,7 @@ import base64
 import py7zr
 import py7zr.io as py7io
 from boto3 import Session
-from layer_utils.aws_utils import s3_object_bytes
+from layer_utils.aws_utils import s3_object_bytes, ProviderMessageKey, ImporterMessageKey
 from layer_utils.cert_utils import get_cn
 from layer_utils.throttling_utils import create_standardized_throttler
 
@@ -39,8 +39,7 @@ def verify_certificate_set(files: list[py7zr.FileInfo], option: str) -> str|None
 def select_certificate_set(manifest_bundle: io.BytesIO, option: str) -> io.BytesIO:
     """There are 3 bundles within the main payload, select which one of it exists."""
     szf = py7zr.SevenZipFile(manifest_bundle)
-    f = verify_certificate_set(szf.list(), option)
-    if f is None:
+    if (f := verify_certificate_set(szf.list(), option)) is None:
         raise FileNotFoundError("file having option not found ")
     # get single file from bundle, return as io,BytesIO
     fcty = py7io.BytesIOFactory(limit=10)
@@ -51,7 +50,7 @@ def send_certificates(manifest_archive: io.BytesIO,
                       config: dict,
                       queue_url: str,
                       session: Session) -> int:
-    "Routine to send data through queue for further processing with batch optimization."
+    """Routine to send data through queue for further processing with batch optimization."""
 
     # Process certificates in batches for optimal SQS throughput
     batch_messages = []
@@ -67,13 +66,12 @@ def send_certificates(manifest_archive: io.BytesIO,
 
     for x in szf.list():
         j = fcty.get(filename = x.filename).read().decode('ascii')
-        #k = format_certificate(j)
         k = str(base64.b64encode(j.encode("ascii")))
         l = get_cn(j)
 
         cert_config = config.copy()
-        cert_config['thing'] = l
-        cert_config['certificate'] = k
+        cert_config[ImporterMessageKey.THING_NAME.value] = l
+        cert_config[ImporterMessageKey.CERTIFICATE.value] = k
 
         batch_messages.append(cert_config)
         total_count += 1
@@ -91,12 +89,11 @@ def send_certificates(manifest_archive: io.BytesIO,
     return total_count
 
 def invoke_export(config, queue_url, cert_type, session: Session=default_session):
-    """
-    The manifest_file must be a file-like object
+    """The manifest_file must be a file-like object
     Main interface to invoke manifest processing routines
     """
-    manifest_bytes = s3_object_bytes(config['bucket'],
-                                    config['key'],
+    manifest_bytes = s3_object_bytes(config[ProviderMessageKey.OBJECT_BUCKET.value],
+                                    config[ProviderMessageKey.OBJECT_KEY.value],
                                     session=session)
     x = select_certificate_set(io.BytesIO(manifest_bytes), cert_type)
     return send_certificates(x, config, queue_url=queue_url, session=session)

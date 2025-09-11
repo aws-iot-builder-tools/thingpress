@@ -39,6 +39,15 @@ class ImporterMessageKey(Enum):
     THING_GROUP_ARN = 'thing_group_arn'
     THING_TYPE_NAME = 'thing_type_name'
     POLICY_NAME = 'policy_name'
+class BotoErrorStruct(Enum):
+    """dict fields in BotoError structure"""
+    ERROR = 'Error'
+    CODE = 'Code'
+    MESSAGE = 'Message'
+class SqsMessageStatus(Enum):
+    """dict status fields in Sqs api call responses"""
+    SUCCESSFUL = 'Successful'
+    FAILED = 'Failed'
 
 QUEUE_DEPTH_DELAY_VERY_HIGH: int = 2000
 QUEUE_DEPTH_DELAY_HIGH = 1000
@@ -158,17 +167,19 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
         results.append(response)
 
         # Log successful sends
-        if 'Successful' in response:
-            logger.info("Successfully sent %d messages in batch", len(response['Successful']))
+        if SqsMessageStatus.SUCCESSFUL.value in response:
+            logger.info("Successfully sent %d messages in batch",
+                        len(response[SqsMessageStatus.SUCCESSFUL.value]))
 
         # Handle partial failures
-        if 'Failed' in response and response['Failed']:
+        if SqsMessageStatus.FAILED.value in response and \
+           response[SqsMessageStatus.FAILED.value]:
             logger.warning(
                 "Batch send partial failure: %d messages failed",
-                len(response['Failed'])
+                len(response[SqsMessageStatus.FAILED.value])
                 )
 
-            for failure in response['Failed']:
+            for failure in response[SqsMessageStatus.FAILED.value]:
                 failed_msg_idx = int(failure['Id'])
                 failed_messages.append({
                     'message': messages[failed_msg_idx],
@@ -193,11 +204,21 @@ def send_sqs_message_batch(messages: list, queue_url: str, session: Session=defa
 
     return results
 
+def _identify_sqs_failed_messages(message_results: list, remaining_messages: list) -> list:
+    failed_messages = []
+    for result in message_results:
+        if not SqsMessageStatus.FAILED.value in result:
+            break
+        for failure in result[SqsMessageStatus.FAILED.value]:
+            if (failed_msg_idx := int(failure['Id'])) < len(remaining_messages):
+                failed_messages.append(remaining_messages[failed_msg_idx])
+
+    return failed_messages
+
 @with_circuit_breaker('sqs_send_message_batch_with_retry')
 def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
                                     session: Session=default_session, max_retries: int = 3):
-    """
-    Send messages in batches with retry logic for failed messages
+    """Send messages in batches with retry logic for failed messages
 
     Args:
         messages: List of message dictionaries to send
@@ -241,18 +262,7 @@ def send_sqs_message_batch_with_retry(messages: list, queue_url: str,
         all_results.extend(results)
 
         # Collect failed messages for retry
-        failed_messages = []
-        for result in results:
-            if not 'Failed' in result:
-                break
-            for failure in result['Failed']:
-                failed_msg_idx = int(failure['Id'])
-                if failed_msg_idx < len(remaining_messages):
-                    failed_messages.append(remaining_messages[failed_msg_idx])
-
-        remaining_messages = failed_messages
-
-        if not remaining_messages:
+        if not (remaining_messages := _identify_sqs_failed_messages(results, remaining_messages)):
             logger.info("All messages sent successfully")
             break
         if attempt < max_retries - 1:
@@ -379,12 +389,39 @@ def send_sqs_message_with_throttling(messages: list, queue_url: str,
     # Send messages in batches with retry
     return send_sqs_message_batch_with_retry(messages, queue_url, session)
 
+def _get_queue_depth_total(queue_url, session) -> int:
+    """Call into SQS to get the queue's metrics, and summarize to total"""
+    try:
+        queue_metrics = get_queue_depth(queue_url, session)
+    except ClientError as e:
+        boto_exception(e, f"Failed to get queue metrics for {queue_url}, returning 0")
+        return 0
+    return int(queue_metrics['total'])
+
+def _do_adaptive_delay(batch_num, max_queue_depth, current_depth):
+    """Apply an adaptive delay (sleep) if excessive depth"""
+    logger.info(
+        "Adaptive throttling check (batch %d): queue_depth=%d",
+        batch_num,
+        current_depth
+    )
+
+    if current_depth > max_queue_depth:
+        # Calculate adaptive delay based on how far over the limit we are
+        excess_ratio = current_depth / max_queue_depth
+        # Cap at 60 seconds
+        adaptive_delay = min(60, int(30 * excess_ratio))
+
+        logger.info("Queue depth (%d) exceeds limit (%d), waiting %ds",
+                    current_depth, max_queue_depth, adaptive_delay)
+        time.sleep(adaptive_delay)
+
+
 def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
                                             session: Session = default_session,
                                             max_queue_depth: int = 1000,
                                             check_interval: int = 10) -> list:
-    """
-    Send messages with adaptive throttling that monitors queue depth during processing
+    """Send messages with adaptive throttling that monitors queue depth during processing
 
     Args:
         messages: List of message dictionaries to send
@@ -407,28 +444,9 @@ def send_sqs_message_with_adaptive_throttling(messages: list, queue_url: str,
 
         # Check queue depth periodically
         if batch_num % check_interval == 1:  # Check on first batch and every check_interval batches
-            try:
-                queue_metrics = get_queue_depth(queue_url, session)
-            except ClientError as e:
-                boto_exception(e, f"Adaptive throttling check failed for batch {batch_num}")
-
-            current_depth = queue_metrics['total']
-
-            logger.info(
-                "Adaptive throttling check (batch %d): queue_depth=%d",
-                batch_num,
-                current_depth
-            )
-
-            if current_depth > max_queue_depth:
-                # Calculate adaptive delay based on how far over the limit we are
-                excess_ratio = current_depth / max_queue_depth
-                # Cap at 60 seconds
-                adaptive_delay = min(60, int(30 * excess_ratio))
-
-                logger.info("Queue depth (%d) exceeds limit (%d), waiting %ds",
-                            current_depth, max_queue_depth, adaptive_delay)
-                time.sleep(adaptive_delay)
+            _do_adaptive_delay(batch_num,
+                               max_queue_depth,
+                               _get_queue_depth_total(queue_url, session))
 
         # Send the batch
         try:
@@ -505,7 +523,7 @@ def register_certificate(certificate: str,
 
 def get_thing_group_arn(thing_group_name: str, session: Session=default_session) -> str:
     """ Retrieves the thing group ARN with circuit breaker pattern """
-    if thing_group_name in ("None", ""):
+    if thing_group_name in {"None", ""}:
         raise ValueError("The provided thing group name signals no thing group used")
 
     operation_name = "iot_describe_thing_group"
@@ -530,7 +548,7 @@ def get_thing_group_arn(thing_group_name: str, session: Session=default_session)
 @with_circuit_breaker('iot_describe_thing_type')
 def get_thing_type_arn(type_name: str, session: Session=default_session) -> str:
     """Retrieves the thing type ARN"""
-    if type_name in ("None", ""):
+    if type_name in {"None", ""}:
         raise ValueError("The thing type value signals that no thing type defined")
 
     iot_client = session.client('iot')
@@ -544,7 +562,7 @@ def get_thing_type_arn(type_name: str, session: Session=default_session) -> str:
 @with_circuit_breaker('iot_describe_thing')
 def get_thing_arn(thing_name: str, session: Session=default_session) -> str:
     """Retrieves the thing ARN"""
-    if thing_name in ("None", ""):
+    if thing_name in {"None", ""}:
         raise ValueError("The thing name value signals that no thing defined")
 
     iot_client = session.client('iot')
@@ -586,7 +604,8 @@ def process_thing_group(thing_group_arn: str,
                                             overrideDynamicGroups=False)
     except ClientError as error:
         boto_exception(
-            error, f"Thing {thing_arn} attachment to thing group {thing_group_arn} creation failed")
+            error, f"Thing {thing_arn} attachment to thing group " \
+                   f"{thing_group_arn} creation failed")
         raise error
 
 def process_policy(policy_name: str,
@@ -599,8 +618,21 @@ def process_policy(policy_name: str,
     try:
         iot_client.attach_policy(policyName=policy_name, target=certificate_arn)
     except ClientError as err:
-        boto_exception(err, f"Policy {policy_name} failed to attach to principal {certificate_arn}.")
+        boto_exception(err, f"Policy {policy_name} failed to attach " \
+                            f"to principal {certificate_arn}.")
         raise err
+
+def _verify_thing_exists(thing_name: str,
+                  session: Session=default_session) -> bool:
+    """ A basic check on whether or not an IoT Thing is defined in the IoT registry """
+    iot_client = session.client('iot')
+    try:
+        iot_client.describe_thing(thingName=thing_name)
+    except ClientError as err_describe:
+        boto_exception(err_describe, f"Thing {thing_name} not found in the IoT registry.")
+        return False
+    logger.info("Thing %s found in the IoT registry", thing_name)
+    return True
 
 def process_thing(thing_name: str,
                   certificate_arn: str,
@@ -609,24 +641,19 @@ def process_thing(thing_name: str,
 
     Args:
         thing_name: Name of the IoT Thing to create
-        certificate_id: Certificate ID to attach to the thing
-        tags: Optional list of tags to apply to the thing
-              Format: [{'Key': 'key1', 'Value': 'value1'}, {'Key': 'key2', 'Value': 'value2'}]
+        certificate_arn: Certificate ID to attach to the thing
         session: Boto3 session
     """
     logger.info("Processing thing %s.", thing_name)
     iot_client = session.client('iot')
 
-    try:
-        iot_client.describe_thing(thingName=thing_name)
-        logger.info("Thing %s already exists", thing_name)
-    except ClientError as err_describe:
-        boto_exception(err_describe, f"Thing {thing_name} not found. Creating.")
+    if not _verify_thing_exists(thing_name, session):
         try:
             iot_client.create_thing(thingName=thing_name)
         except ClientError as err_create:
             boto_exception(err_create, f"Thing {thing_name} creation failed")
             raise err_create
+
     logger.info("Created thing %s", thing_name)
 
     # Always attempt to attach certificate, whether thing existed or was just created
@@ -710,16 +737,16 @@ def powertools_idempotency_environ():
 
 def boto_errorcode(e: ClientError) -> str:
     """ Consolidate checks on typed dict having optional keys """
-    if 'Error' in e.response:
-        if 'Code' in e.response['Error']:
-            return e.response['Error']['Code']
+    if BotoErrorStruct.ERROR.value in e.response:
+        if BotoErrorStruct.CODE.value in e.response[BotoErrorStruct.ERROR.value]:
+            return e.response[BotoErrorStruct.ERROR.value][BotoErrorStruct.CODE.value]
     return "ERROR_UNKNOWN"
 
 def boto_errormessage(e: ClientError) -> str:
     """ Consolidate checks on typed dict having optional keys """
-    if 'Error' in e.response:
-        if 'Message' in e.response['Error']:
-            return e.response['Error']['Message']
+    if BotoErrorStruct.ERROR.value in e.response:
+        if BotoErrorStruct.MESSAGE.value in e.response[BotoErrorStruct.ERROR.value]:
+            return e.response[BotoErrorStruct.ERROR.value][BotoErrorStruct.MESSAGE.value]
     return "ERROR_UNKNOWN"
 
 def boto_exception(exc: ClientError, context_message: str) -> None:

@@ -11,7 +11,9 @@ from aws_lambda_powertools.utilities.typing import LambdaContext
 from aws_lambda_powertools.utilities.data_classes import SQSEvent
 from boto3 import Session
 from botocore.exceptions import ClientError
-from layer_utils.aws_utils import boto_exception, verify_queue, powertools_idempotency_environ
+from layer_utils.aws_utils import (
+    boto_exception, verify_queue, powertools_idempotency_environ,
+    ProviderMessageKey)
 from provider_infineon.manifest_handler import invoke_export, verify_certtype
 
 # Initialize Logger and Idempotency
@@ -22,17 +24,20 @@ persistence_layer, idempotency_config = powertools_idempotency_environ()
 
 def file_key_generator(event, _context):
     """Generate a unique key based on S3 bucket and key"""
-    if isinstance(event, dict) and "bucket" in event and "key" in event:
+    if isinstance(event, dict) and \
+       ProviderMessageKey.OBJECT_BUCKET.value in event and \
+       ProviderMessageKey.OBJECT_KEY.value in event:
         # Use bucket and key as the idempotency key
-        return f"{event['bucket']}:{event['key']}"
+        return f"{event[ProviderMessageKey.OBJECT_BUCKET.value]}:" \
+               f"{event[ProviderMessageKey.OBJECT_KEY.value]}"
     return None
 
 def process_infineon_manifest(config, queue_url, cert_type, session=default_session):
     """Process Infineon manifest with idempotency"""
     logger.info({
         "message": "Processing Infineon manifest",
-        "bucket": config['bucket'],
-        "key": config['key'],
+        "bucket": config[ProviderMessageKey.OBJECT_BUCKET.value],
+        "key": config[ProviderMessageKey.OBJECT_KEY.value],
         "cert_type": cert_type
     })
 
@@ -41,15 +46,14 @@ def process_infineon_manifest(config, queue_url, cert_type, session=default_sess
     logger.info({
         "message": "Processed certificates from Infineon manifest",
         "count": count,
-        "bucket": config['bucket'],
-        "key": config['key']
+        "bucket": config[ProviderMessageKey.OBJECT_BUCKET.value],
+        "key": config[ProviderMessageKey.OBJECT_KEY.value]
     })
 
     return count
 
 def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disable=unused-argument
-    """
-    Process Infineon certificate manifests from SQS messages and forward to target queue.
+    """Process Infineon certificate manifests from SQS messages and forward to target queue.
     
     This Lambda function processes SQS messages containing S3 bucket and object information
     for Infineon certificate manifests. For each manifest:
@@ -100,8 +104,8 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
         config = json.loads(record.body)
         logger.info({
             "message": "Processing SQS message",
-            "bucket": config.get('bucket'),
-            "key": config.get('key')
+            "bucket": config.get(ProviderMessageKey.OBJECT_BUCKET.value),
+            "key": config.get(ProviderMessageKey.OBJECT_KEY.value)
         })
         total_processed += process_infineon_manifest(config, queue_url, cert_type)
 
