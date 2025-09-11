@@ -12,23 +12,6 @@ Complete the [main installation guide](../setup/installation.md) through **Step 
 
 ## Deployment
 
-### SAM Deployment Parameters
-
-Deploy Thingpress with Infineon-specific parameters:
-
-```bash
-sam deploy \
-  --stack-name thingpress-infineon \
-  --parameter-overrides \
-    PolicyName=<your-iot-policy-name> \
-    ThingGroupName=<your-thing-group-name> \
-    ThingTypeName=<your-thing-type-name> \
-    S3BucketName=<your-deployment-bucket> \
-    Region=<your-aws-region> \
-    RoleArn=<your-iam-role-arn> \
-    CertificateType=<E0E0|E0E1|E0E2>
-```
-
 ### Certificate Bundle Types
 
 Infineon provides different certificate bundle types:
@@ -38,6 +21,55 @@ Infineon provides different certificate bundle types:
 - **E0E2:** Advanced certificate bundle with extended features
 
 Choose the appropriate type based on your Optiga Trust M Express configuration.
+
+### SAM Deployment Parameters
+
+Change directory to the Thingpress project root directory.
+```bash
+$ cd thingpress # navigate to project root
+```
+
+Modify TOML file parameters.
+```bash
+$ vi configs/sam-integration-full.toml
+```
+
+Edit the following properties. The property value is the object name (not ARN). Set the property value to `\"\"` if you do not wish to configure those properties.
+- IoTPolicy
+- IoTThingGroup
+- IoTThingType
+- **InfineonCertBundleType**
+
+Deploy Thingpress.
+
+```bash
+$ sam deploy \
+   --stack-name thingpress-espressif \
+   --region REGION \
+   --resolve-s3 \
+   --config-file CONFIG \
+   --capabilities CAPABILITY_NAMED_IAM \
+   --no-confirm-changeset \
+   --no-fail-on-empty-changeset
+```
+
+Where:
+- REGION is your target deployment AWS region.
+  - example: us-east-1
+- CONFIG is the toml config file. Toml config is in a SAM-expected format.
+  - example: configs/sam-integration-full.toml
+
+For example:
+```bash
+$ sam deploy \
+   --stack-name thingpress-espressif \
+   --region us-east-1 \
+   --resolve-s3 \
+   --config-file configs/sam-integration-full.toml \
+   --capabilities CAPABILITY_NAMED_IAM \
+   --no-confirm-changeset \
+   --no-fail-on-empty-changeset
+```
 
 ### Expected AWS Resources
 

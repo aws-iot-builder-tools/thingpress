@@ -29,29 +29,51 @@ Complete the [main installation guide](../setup/installation.md) through **Step 
 
 ### SAM Deployment Parameters
 
-Deploy Thingpress with Generated Certificates parameters:
-
+Change directory to the Thingpress project root directory.
 ```bash
-sam deploy \
-  --stack-name thingpress-generated \
-  --parameter-overrides \
-    PolicyName=<your-iot-policy-name> \
-    ThingGroupName=<your-thing-group-name> \
-    ThingTypeName=<your-thing-type-name> \
-    S3BucketName=<your-deployment-bucket> \
-    Region=<your-aws-region> \
-    RoleArn=<your-iam-role-arn>
+$ cd thingpress # navigate to project root
 ```
 
-### Expected AWS Resources
+Modify TOML file parameters.
+```bash
+$ vi configs/sam-integration-full.toml
+```
 
-After deployment, to view all created resources:
+Edit the following properties. The property value is the object name (not ARN). Set the property value to `\"\"` if you do not wish to configure those properties.
+- IoTPolicy
+- IoTThingGroup
+- IoTThingType
 
-1. **Navigate to CloudFormation** in the AWS Console
-2. **Select your stack** (e.g., `thingpress-generated`)
-3. **Click the "Resources" tab** to see all created AWS resources
-4. **Review resource status** and physical IDs for troubleshooting
+Deploy Thingpress.
 
+```bash
+$ sam deploy \
+   --stack-name thingpress-espressif \
+   --region REGION \
+   --resolve-s3 \
+   --config-file CONFIG \
+   --capabilities CAPABILITY_NAMED_IAM \
+   --no-confirm-changeset \
+   --no-fail-on-empty-changeset
+```
+
+Where:
+- REGION is your target deployment AWS region.
+  - example: us-east-1
+- CONFIG is the toml config file. Toml config is in a SAM-expected format.
+  - example: configs/sam-integration-full.toml
+
+For example:
+```bash
+$ sam deploy \
+   --stack-name thingpress-espressif \
+   --region us-east-1 \
+   --resolve-s3 \
+   --config-file configs/sam-integration-full.toml \
+   --capabilities CAPABILITY_NAMED_IAM \
+   --no-confirm-changeset \
+   --no-fail-on-empty-changeset
+```
 ## Certificate File Format Requirements
 
 ### Input Format Specification
@@ -84,7 +106,6 @@ LS0tLS1CRUdJTiBDRVJUSUZJQ0FURS0tLS0tCk1JSUNpakNDQWkrZ0F3SUJBZ0lVQm...
 **X.509 Certificate Standards:**
 - **Valid X.509 certificates** in PEM format (before base64 encoding)
 - **Unique Common Names (CN)** for each certificate (used as Thing names)
-- **Valid certificate chains** if using intermediate CAs
 - **Non-expired certificates** recommended
 
 **Thing Naming:**

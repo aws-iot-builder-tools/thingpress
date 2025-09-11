@@ -41,6 +41,7 @@ These steps assume you are building and installing the tool on a GNU/Linux opera
    pip install -r requirements.txt
    ```
 
+4. Install Serverless Application Model (SAM). The SAM CLI is required to build and deploy Thingpress.
 
 ## Step 3: Build and Deploy Thingpress
 
