@@ -17,7 +17,7 @@ Thingpress supports manifests from three vendors as well as programmatically gen
 | --------- | ---------- | ---------------------------- |
 | [Espressif Systems](https://www.espressif.com/) | [ESP32-S3](https://www.espressif.com/en/products/socs/esp32-s3) | [Thingpress for Espressif](docs/vendors/espressif.md) |
 | [Infineon Technologies SA](https://www.infineon.com/) | [Optiga Trust M Express](https://www.infineon.com/cms/en/product/security-smart-card-solutions/optiga-embedded-security-solutions/optiga-trust/optiga-trust-m-express/)| [Thingpress for Infineon](docs/vendors/infineon.md) |
-| [Microchip Technology Inc.](https://www.microchip.com/) | [Trust&Go ATECC608B with TLS](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls) | [Thingpress for Microchip](docs/vendors/microchip.md) |
+| [Microchip Technology Inc.](https://www.microchip.com/) | [Trust Platform](https://www.microchip.com/en-us/products/security/trust-platform)<br/>[Trust&GO ATECC608](https://www.microchip.com/en-us/products/security/trust-platform/trust-and-go/trust-and-go-tls)<br/>[TrustFlex ATECC608](https://www.microchip.com/en-us/products/security/trust-platform/trustflex) | [Thingpress for Microchip](docs/vendors/microchip.md) |
 | Generated Certificates | Programmatically generated certificates | [Thingpress for Generated Certificates](docs/vendors/generated.md) |
 
 ## Development Roadmap
