@@ -62,23 +62,24 @@ def lambda_handler(event,
     QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED
     
     Supports both new multi-value and legacy single-value parameters:
-    New: POLICY_NAMES, THING_GROUP_NAMES, THING_TYPE_NAMES (comma-delimited)
-    Legacy: POLICY_NAME, THING_GROUP_NAME, THING_TYPE_NAME (single values)
+    New: POLICY_NAMES, THING_GROUP_NAMES (comma-delimited)
+    Legacy: POLICY_NAME, THING_GROUP_NAME (single values)
+    Thing Type: THING_TYPE_NAME (always singular - AWS IoT limitation)
     """
     config = {}
     
     # Try new multi-value parameters first, fall back to legacy
     e_policies = os.environ.get('POLICY_NAMES', '')
     e_thing_groups = os.environ.get('THING_GROUP_NAMES', '')
-    e_thing_types = os.environ.get('THING_TYPE_NAMES', '')
     
     # Backward compatibility: if new params empty, try legacy
     if not e_policies:
         e_policies = os.environ.get('POLICY_NAME', '')
     if not e_thing_groups:
         e_thing_groups = os.environ.get('THING_GROUP_NAME', '')
-    if not e_thing_types:
-        e_thing_types = os.environ.get('THING_TYPE_NAME', '')
+    
+    # Thing type is always singular (AWS IoT limitation: one thing type per thing)
+    e_thing_type = os.environ.get('THING_TYPE_NAME', '')
 
     # Handle both raw dict and S3Event object formats
     if hasattr(event, 'records'):
@@ -116,16 +117,10 @@ def lambda_handler(event,
         if thing_groups:
             config['thing_groups'] = thing_groups
 
-    # Parse and validate thing types
-    thing_type_names = parse_comma_delimited_list(e_thing_types)
-    if thing_type_names:
-        thing_types = []
-        for thing_type_name in thing_type_names:
-            if check_cfn_prop_valid(thing_type_name):
-                get_thing_type_arn(thing_type_name, default_session)
-                thing_types.append(thing_type_name)
-        if thing_types:
-            config['thing_types'] = thing_types
+    # Parse and validate thing type (singular - AWS IoT allows only one thing type per thing)
+    if e_thing_type and check_cfn_prop_valid(e_thing_type):
+        get_thing_type_arn(e_thing_type, default_session)
+        config['thing_type_name'] = e_thing_type
 
     try:
         queue_url = get_provider_queue(config['bucket'])

@@ -92,7 +92,7 @@ $ sam deploy \
    --parameter-overrides \
      IoTPolicies=base-connectivity,sensor-telemetry,admin-access \
      IoTThingGroups=dept-engineering,location-seattle,product-sensor \
-     IoTThingTypes=esp32-s3 \
+     IoTThingType=esp32-s3 \
    --capabilities CAPABILITY_NAMED_IAM
 ```
 

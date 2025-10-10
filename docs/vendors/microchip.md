@@ -83,7 +83,7 @@ $ sam deploy \
    --parameter-overrides \
      IoTPolicies=base-connectivity,sensor-telemetry,admin-access \
      IoTThingGroups=dept-engineering,location-seattle,product-sensor \
-     IoTThingTypes=atecc608b \
+     IoTThingType=atecc608b \
    --capabilities CAPABILITY_NAMED_IAM
 ```
 

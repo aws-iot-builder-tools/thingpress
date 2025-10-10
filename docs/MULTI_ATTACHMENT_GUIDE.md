@@ -2,7 +2,7 @@
 
 ## Overview
 
-Thingpress now supports attaching multiple policies, thing groups, and thing types to each certificate/thing. This enables enterprise IoT deployment patterns with hierarchical organization.
+Thingpress supports attaching multiple policies and thing groups to each certificate/thing. **Note: AWS IoT Core allows only one thing type per thing.**
 
 ## Parameter Syntax
 
@@ -14,7 +14,7 @@ Use comma-delimited lists for multiple values:
 sam deploy --parameter-overrides \
   IoTPolicies=policy1,policy2,policy3 \
   IoTThingGroups=dept-eng,location-seattle,product-sensor \
-  IoTThingTypes=temp-sensor,humidity-sensor
+  IoTThingType=temp-sensor
 ```
 
 ### Legacy Single-Value Parameters (Still Supported)
@@ -27,6 +27,8 @@ sam deploy --parameter-overrides \
   IoTThingGroup=my-group \
   IoTThingType=my-type
 ```
+
+**Note:** Thing type is always singular - AWS IoT Core allows only one thing type per thing.
 
 ## Common Use Cases
 
@@ -53,10 +55,10 @@ Applies multiple policies:
 ### 3. Device Categorization
 
 ```bash
-IoTThingTypes=hardware-esp32,firmware-v2.1,capability-temperature
+IoTThingType=hardware-esp32
 ```
 
-Multiple classifications:
+Single classification per device (AWS IoT limitation):
 - Hardware model
 - Firmware version
 - Device capabilities
@@ -104,16 +106,20 @@ IoTThingGroups=acme-corp,manufacturing,quality-control,seattle-plant,sensor-netw
 
 ### Thing Type Strategy
 
-Use for device characteristics:
+**AWS IoT Limitation:** Each thing can have only one thing type.
+
+Use thing types to categorize device characteristics:
 ```bash
-IoTThingTypes=hardware-esp32,sensor-temperature,protocol-mqtt
+IoTThingType=sensor-temperature
+# OR
+IoTThingType=hardware-esp32
 ```
 
 ## Recommended Limits
 
 - **Policies**: Maximum 5 per certificate
 - **Thing Groups**: Maximum 10 per thing
-- **Thing Types**: Maximum 3 per thing
+- **Thing Type**: Exactly 1 per thing (AWS IoT limitation)
 
 Exceeding these limits may impact performance.
 
@@ -199,7 +205,7 @@ sam deploy --parameter-overrides \
 ```bash
 IoTPolicies=base-mqtt,manufacturing-floor,quality-control
 IoTThingGroups=factory-seattle,line-assembly-1,zone-welding
-IoTThingTypes=plc-controller,sensor-vibration
+IoTThingType=plc-controller
 ```
 
 ### Smart Buildings
@@ -207,7 +213,7 @@ IoTThingTypes=plc-controller,sensor-vibration
 ```bash
 IoTPolicies=base-connectivity,building-automation,hvac-control
 IoTThingGroups=building-hq,floor-3,zone-west-wing
-IoTThingTypes=thermostat,occupancy-sensor
+IoTThingType=thermostat
 ```
 
 ### Fleet Management
@@ -215,7 +221,7 @@ IoTThingTypes=thermostat,occupancy-sensor
 ```bash
 IoTPolicies=base-telemetry,fleet-tracking,geofence-enabled
 IoTThingGroups=fleet-delivery,region-west,vehicle-type-van
-IoTThingTypes=gps-tracker,obd-reader
+IoTThingType=gps-tracker
 ```
 
 ## API Reference
@@ -260,5 +266,6 @@ For issues or questions:
 
 ## Version History
 
-- **v1.0.1**: Added multiple policies, thing groups, and thing types support
+- **v1.1.0**: Removed IoTThingTypes parameter (AWS IoT allows only one thing type per thing)
+- **v1.0.1**: Added multiple policies and thing groups support
 - **v1.0.0**: Initial release with single-value parameters

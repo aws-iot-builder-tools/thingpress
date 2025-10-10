@@ -148,20 +148,12 @@ def process_sqs(config, session: Session=default_session):
                                thing_arn=thing_arn,
                                session=session)
 
-    # Process multiple thing types (backward compatible)
-    thing_types = config.get('thing_types', [])
-    if thing_types:
-        for thing_type_name in thing_types:
-            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
-                              thing_type_name=thing_type_name,
-                              session=session)
-    else:
-        # Legacy single thing type support
-        thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
-        if thing_type_name:
-            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
-                              thing_type_name=thing_type_name,
-                              session=session)
+    # Process thing type (singular - AWS IoT allows only one thing type per thing)
+    thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
+    if thing_type_name:
+        process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                          thing_type_name=thing_type_name,
+                          session=session)
 
     return {
         "certificate_id": certificate_id,

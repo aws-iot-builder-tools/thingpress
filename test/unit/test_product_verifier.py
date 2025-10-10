@@ -263,6 +263,17 @@ class TestProductProvider(TestCase):
         assert e.typename == 'ValueError'
 
     def tearDown(self):
+        # Clean up environment variables to prevent test pollution
+        env_vars_to_clear = [
+            'POLICY_NAME', 'POLICY_NAMES',
+            'THING_GROUP_NAME', 'THING_GROUP_NAMES',
+            'THING_TYPE_NAME',
+            'QUEUE_TARGET_ESPRESSIF', 'QUEUE_TARGET_INFINEON',
+            'QUEUE_TARGET_MICROCHIP', 'QUEUE_TARGET_GENERATED'
+        ]
+        for var in env_vars_to_clear:
+            os.environ.pop(var, None)
+        
         # Clean up SQS queues
         sqs_resource = resource("sqs", region_name="us-east-1")
         sqs_client = client("sqs", "us-east-1")
@@ -405,8 +416,12 @@ class TestProductProvider(TestCase):
         message_body = json.loads(messages['Messages'][0]['Body'])
         self.assertEqual(message_body['bucket'], self.bucket_generated_pos)
         self.assertEqual(message_body['key'], "certificates/" + self.obj_generated)
-        self.assertEqual(message_body['policy_name'], self.env_policy_name_pos)
-        self.assertIn('thing_group_arn', message_body)
+        # Check new multi-value format (even when using legacy env vars)
+        self.assertIn('policies', message_body)
+        self.assertEqual(len(message_body['policies']), 1)
+        self.assertEqual(message_body['policies'][0]['name'], self.env_policy_name_pos)
+        self.assertIn('thing_groups', message_body)
+        self.assertEqual(len(message_body['thing_groups']), 1)
         self.assertEqual(message_body['thing_type_name'], self.env_thing_type_name_pos)
 
 
@@ -462,7 +477,7 @@ class TestProductProvider(TestCase):
         # Set environment variables for multiple policies
         os.environ['POLICY_NAMES'] = 'test-policy-1,test-policy-2'
         os.environ['THING_GROUP_NAMES'] = 'None'
-        os.environ['THING_TYPE_NAMES'] = 'None'
+        os.environ['THING_TYPE_NAME'] = 'None'
         os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
         
         # Create S3 bucket and upload object
@@ -517,7 +532,7 @@ class TestProductProvider(TestCase):
         # Set environment variables
         os.environ['POLICY_NAMES'] = 'None'
         os.environ['THING_GROUP_NAMES'] = 'test-group-1,test-group-2'
-        os.environ['THING_TYPE_NAMES'] = 'None'
+        os.environ['THING_TYPE_NAME'] = 'None'
         os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
         
         # Create S3 bucket and upload object
@@ -572,7 +587,6 @@ class TestProductProvider(TestCase):
         # Set ONLY legacy environment variables (new ones empty)
         os.environ['POLICY_NAMES'] = ''
         os.environ['THING_GROUP_NAMES'] = ''
-        os.environ['THING_TYPE_NAMES'] = ''
         os.environ['POLICY_NAME'] = 'legacy-policy'
         os.environ['THING_GROUP_NAME'] = 'legacy-group'
         os.environ['THING_TYPE_NAME'] = 'None'
@@ -629,7 +643,6 @@ class TestProductProvider(TestCase):
         # New multi-value for policies, legacy for thing group
         os.environ['POLICY_NAMES'] = 'policy-1,policy-2'
         os.environ['THING_GROUP_NAMES'] = ''
-        os.environ['THING_TYPE_NAMES'] = ''
         os.environ['THING_GROUP_NAME'] = 'legacy-group'
         os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
         

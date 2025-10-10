@@ -95,7 +95,7 @@ $ sam deploy \
    --parameter-overrides \
      IoTPolicies=base-connectivity,sensor-telemetry,admin-access \
      IoTThingGroups=dept-engineering,location-seattle,product-sensor \
-     IoTThingTypes=optiga-trust-m \
+     IoTThingType=optiga-trust-m \
    --capabilities CAPABILITY_NAMED_IAM
 ```
 

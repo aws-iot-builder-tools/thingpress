@@ -59,13 +59,7 @@ Parameters:
   IoTThingType:
     Default: None
     Type: String
-    Description: (DEPRECATED - Use IoTThingTypes) Single Thing Type for backward compatibility.
-
-  IoTThingTypes:
-    Default: None
-    Type: CommaDelimitedList
-    Description: Comma-separated list of AWS IoT Thing Types.
-      Use 'None' for no thing types. Example sensor-temp,sensor-humidity
+    Description: AWS IoT Thing Type to apply to things. Use 'None' for no thing type.
 
   InfineonCertBundleType:
     Default: E0E0
@@ -394,7 +388,6 @@ Resources:
           QUEUE_TARGET_GENERATED: !Ref ThingpressGeneratedProviderQueue
           POLICY_NAMES: !Join [',', !Ref IoTPolicies]
           THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
-          THING_TYPE_NAMES: !Join [',', !Ref IoTThingTypes]
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType

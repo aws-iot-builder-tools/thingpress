@@ -526,8 +526,8 @@ class EndToEndTestFramework:
                 'exact_match_count': validation_details.get('summary', {}).get('correct_thing_groups', 0),
                 'count_mismatch_count': validation_details.get('summary', {}).get('thing_group_count_mismatches', 0)
             },
-            'thing_types': {
-                'expected': self.expected_config.get('thing_types', []),
+            'thing_type': {
+                'expected': self.expected_config.get('thing_type'),
                 'correct_count': validation_details.get('summary', {}).get('correct_thing_types', 0),
                 'incorrect_count': len(validation_details.get('summary', {}).get('incorrect_thing_types', []))
             }
@@ -564,12 +564,12 @@ class EndToEndTestFramework:
         if groups['count_mismatch_count'] > 0:
             self.logger.warning(f"  ⚠️  Count Mismatches: {groups['count_mismatch_count']}")
         
-        # Thing Types
-        types = summary['thing_types']
-        self.logger.info(f"Thing Types (Expected: {types['expected']})")
-        self.logger.info(f"  Correct: {types['correct_count']}/{summary['total_things']}")
-        if types['incorrect_count'] > 0:
-            self.logger.warning(f"  ⚠️  Incorrect: {types['incorrect_count']}")
+        # Thing Type (singular)
+        thing_type = summary['thing_type']
+        self.logger.info(f"Thing Type (Expected: {thing_type['expected']})")
+        self.logger.info(f"  Correct: {thing_type['correct_count']}/{summary['total_things']}")
+        if thing_type['incorrect_count'] > 0:
+            self.logger.warning(f"  ⚠️  Incorrect: {thing_type['incorrect_count']}")
         
         self.logger.info("=" * 60)
 
@@ -605,7 +605,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
             expected_config = {
                 'policies': [],
                 'thing_groups': [],
-                'thing_types': []
+                'thing_type': None  # Singular - AWS IoT allows only one thing type per thing
             }
             
             # Extract configuration from stack parameters
@@ -634,15 +634,9 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                     if not expected_config['thing_groups']:
                         expected_config['thing_groups'] = [param_value]
                 
-                # Handle thing types
-                elif param_key == 'IoTThingTypes' and param_value and param_value != 'None':
-                    expected_config['thing_types'] = [
-                        t.strip() for t in param_value.split(',')
-                        if t.strip() and t.strip() != 'None'
-                    ]
+                # Handle thing type (singular - AWS IoT allows only one thing type per thing)
                 elif param_key == 'IoTThingType' and param_value and param_value != 'None':
-                    if not expected_config['thing_types']:
-                        expected_config['thing_types'] = [param_value]
+                    expected_config['thing_type'] = param_value
             
             self.logger.info(f"Expected config from stack: {expected_config}")
             return expected_config
@@ -650,7 +644,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
         except Exception as e:
             self.logger.error(f"Failed to get expected config from stack: {e}")
             # Return empty config rather than failing
-            return {'policies': [], 'thing_groups': [], 'thing_types': []}
+            return {'policies': [], 'thing_groups': [], 'thing_type': None}
 
     def run_test(self, timeout_minutes: int = 10) -> dict:
         """Run the complete end-to-end test for this provider"""
@@ -723,7 +717,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
 
         expected_policies = set(self.expected_config.get('policies', []))
         expected_groups = set(self.expected_config.get('thing_groups', []))
-        expected_types = self.expected_config.get('thing_types', [])
+        expected_type = self.expected_config.get('thing_type')  # Singular
 
         validation_results = {
             'valid': True,
@@ -766,8 +760,8 @@ class ProviderEndToEndTest(EndToEndTestFramework):
             extra_groups = thing_groups - expected_groups
             group_count_match = len(thing_groups) == len(expected_groups)
 
-            # EXACT MATCH: Check thing type applied to thing
-            type_match = thing_type in expected_types if expected_types else True
+            # EXACT MATCH: Check thing type applied to thing (singular)
+            type_match = thing_type == expected_type if expected_type else (thing_type is None)
 
             thing_validation = {
                 'thing_name': thing['thingName'],
@@ -792,7 +786,7 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                     'extra': list(extra_groups)
                 },
                 'thing_type': {
-                    'expected': expected_types,
+                    'expected': expected_type,
                     'actual': thing_type,
                     'match': type_match
                 },

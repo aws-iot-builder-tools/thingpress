@@ -343,13 +343,12 @@ class TestBulkImporter(TestCase):
         """Test processing with empty policies and thing groups lists"""
         from bulk_importer.main import process_sqs
         
-        # Config with empty lists
+        # Config with empty lists and no thing type
         config = {
             'certificate': self.local_cert_loaded,
             'thing': 'test-thing-no-attachments',
             'policies': [],
-            'thing_groups': [],
-            'thing_types': []
+            'thing_groups': []
         }
         
         # Execute
