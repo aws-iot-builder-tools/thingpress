@@ -28,7 +28,7 @@ jobs:
     
     env:
       AWS_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
-      STACK_NAME: thingpress-integration-test-multi-${{ github.run_number }}
+      STACK_NAME: tp-int-multi-${{ github.run_number }}
     
     steps:
       - name: Checkout code
