@@ -74,6 +74,56 @@ $ sam deploy \
    --no-confirm-changeset \
    --no-fail-on-empty-changeset
 ```
+
+## Multiple Policies and Thing Groups
+
+Thingpress supports attaching multiple policies, thing groups, and thing types to each certificate/thing. This enables hierarchical organization and layered access control for enterprise IoT deployments.
+
+### Using Multiple Values
+
+Use comma-delimited lists in your deployment parameters:
+
+```bash
+$ sam deploy \
+   --stack-name thingpress-generated \
+   --region us-east-1 \
+   --parameter-overrides \
+     IoTPolicies=base-connectivity,sensor-telemetry,admin-access \
+     IoTThingGroups=dept-engineering,location-seattle,product-sensor \
+     IoTThingTypes=custom-device \
+   --capabilities CAPABILITY_NAMED_IAM
+```
+
+Or in your TOML configuration file:
+
+```toml
+parameter_overrides = "IoTPolicies=\"base-policy,sensor-policy\" IoTThingGroups=\"dept-eng,location-us-west\""
+```
+
+### Common Use Cases
+
+**Layered Access Control:**
+```bash
+IoTPolicies=base-connectivity,role-sensor,location-restricted
+```
+- Base policy: MQTT connectivity
+- Role policy: Sensor-specific permissions  
+- Location policy: Regional restrictions
+
+**Organizational Hierarchy:**
+```bash
+IoTThingGroups=company-acme,dept-manufacturing,location-seattle,line-assembly-1
+```
+- Organize devices by company → department → location → production line
+
+**Legacy Single-Value (Still Supported):**
+```bash
+IoTPolicy=my-policy
+IoTThingGroup=my-group
+```
+
+For detailed examples, best practices, and troubleshooting, see the [Multiple Attachments Guide](../MULTI_ATTACHMENT_GUIDE.md).
+
 ## Certificate File Format Requirements
 
 ### Input Format Specification
