@@ -67,7 +67,7 @@ jobs:
           echo "🧹 Pre-deployment cleanup of any existing test resources..."
           chmod +x scripts/cleanup-integration-test.sh
           ./scripts/cleanup-integration-test.sh \
-            --stack-prefix "thingpress-integration-test" \
+            --stack-prefix "thingpress-multi" \
             --no-dry-run \
             --region "${{ env.AWS_REGION }}" || true
         env:
@@ -164,7 +164,7 @@ jobs:
           
           # Run comprehensive cleanup to ensure no resources are left behind
           ./scripts/cleanup-integration-test.sh \
-            --stack-prefix "thingpress-integration-test" \
+            --stack-prefix "thingpress-multi" \
             --no-dry-run \
             --region "${{ env.AWS_REGION }}" || true
           
