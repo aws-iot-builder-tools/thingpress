@@ -6,6 +6,9 @@ on:
     branches:
       - master
 
+permissions:
+  contents: write  # Required for committing and pushing badge files
+
 jobs:
     CoverageAndLinting:
         runs-on: ubuntu-latest

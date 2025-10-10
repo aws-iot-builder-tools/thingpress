@@ -254,6 +254,10 @@ jobs:
     needs: [integration-tests, final-cleanup]
     if: always() && github.event_name == 'release'
     
+    permissions:
+      actions: read    # Required for download-artifact
+      contents: read   # Minimal read access
+    
     steps:
       - name: Download all test results
         uses: actions/download-artifact@v5
