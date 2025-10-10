@@ -1,0 +1,33 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Publish"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topic/sensor/${iot:Connection.Thing.ThingName}/telemetry",
+                "arn:aws:iot:*:*:topic/sensor/${iot:Connection.Thing.ThingName}/status"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Subscribe"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topicfilter/sensor/${iot:Connection.Thing.ThingName}/commands"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Receive"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topic/sensor/${iot:Connection.Thing.ThingName}/commands"
+            ]
+        }
+    ]
+}

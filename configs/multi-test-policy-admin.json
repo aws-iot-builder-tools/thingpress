@@ -1,0 +1,42 @@
+{
+    "Version": "2012-10-17",
+    "Statement": [
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Publish"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topic/admin/${iot:Connection.Thing.ThingName}/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Subscribe"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topicfilter/admin/broadcast/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:Receive"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:topic/admin/broadcast/*"
+            ]
+        },
+        {
+            "Effect": "Allow",
+            "Action": [
+                "iot:UpdateThingShadow",
+                "iot:GetThingShadow"
+            ],
+            "Resource": [
+                "arn:aws:iot:*:*:thing/${iot:Connection.Thing.ThingName}"
+            ]
+        }
+    ]
+}

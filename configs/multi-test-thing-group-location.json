@@ -1,0 +1,15 @@
+{
+    "thingGroupName": "multi-test-location-seattle",
+    "thingGroupProperties": {
+        "thingGroupDescription": "Multi-attachment test: Seattle location devices",
+        "attributePayload": {
+            "attributes": {
+                "location": "seattle",
+                "region": "us-west",
+                "timezone": "America/Los_Angeles",
+                "test-group": "multi-attachment"
+            },
+            "merge": true
+        }
+    }
+}

@@ -1,0 +1,15 @@
+{
+    "thingGroupName": "multi-test-product-sensor",
+    "thingGroupProperties": {
+        "thingGroupDescription": "Multi-attachment test: Sensor product line",
+        "attributePayload": {
+            "attributes": {
+                "product-line": "sensor",
+                "device-type": "iot-sensor",
+                "firmware-family": "sensor-v2",
+                "test-group": "multi-attachment"
+            },
+            "merge": true
+        }
+    }
+}

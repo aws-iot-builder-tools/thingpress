@@ -1,0 +1,14 @@
+{
+    "thingGroupName": "multi-test-dept-engineering",
+    "thingGroupProperties": {
+        "thingGroupDescription": "Multi-attachment test: Engineering department devices",
+        "attributePayload": {
+            "attributes": {
+                "department": "engineering",
+                "cost-center": "eng-001",
+                "test-group": "multi-attachment"
+            },
+            "merge": true
+        }
+    }
+}
