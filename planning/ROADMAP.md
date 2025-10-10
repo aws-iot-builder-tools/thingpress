@@ -60,6 +60,12 @@ This document provides a high-level overview of planned development efforts for 
 - See: [Web App Specification](planning/thingpress-web-app-spec.md)
 - **Priority:** Medium-High - transforms user experience paradigm
 
+**Breaking Changes:**
+- Remove deprecated single-value parameters: `IoTPolicy`, `IoTThingGroup`, `IoTThingType`
+- Users must migrate to multi-value parameters: `IoTPolicies`, `IoTThingGroups`, `IoTThingTypes`
+- Migration path: Single values can be specified as comma-delimited lists with one item
+- **Rationale:** Simplify codebase and eliminate dual-parameter maintenance burden after sufficient adoption period
+
 ### v2.1.0 - Security Enhancement
 **IoT Permissions Analysis and Visualization**
 - Analyze effective permissions from Thing Type + Thing Group + Policy combinations
