@@ -476,18 +476,102 @@ class EndToEndTestFramework:
         total_duration = (end_time - start_time).total_seconds() * 1000
         self.results['total_duration_ms'] = total_duration
 
+        # Add validation summary if validation was performed
+        self._add_validation_summary()
+
         # Cleanup resources
         self.cleanup_test_resources()
 
-        # Log final result
+        # Log final result with validation details
         status = "🎉 PASSED" if success else "❌ FAILED"
-        self.logger.info("%s Test %s completed in %d:.2fms",
+        self.logger.info("%s Test %s completed in %.2fms",
                          status, self.test_name, total_duration)
 
         if error:
             self.logger.error("Error: %s", error)
+        
+        # Log validation summary
+        self._log_validation_summary()
 
         return self.results
+
+    def _add_validation_summary(self):
+        """Add detailed validation summary to test results"""
+        # Find validation step
+        validation_step = None
+        for step in self.results.get('steps', []):
+            if step['name'] == 'validate_iot_config':
+                validation_step = step
+                break
+        
+        if not validation_step or 'details' not in validation_step:
+            return
+        
+        validation_details = validation_step['details']
+        
+        # Create high-level summary
+        self.results['validation_summary'] = {
+            'total_things': validation_details.get('total_things', 0),
+            'things_validated': validation_details.get('things_validated', 0),
+            'success_rate': validation_details.get('success_rate', 0.0),
+            'policies': {
+                'expected': list(self.expected_config.get('policies', [])),
+                'expected_count': len(self.expected_config.get('policies', [])),
+                'exact_match_count': validation_details.get('summary', {}).get('correct_policies', 0),
+                'count_mismatch_count': validation_details.get('summary', {}).get('policy_count_mismatches', 0)
+            },
+            'thing_groups': {
+                'expected': list(self.expected_config.get('thing_groups', [])),
+                'expected_count': len(self.expected_config.get('thing_groups', [])),
+                'exact_match_count': validation_details.get('summary', {}).get('correct_thing_groups', 0),
+                'count_mismatch_count': validation_details.get('summary', {}).get('thing_group_count_mismatches', 0)
+            },
+            'thing_types': {
+                'expected': self.expected_config.get('thing_types', []),
+                'correct_count': validation_details.get('summary', {}).get('correct_thing_types', 0),
+                'incorrect_count': len(validation_details.get('summary', {}).get('incorrect_thing_types', []))
+            }
+        }
+    
+    def _log_validation_summary(self):
+        """Log validation summary to console"""
+        if 'validation_summary' not in self.results:
+            return
+        
+        summary = self.results['validation_summary']
+        
+        self.logger.info("=" * 60)
+        self.logger.info("VALIDATION SUMMARY")
+        self.logger.info("=" * 60)
+        self.logger.info(f"Total Things: {summary['total_things']}")
+        self.logger.info(f"Things Validated: {summary['things_validated']}")
+        self.logger.info(f"Success Rate: {summary['success_rate']:.1%}")
+        self.logger.info("")
+        
+        # Policies
+        policies = summary['policies']
+        self.logger.info(f"Policies (Expected: {policies['expected_count']})")
+        self.logger.info(f"  Expected: {policies['expected']}")
+        self.logger.info(f"  Exact Matches: {policies['exact_match_count']}/{summary['total_things']}")
+        if policies['count_mismatch_count'] > 0:
+            self.logger.warning(f"  ⚠️  Count Mismatches: {policies['count_mismatch_count']}")
+        
+        # Thing Groups
+        groups = summary['thing_groups']
+        self.logger.info(f"Thing Groups (Expected: {groups['expected_count']})")
+        self.logger.info(f"  Expected: {groups['expected']}")
+        self.logger.info(f"  Exact Matches: {groups['exact_match_count']}/{summary['total_things']}")
+        if groups['count_mismatch_count'] > 0:
+            self.logger.warning(f"  ⚠️  Count Mismatches: {groups['count_mismatch_count']}")
+        
+        # Thing Types
+        types = summary['thing_types']
+        self.logger.info(f"Thing Types (Expected: {types['expected']})")
+        self.logger.info(f"  Correct: {types['correct_count']}/{summary['total_things']}")
+        if types['incorrect_count'] > 0:
+            self.logger.warning(f"  ⚠️  Incorrect: {types['incorrect_count']}")
+        
+        self.logger.info("=" * 60)
 
 
 class ProviderEndToEndTest(EndToEndTestFramework):
