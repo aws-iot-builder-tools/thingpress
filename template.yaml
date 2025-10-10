@@ -37,21 +37,35 @@ Parameters:
   IoTPolicy:
     Default: None
     Type: String
-    Description: The AWS IoT Policy that you will apply to every certificate being
-      imported. Using best practice techniques, abstract the Policy using Policy
-      variables.
+    Description: (DEPRECATED - Use IoTPolicies) Single AWS IoT Policy for backward compatibility.
+
+  IoTPolicies:
+    Default: None
+    Type: CommaDelimitedList
+    Description: Comma-separated list of AWS IoT Policies to apply to certificates.
+      Use 'None' for no policies. Example policy1,policy2,policy3
 
   IoTThingGroup:
     Default: None
     Type: String
-    Description: The AWS IoT Thing Group you apply to the Thing being created. Put
-      None if no Thing Group.
+    Description: (DEPRECATED - Use IoTThingGroups) Single Thing Group for backward compatibility.
+
+  IoTThingGroups:
+    Default: None
+    Type: CommaDelimitedList
+    Description: Comma-separated list of AWS IoT Thing Groups.
+      Use 'None' for no thing groups. Example dept-eng,location-seattle,product-sensor
 
   IoTThingType:
     Default: None
     Type: String
-    Description: The AWS IoT Thing Type you apply to the Thing being created. Put
-      None if no Thing Type.
+    Description: (DEPRECATED - Use IoTThingTypes) Single Thing Type for backward compatibility.
+
+  IoTThingTypes:
+    Default: None
+    Type: CommaDelimitedList
+    Description: Comma-separated list of AWS IoT Thing Types.
+      Use 'None' for no thing types. Example sensor-temp,sensor-humidity
 
   InfineonCertBundleType:
     Default: E0E0
@@ -378,6 +392,9 @@ Resources:
           QUEUE_TARGET_INFINEON: !Ref ThingpressInfineonProviderQueue
           QUEUE_TARGET_MICROCHIP: !Ref ThingpressMicrochipProviderQueue
           QUEUE_TARGET_GENERATED: !Ref ThingpressGeneratedProviderQueue
+          POLICY_NAMES: !Join [',', !Ref IoTPolicies]
+          THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
+          THING_TYPE_NAMES: !Join [',', !Ref IoTThingTypes]
           POLICY_NAME: !Ref IoTPolicy
           THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType

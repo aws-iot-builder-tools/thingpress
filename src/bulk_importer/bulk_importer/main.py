@@ -115,19 +115,53 @@ def process_sqs(config, session: Session=default_session):
                   certificate_arn=certificate_arn,
                   session=session)
 
-    process_policy(policy_name=config.get(ImporterMessageKey.POLICY_NAME.value),
-                   certificate_arn=certificate_arn,
-                   session=session)
+    # Process multiple policies (backward compatible)
+    policies = config.get('policies', [])
+    if policies:
+        for policy_info in policies:
+            process_policy(policy_name=policy_info['name'],
+                          certificate_arn=certificate_arn,
+                          session=session)
+    else:
+        # Legacy single policy support
+        policy_name = config.get(ImporterMessageKey.POLICY_NAME.value)
+        if policy_name:
+            process_policy(policy_name=policy_name,
+                          certificate_arn=certificate_arn,
+                          session=session)
 
-    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value, session),
+    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value),
                               session=session)
-    process_thing_group(thing_group_arn=config.get(ImporterMessageKey.THING_GROUP_ARN.value),
-                        thing_arn=thing_arn,
-                        session=session)
+    
+    # Process multiple thing groups (backward compatible)
+    thing_groups = config.get('thing_groups', [])
+    if thing_groups:
+        for thing_group_info in thing_groups:
+            process_thing_group(thing_group_arn=thing_group_info['arn'],
+                               thing_arn=thing_arn,
+                               session=session)
+    else:
+        # Legacy single thing group support
+        thing_group_arn = config.get(ImporterMessageKey.THING_GROUP_ARN.value)
+        if thing_group_arn:
+            process_thing_group(thing_group_arn=thing_group_arn,
+                               thing_arn=thing_arn,
+                               session=session)
 
-    process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
-                       thing_type_name=config.get(ImporterMessageKey.THING_TYPE_NAME.value),
-                       session=session)
+    # Process multiple thing types (backward compatible)
+    thing_types = config.get('thing_types', [])
+    if thing_types:
+        for thing_type_name in thing_types:
+            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                              thing_type_name=thing_type_name,
+                              session=session)
+    else:
+        # Legacy single thing type support
+        thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
+        if thing_type_name:
+            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                              thing_type_name=thing_type_name,
+                              session=session)
 
     return {
         "certificate_id": certificate_id,

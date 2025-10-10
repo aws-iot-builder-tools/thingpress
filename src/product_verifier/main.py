@@ -23,6 +23,13 @@ logger.setLevel("INFO")
 
 default_session: Session = Session()
 
+def parse_comma_delimited_list(value: str) -> list[str]:
+    """Parse comma-delimited string into list, filtering out 'None' and empty values"""
+    if not value or value.strip().lower() == 'none':
+        return []
+    return [item.strip() for item in value.split(',') 
+            if item.strip() and item.strip().lower() != 'none']
+
 ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
 INFINEON_BUCKET_PREFIX = "thingpress-infineon-"
 MICROCHIP_BUCKET_PREFIX = "thingpress-microchip-"
@@ -52,52 +59,73 @@ def lambda_handler(event,
     event, but is processed as if multiple events were found at once.
     
     Expects the following environment variables to be set:
-    QUEUE_TARGET_ESPRESSIF
-    QUEUE_TARGET_INFINEON
-    QUEUE_TARGET_MICROCHIP
-    QUEUE_TARGET_GENERATED
+    QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED
     
-    Expects at least one of the following environment variables to be set:
-    POLICY_NAME
-    THING_GROUP_NAME
-
-    May have the following environment variables set:
-    THING_TYPE_NAME
+    Supports both new multi-value and legacy single-value parameters:
+    New: POLICY_NAMES, THING_GROUP_NAMES, THING_TYPE_NAMES (comma-delimited)
+    Legacy: POLICY_NAME, THING_GROUP_NAME, THING_TYPE_NAME (single values)
     """
-    # Get the payload coming in and process it.  There might be more than one.
     config = {}
-    queue_url = None
-
-    e_thing_group = os.environ['THING_GROUP_NAME']
-    e_thing_type = os.environ['THING_TYPE_NAME']
-    e_policy = os.environ['POLICY_NAME']
+    
+    # Try new multi-value parameters first, fall back to legacy
+    e_policies = os.environ.get('POLICY_NAMES', '')
+    e_thing_groups = os.environ.get('THING_GROUP_NAMES', '')
+    e_thing_types = os.environ.get('THING_TYPE_NAMES', '')
+    
+    # Backward compatibility: if new params empty, try legacy
+    if not e_policies:
+        e_policies = os.environ.get('POLICY_NAME', '')
+    if not e_thing_groups:
+        e_thing_groups = os.environ.get('THING_GROUP_NAME', '')
+    if not e_thing_types:
+        e_thing_types = os.environ.get('THING_TYPE_NAME', '')
 
     # Handle both raw dict and S3Event object formats
     if hasattr(event, 'records'):
-        # S3Event object format
         s3_event = event
         raw_event = event.raw_event
     else:
-        # Raw dict format - convert to S3Event
         s3_event = S3Event(event)
         raw_event = event
 
-    # Process the first record to get bucket name for queue determination
+    # Process the first record to get bucket name
     records_list = list(s3_event.records)
     first_record = records_list[0]
     bucket_name = first_record.s3.bucket.name
     config['bucket'] = bucket_name
 
-    if check_cfn_prop_valid(e_thing_group):
-        config['thing_group_arn'] = get_thing_group_arn(e_thing_group, default_session)
+    # Parse and validate policies
+    policy_names = parse_comma_delimited_list(e_policies)
+    if policy_names:
+        policies = []
+        for policy_name in policy_names:
+            if check_cfn_prop_valid(policy_name):
+                policy_arn = get_policy_arn(policy_name, default_session)
+                policies.append({'name': policy_name, 'arn': policy_arn})
+        if policies:
+            config['policies'] = policies
 
-    if check_cfn_prop_valid(e_thing_type):
-        get_thing_type_arn(e_thing_type, default_session)
-        config['thing_type_name'] = e_thing_type
+    # Parse and validate thing groups
+    thing_group_names = parse_comma_delimited_list(e_thing_groups)
+    if thing_group_names:
+        thing_groups = []
+        for thing_group_name in thing_group_names:
+            if check_cfn_prop_valid(thing_group_name):
+                thing_group_arn = get_thing_group_arn(thing_group_name, default_session)
+                thing_groups.append({'name': thing_group_name, 'arn': thing_group_arn})
+        if thing_groups:
+            config['thing_groups'] = thing_groups
 
-    if check_cfn_prop_valid(e_policy):
-        get_policy_arn(e_policy, default_session)
-        config['policy_name'] = e_policy
+    # Parse and validate thing types
+    thing_type_names = parse_comma_delimited_list(e_thing_types)
+    if thing_type_names:
+        thing_types = []
+        for thing_type_name in thing_type_names:
+            if check_cfn_prop_valid(thing_type_name):
+                get_thing_type_arn(thing_type_name, default_session)
+                thing_types.append(thing_type_name)
+        if thing_types:
+            config['thing_types'] = thing_types
 
     try:
         queue_url = get_provider_queue(config['bucket'])
@@ -108,7 +136,6 @@ def lambda_handler(event,
     for record in records_list:
         config['key'] = record.s3.get_object.key
 
-        # Log the provider type based on the bucket name
         if config['bucket'].startswith(GENERATED_BUCKET_PREFIX):
             logger.info("Processing generated certificate file: %s", record.s3.get_object.key)
         else:

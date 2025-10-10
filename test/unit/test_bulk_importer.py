@@ -231,3 +231,138 @@ class TestBulkImporter(TestCase):
                 dynamodb.delete_table(TableName=os.environ["POWERTOOLS_IDEMPOTENCY_TABLE"])
             except Exception:
                 pass  # Ignore errors during cleanup
+
+
+    # ========================================================================
+    # v1.0.1 Tests - Multiple Policies and Thing Groups Support
+    # ========================================================================
+
+    def test_process_sqs_multiple_policies(self):
+        """Test processing SQS message with multiple policies"""
+        from bulk_importer.main import process_sqs
+        
+        # Setup: Create multiple policies
+        iot_client = _get_default_session().client('iot')
+        iot_client.create_policy(policyName='test-policy-1', policyDocument=json.dumps(IOT_POLICY))
+        iot_client.create_policy(policyName='test-policy-2', policyDocument=json.dumps(IOT_POLICY))
+        
+        # Create config with multiple policies
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': 'test-thing-multi-policy',
+            'policies': [
+                {'name': 'test-policy-1', 'arn': 'arn:aws:iot:us-east-1:123456789012:policy/test-policy-1'},
+                {'name': 'test-policy-2', 'arn': 'arn:aws:iot:us-east-1:123456789012:policy/test-policy-2'}
+            ]
+        }
+        
+        # Execute
+        result = process_sqs(config, session=_get_default_session())
+        
+        # Verify: Both policies attached to certificate
+        cert_id = result['certificate_id']
+        cert_arn = f"arn:aws:iot:us-east-1:123456789012:cert/{cert_id}"
+        policies = iot_client.list_principal_policies(principal=cert_arn)
+        
+        self.assertEqual(len(policies['policies']), 2)
+        policy_names = [p['policyName'] for p in policies['policies']]
+        self.assertIn('test-policy-1', policy_names)
+        self.assertIn('test-policy-2', policy_names)
+
+    def test_process_sqs_multiple_thing_groups(self):
+        """Test processing SQS message with multiple thing groups"""
+        from bulk_importer.main import process_sqs
+        
+        # Setup: Create thing groups
+        iot_client = _get_default_session().client('iot')
+        iot_client.create_thing_group(thingGroupName='test-group-1')
+        iot_client.create_thing_group(thingGroupName='test-group-2')
+        
+        # Get ARNs
+        group1_arn = iot_client.describe_thing_group(thingGroupName='test-group-1')['thingGroupArn']
+        group2_arn = iot_client.describe_thing_group(thingGroupName='test-group-2')['thingGroupArn']
+        
+        # Create config with multiple thing groups
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': 'test-thing-multi-group',
+            'thing_groups': [
+                {'name': 'test-group-1', 'arn': group1_arn},
+                {'name': 'test-group-2', 'arn': group2_arn}
+            ]
+        }
+        
+        # Execute
+        result = process_sqs(config, session=_get_default_session())
+        
+        # Verify: Thing is in both groups
+        thing_name = result['thing_name']
+        groups = iot_client.list_thing_groups_for_thing(thingName=thing_name)
+        
+        self.assertEqual(len(groups['thingGroups']), 2)
+        group_names = [g['groupName'] for g in groups['thingGroups']]
+        self.assertIn('test-group-1', group_names)
+        self.assertIn('test-group-2', group_names)
+
+    def test_process_sqs_backward_compatibility_legacy_format(self):
+        """Test backward compatibility with legacy config format"""
+        from bulk_importer.main import process_sqs
+        
+        # Setup
+        iot_client = _get_default_session().client('iot')
+        iot_client.create_policy(policyName='legacy-policy', policyDocument=json.dumps(IOT_POLICY))
+        iot_client.create_thing_group(thingGroupName='legacy-group')
+        group_arn = iot_client.describe_thing_group(thingGroupName='legacy-group')['thingGroupArn']
+        
+        # Legacy config format (no 'policies' or 'thing_groups' keys)
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': 'test-thing-legacy',
+            'policy_name': 'legacy-policy',
+            'thing_group_arn': group_arn
+        }
+        
+        # Execute
+        result = process_sqs(config, session=_get_default_session())
+        
+        # Verify: Works exactly as before
+        cert_id = result['certificate_id']
+        cert_arn = f"arn:aws:iot:us-east-1:123456789012:cert/{cert_id}"
+        policies = iot_client.list_principal_policies(principal=cert_arn)
+        
+        self.assertEqual(len(policies['policies']), 1)
+        self.assertEqual(policies['policies'][0]['policyName'], 'legacy-policy')
+        
+        # Verify thing group
+        thing_name = result['thing_name']
+        groups = iot_client.list_thing_groups_for_thing(thingName=thing_name)
+        self.assertEqual(len(groups['thingGroups']), 1)
+        self.assertEqual(groups['thingGroups'][0]['groupName'], 'legacy-group')
+
+    def test_process_sqs_empty_lists(self):
+        """Test processing with empty policies and thing groups lists"""
+        from bulk_importer.main import process_sqs
+        
+        # Config with empty lists
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': 'test-thing-no-attachments',
+            'policies': [],
+            'thing_groups': [],
+            'thing_types': []
+        }
+        
+        # Execute
+        result = process_sqs(config, session=_get_default_session())
+        
+        # Verify: Thing created, but no policies or groups attached
+        cert_id = result['certificate_id']
+        cert_arn = f"arn:aws:iot:us-east-1:123456789012:cert/{cert_id}"
+        policies = _get_default_session().client('iot').list_principal_policies(principal=cert_arn)
+        
+        self.assertEqual(len(policies['policies']), 0)
+        
+        # Verify no thing groups
+        thing_name = result['thing_name']
+        groups = _get_default_session().client('iot').list_thing_groups_for_thing(thingName=thing_name)
+        self.assertEqual(len(groups['thingGroups']), 0)
