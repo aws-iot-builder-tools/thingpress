@@ -34,6 +34,7 @@ Thingpress is a tool used for production environment preparation. Careful AWS Io
    [AWS IoT Things (device registry)](https://docs.aws.amazon.com/iot/latest/developerguide/thing-registry.html), 
    [IoT Thing Types](https://docs.aws.amazon.com/iot/latest/developerguide/thing-types.html), and
    [IoT Thing Group](https://docs.aws.amazon.com/iot/latest/developerguide/thing-groups.html).
+   For enterprise deployments, see the [Multiple Attachments Guide](docs/MULTI_ATTACHMENT_GUIDE.md) to learn how to attach multiple policies and thing groups per certificate.
 2. Become familiar with any planning activity for your chosen vendor: [Espressif](docs/vendors/espressif.md), [Infineon](docs/vendors/infineon.md), [Microchip](docs/vendors/microchip.md), or [Generated Certificates](docs/vendors/generated.md).
 3. Evaluate service API call limits. Although Thingpress recovers from API throttling to not lose data, avoid API throttling in the first place to optimize processing time.
 3. Prepare and test artifacts to be associated with the import. Verify that the effective policy on the device is exactly what want. Policies may be adjusted later, but testing may highlight adjustments to Thing Group hierarchies.
