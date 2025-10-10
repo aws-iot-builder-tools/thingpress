@@ -827,5 +827,10 @@ class ProviderEndToEndTest(EndToEndTestFramework):
         validation_results['success_rate'] = (
             validation_results['things_validated'] / validation_results['total_things']
         )
+        
+        # Add certificate tracking for test reporting
+        things_with_certs = sum(1 for thing in iot_things if thing.get('certificates'))
+        validation_results['things_with_certificates'] = things_with_certs
+        validation_results['certificate_success_rate'] = validation_results['success_rate']
 
         return validation_results
