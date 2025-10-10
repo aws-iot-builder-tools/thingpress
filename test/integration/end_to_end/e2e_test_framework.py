@@ -234,11 +234,12 @@ class EndToEndTestFramework:
             # Get thing description
             thing_response = self.iot_client.describe_thing(thingName=thing_name)
 
-            # Get attached certificates
+            # Get attached certificates (principals)
             principals_response = self.iot_client.list_thing_principals(thingName=thing_name)
             certificates = principals_response.get('principals', [])
 
-            # Get policies for each certificate
+            # Get policies attached to each certificate
+            # NOTE: Policies attach to CERTIFICATES, not things
             policies = []
             for cert_arn in certificates:
                 try:
@@ -248,12 +249,21 @@ class EndToEndTestFramework:
                 except:
                     pass  # Best effort
 
+            # Get thing groups (things are members of groups)
+            thing_groups = []
+            try:
+                groups_response = self.iot_client.list_thing_groups_for_thing(thingName=thing_name)
+                thing_groups = [g['groupName'] for g in groups_response.get('thingGroups', [])]
+            except Exception as e:
+                self.logger.warning(f"Failed to get thing groups for {thing_name}: {e}")
+
             return {
                 'thingName': thing_name,
-                'thingType': thing_response.get('thingTypeName'),
+                'thingType': thing_response.get('thingTypeName'),  # Thing type applied to thing
+                'thingGroups': thing_groups,  # Thing membership in groups
                 'attributes': thing_response.get('attributes', {}),
-                'certificates': certificates,
-                'policies': list(set(policies)),  # Remove duplicates
+                'certificates': certificates,  # Certificates attached to thing
+                'policies': list(set(policies)),  # Policies attached to certificates (deduplicated)
                 'creationDate': thing_response.get('creationDate').isoformat() if thing_response.get('creationDate') else None
             }
 
@@ -492,6 +502,71 @@ class ProviderEndToEndTest(EndToEndTestFramework):
 
         if not self.manifest_path.exists():
             raise FileNotFoundError(f"Test manifest not found: {manifest_path}")
+        
+        # Get expected configuration from deployed stack (DATA-DRIVEN)
+        self.expected_config = self._get_expected_config_from_stack()
+
+    def _get_expected_config_from_stack(self) -> dict:
+        """Retrieve expected configuration from CloudFormation stack parameters
+        
+        This is DATA-DRIVEN - reads actual deployment parameters, not hardcoded values.
+        Different workflows/stacks can have different configurations.
+        """
+        try:
+            stack_name = os.environ.get('THINGPRESS_STACK_NAME', 'sam-app')
+            response = self.cloudformation.describe_stacks(StackName=stack_name)
+            parameters = response['Stacks'][0]['Parameters']
+            
+            # Build expected config from stack parameters
+            expected_config = {
+                'policies': [],
+                'thing_groups': [],
+                'thing_types': []
+            }
+            
+            # Extract configuration from stack parameters
+            for param in parameters:
+                param_key = param['ParameterKey']
+                param_value = param['ParameterValue']
+                
+                # Handle new multi-value parameters (comma-delimited)
+                if param_key == 'IoTPolicies' and param_value and param_value != 'None':
+                    expected_config['policies'] = [
+                        p.strip() for p in param_value.split(',') 
+                        if p.strip() and p.strip() != 'None'
+                    ]
+                # Handle legacy single-value parameter (backward compatibility)
+                elif param_key == 'IoTPolicy' and param_value and param_value != 'None':
+                    if not expected_config['policies']:  # Only use if multi-value not set
+                        expected_config['policies'] = [param_value]
+                
+                # Handle thing groups
+                elif param_key == 'IoTThingGroups' and param_value and param_value != 'None':
+                    expected_config['thing_groups'] = [
+                        g.strip() for g in param_value.split(',')
+                        if g.strip() and g.strip() != 'None'
+                    ]
+                elif param_key == 'IoTThingGroup' and param_value and param_value != 'None':
+                    if not expected_config['thing_groups']:
+                        expected_config['thing_groups'] = [param_value]
+                
+                # Handle thing types
+                elif param_key == 'IoTThingTypes' and param_value and param_value != 'None':
+                    expected_config['thing_types'] = [
+                        t.strip() for t in param_value.split(',')
+                        if t.strip() and t.strip() != 'None'
+                    ]
+                elif param_key == 'IoTThingType' and param_value and param_value != 'None':
+                    if not expected_config['thing_types']:
+                        expected_config['thing_types'] = [param_value]
+            
+            self.logger.info(f"Expected config from stack: {expected_config}")
+            return expected_config
+            
+        except Exception as e:
+            self.logger.error(f"Failed to get expected config from stack: {e}")
+            # Return empty config rather than failing
+            return {'policies': [], 'thing_groups': [], 'thing_types': []}
 
     def run_test(self, timeout_minutes: int = 10) -> dict:
         """Run the complete end-to-end test for this provider"""
@@ -552,41 +627,127 @@ class ProviderEndToEndTest(EndToEndTestFramework):
             return self.results
 
     def _validate_iot_things(self, iot_things: list[dict]) -> dict:
-        """Validate that IoT things are properly configured"""
-        success_threshold = 1.0  # 100% of things should have certificates
-
+        """Validate that IoT things EXACTLY match expected configuration
+        
+        Validates:
+        - Policies attached to certificates (exact match)
+        - Thing membership in thing groups (exact match)
+        - Thing type applied to thing (exact match)
+        """
         if not iot_things:
             return {'valid': False, 'error': 'No IoT things to validate'}
+
+        expected_policies = set(self.expected_config.get('policies', []))
+        expected_groups = set(self.expected_config.get('thing_groups', []))
+        expected_types = self.expected_config.get('thing_types', [])
 
         validation_results = {
             'valid': True,
             'total_things': len(iot_things),
-            'things_with_certificates': 0,
-            'things_with_policies': 0,
-            'validation_details': []
+            'things_validated': 0,
+            'validation_details': [],
+            'summary': {
+                'correct_policies': 0,
+                'correct_thing_groups': 0,
+                'correct_thing_types': 0,
+                'policy_count_mismatches': 0,
+                'thing_group_count_mismatches': 0,
+                'missing_policies': [],
+                'missing_thing_groups': [],
+                'extra_policies': [],
+                'extra_thing_groups': [],
+                'incorrect_thing_types': []
+            }
         }
 
         for thing in iot_things:
+            # Policies are attached to certificates (not directly to things)
+            thing_policies = set(thing.get('policies', []))
+            
+            # Things are members of thing groups
+            thing_groups = set(thing.get('thingGroups', []))
+            
+            # Thing type is applied to thing
+            thing_type = thing.get('thingType')
+
+            # EXACT MATCH: Check policies attached to certificates
+            policies_exact_match = thing_policies == expected_policies
+            missing_policies = expected_policies - thing_policies
+            extra_policies = thing_policies - expected_policies
+            policy_count_match = len(thing_policies) == len(expected_policies)
+
+            # EXACT MATCH: Check thing group membership
+            groups_exact_match = thing_groups == expected_groups
+            missing_groups = expected_groups - thing_groups
+            extra_groups = thing_groups - expected_groups
+            group_count_match = len(thing_groups) == len(expected_groups)
+
+            # EXACT MATCH: Check thing type applied to thing
+            type_match = thing_type in expected_types if expected_types else True
+
             thing_validation = {
                 'thing_name': thing['thingName'],
-                'has_certificates': len(thing.get('certificates', [])) > 0,
-                'has_policies': len(thing.get('policies', [])) > 0,
-                'certificate_count': len(thing.get('certificates', [])),
-                'policy_count': len(thing.get('policies', []))
+                'policies': {
+                    'expected': list(expected_policies),
+                    'expected_count': len(expected_policies),
+                    'actual': list(thing_policies),
+                    'actual_count': len(thing_policies),
+                    'exact_match': policies_exact_match,
+                    'count_match': policy_count_match,
+                    'missing': list(missing_policies),
+                    'extra': list(extra_policies)
+                },
+                'thing_groups': {
+                    'expected': list(expected_groups),
+                    'expected_count': len(expected_groups),
+                    'actual': list(thing_groups),
+                    'actual_count': len(thing_groups),
+                    'exact_match': groups_exact_match,
+                    'count_match': group_count_match,
+                    'missing': list(missing_groups),
+                    'extra': list(extra_groups)
+                },
+                'thing_type': {
+                    'expected': expected_types,
+                    'actual': thing_type,
+                    'match': type_match
+                },
+                'overall_valid': policies_exact_match and groups_exact_match and type_match
             }
 
-            if thing_validation['has_certificates']:
-                validation_results['things_with_certificates'] += 1
+            if thing_validation['overall_valid']:
+                validation_results['things_validated'] += 1
 
-            if thing_validation['has_policies']:
-                validation_results['things_with_policies'] += 1
+            if policies_exact_match:
+                validation_results['summary']['correct_policies'] += 1
+            else:
+                if not policy_count_match:
+                    validation_results['summary']['policy_count_mismatches'] += 1
+                validation_results['summary']['missing_policies'].extend(missing_policies)
+                validation_results['summary']['extra_policies'].extend(extra_policies)
+
+            if groups_exact_match:
+                validation_results['summary']['correct_thing_groups'] += 1
+            else:
+                if not group_count_match:
+                    validation_results['summary']['thing_group_count_mismatches'] += 1
+                validation_results['summary']['missing_thing_groups'].extend(missing_groups)
+                validation_results['summary']['extra_thing_groups'].extend(extra_groups)
+
+            if type_match:
+                validation_results['summary']['correct_thing_types'] += 1
+            else:
+                validation_results['summary']['incorrect_thing_types'].append(thing_type)
 
             validation_results['validation_details'].append(thing_validation)
 
-        # Consider validation successful if most things have certificates
-        certificate_success_rate = validation_results['things_with_certificates'] / validation_results['total_things']
+        # Overall validation passes ONLY if ALL things have EXACT configuration match
+        validation_results['valid'] = (
+            validation_results['things_validated'] == validation_results['total_things']
+        )
 
-        validation_results['certificate_success_rate'] = certificate_success_rate
-        validation_results['valid'] = certificate_success_rate >= success_threshold
+        validation_results['success_rate'] = (
+            validation_results['things_validated'] / validation_results['total_things']
+        )
 
         return validation_results
