@@ -6,6 +6,6 @@
 -r src/provider_infineon/requirements.txt
 -r src/provider_microchip/requirements.txt
 -r test/unit/requirements.txt
-fastjsonschema==2.21.1
+fastjsonschema==2.21.2
 pyYAML==6.0.2
 types-boto3==1.40.25
