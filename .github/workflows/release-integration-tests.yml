@@ -116,7 +116,7 @@ jobs:
       
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results-${{ matrix.provider }}
           path: |
@@ -127,7 +127,7 @@ jobs:
       
       - name: Upload test logs
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-logs-${{ matrix.provider }}
           path: |
@@ -201,7 +201,7 @@ jobs:
       
       - name: Upload comprehensive test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: test-results-all-providers
           path: |
