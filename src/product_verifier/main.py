@@ -60,25 +60,13 @@ def lambda_handler(event,
     
     Expects the following environment variables to be set:
     QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED
-    
-    Supports both new multi-value and legacy single-value parameters:
-    New: POLICY_NAMES, THING_GROUP_NAMES (comma-delimited)
-    Legacy: POLICY_NAME, THING_GROUP_NAME (single values)
-    Thing Type: THING_TYPE_NAME (always singular - AWS IoT limitation)
+    POLICY_NAMES, THING_GROUP_NAMES (comma-delimited), THING_TYPE_NAME
     """
     config = {}
     
-    # Try new multi-value parameters first, fall back to legacy
+    # Get multi-value parameters
     e_policies = os.environ.get('POLICY_NAMES', '')
     e_thing_groups = os.environ.get('THING_GROUP_NAMES', '')
-    
-    # Backward compatibility: if new params empty, try legacy
-    if not e_policies:
-        e_policies = os.environ.get('POLICY_NAME', '')
-    if not e_thing_groups:
-        e_thing_groups = os.environ.get('THING_GROUP_NAME', '')
-    
-    # Thing type is always singular (AWS IoT limitation: one thing type per thing)
     e_thing_type = os.environ.get('THING_TYPE_NAME', '')
 
     # Handle both raw dict and S3Event object formats

@@ -115,38 +115,22 @@ def process_sqs(config, session: Session=default_session):
                   certificate_arn=certificate_arn,
                   session=session)
 
-    # Process multiple policies (backward compatible)
+    # Process multiple policies
     policies = config.get('policies', [])
-    if policies:
-        for policy_info in policies:
-            process_policy(policy_name=policy_info['name'],
-                          certificate_arn=certificate_arn,
-                          session=session)
-    else:
-        # Legacy single policy support
-        policy_name = config.get(ImporterMessageKey.POLICY_NAME.value)
-        if policy_name:
-            process_policy(policy_name=policy_name,
-                          certificate_arn=certificate_arn,
-                          session=session)
+    for policy_info in policies:
+        process_policy(policy_name=policy_info['name'],
+                      certificate_arn=certificate_arn,
+                      session=session)
 
     thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value),
                               session=session)
     
-    # Process multiple thing groups (backward compatible)
+    # Process multiple thing groups
     thing_groups = config.get('thing_groups', [])
-    if thing_groups:
-        for thing_group_info in thing_groups:
-            process_thing_group(thing_group_arn=thing_group_info['arn'],
-                               thing_arn=thing_arn,
-                               session=session)
-    else:
-        # Legacy single thing group support
-        thing_group_arn = config.get(ImporterMessageKey.THING_GROUP_ARN.value)
-        if thing_group_arn:
-            process_thing_group(thing_group_arn=thing_group_arn,
-                               thing_arn=thing_arn,
-                               session=session)
+    for thing_group_info in thing_groups:
+        process_thing_group(thing_group_arn=thing_group_info['arn'],
+                           thing_arn=thing_arn,
+                           session=session)
 
     # Process thing type (singular - AWS IoT allows only one thing type per thing)
     thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)

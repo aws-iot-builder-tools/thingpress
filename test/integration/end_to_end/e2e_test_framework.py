@@ -613,16 +613,12 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                 param_key = param['ParameterKey']
                 param_value = param['ParameterValue']
                 
-                # Handle new multi-value parameters (comma-delimited)
+                # Handle multi-value parameters (comma-delimited)
                 if param_key == 'IoTPolicies' and param_value and param_value != 'None':
                     expected_config['policies'] = [
                         p.strip() for p in param_value.split(',') 
                         if p.strip() and p.strip() != 'None'
                     ]
-                # Handle legacy single-value parameter (backward compatibility)
-                elif param_key == 'IoTPolicy' and param_value and param_value != 'None':
-                    if not expected_config['policies']:  # Only use if multi-value not set
-                        expected_config['policies'] = [param_value]
                 
                 # Handle thing groups
                 elif param_key == 'IoTThingGroups' and param_value and param_value != 'None':
@@ -630,9 +626,6 @@ class ProviderEndToEndTest(EndToEndTestFramework):
                         g.strip() for g in param_value.split(',')
                         if g.strip() and g.strip() != 'None'
                     ]
-                elif param_key == 'IoTThingGroup' and param_value and param_value != 'None':
-                    if not expected_config['thing_groups']:
-                        expected_config['thing_groups'] = [param_value]
                 
                 # Handle thing type (singular - AWS IoT allows only one thing type per thing)
                 elif param_key == 'IoTThingType' and param_value and param_value != 'None':

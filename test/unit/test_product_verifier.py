@@ -153,8 +153,8 @@ class TestProductProvider(TestCase):
         """ The number of items in the queue should be 7 since there are
             seven certificates in the test file """
 
-        os.environ['POLICY_NAME'] = 'dev_policy'
-        os.environ['THING_GROUP_NAME'] = "None"
+        os.environ['POLICY_NAMES'] = 'dev_policy'
+        os.environ['THING_GROUP_NAMES'] = "None"
         os.environ['THING_TYPE_NAME'] = "None"
         os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
 
@@ -212,8 +212,8 @@ class TestProductProvider(TestCase):
         """ The number of items in the queue should be 7 since there are
             seven certificates in the test file """
 
-        os.environ['POLICY_NAME'] = 'dev_policy'
-        os.environ['THING_GROUP_NAME'] = "None"
+        os.environ['POLICY_NAMES'] = 'dev_policy'
+        os.environ['THING_GROUP_NAMES'] = "None"
         os.environ['THING_TYPE_NAME'] = "None"
         os.environ['QUEUE_TARGET_ESPRESSIF'] = self.env_queue_target_espressif
         reset_circuit('iot_get_policy')
@@ -265,9 +265,7 @@ class TestProductProvider(TestCase):
     def tearDown(self):
         # Clean up environment variables to prevent test pollution
         env_vars_to_clear = [
-            'POLICY_NAME', 'POLICY_NAMES',
-            'THING_GROUP_NAME', 'THING_GROUP_NAMES',
-            'THING_TYPE_NAME',
+            'POLICY_NAMES', 'THING_GROUP_NAMES', 'THING_TYPE_NAME',
             'QUEUE_TARGET_ESPRESSIF', 'QUEUE_TARGET_INFINEON',
             'QUEUE_TARGET_MICROCHIP', 'QUEUE_TARGET_GENERATED'
         ]
@@ -310,8 +308,8 @@ class TestProductProvider(TestCase):
                 pass
     def test_pos_lambda_handler_generated(self):
         """Test the lambda handler with a generated certificates file"""
-        os.environ['POLICY_NAME'] = self.env_policy_name_pos
-        os.environ['THING_GROUP_NAME'] = self.env_thing_group_name_pos
+        os.environ['POLICY_NAMES'] = self.env_policy_name_pos
+        os.environ['THING_GROUP_NAMES'] = self.env_thing_group_name_pos
         os.environ['THING_TYPE_NAME'] = self.env_thing_type_name_pos
         os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
 
@@ -569,116 +567,3 @@ class TestProductProvider(TestCase):
         group_names = [g['name'] for g in message_body['thing_groups']]
         self.assertIn('test-group-1', group_names)
         self.assertIn('test-group-2', group_names)
-
-    def test_lambda_handler_backward_compatibility(self):
-        """Test backward compatibility with legacy single-value parameters"""
-        reset_circuit('iot_get_policy')
-        reset_circuit('iot_get_thing_group')
-        
-        # Setup
-        iot_client = self.session.client('iot')
-        sqs_client = self.session.client('sqs')
-        s3_client = self.session.client('s3')
-        
-        # Create single policy and thing group
-        iot_client.create_policy(policyName='legacy-policy', policyDocument=json.dumps(self.IOT_POLICY))
-        iot_client.create_thing_group(thingGroupName='legacy-group')
-        
-        # Set ONLY legacy environment variables (new ones empty)
-        os.environ['POLICY_NAMES'] = ''
-        os.environ['THING_GROUP_NAMES'] = ''
-        os.environ['POLICY_NAME'] = 'legacy-policy'
-        os.environ['THING_GROUP_NAME'] = 'legacy-group'
-        os.environ['THING_TYPE_NAME'] = 'None'
-        os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
-        
-        # Create S3 bucket and upload object
-        s3_client.create_bucket(Bucket=self.bucket_generated_pos)
-        s3_client.put_object(Bucket=self.bucket_generated_pos, Key=self.obj_generated, Body=b'test')
-        
-        # Create SQS queue
-        sqs_client.create_queue(QueueName=self.env_queue_target_generated)
-        
-        # Create S3 event
-        s3_event = {
-            "Records": [{
-                "eventSource": "aws:s3",
-                "s3": {
-                    "bucket": {"name": self.bucket_generated_pos},
-                    "object": {"key": self.obj_generated}
-                }
-            }]
-        }
-        
-        # Execute
-        result = lambda_handler(S3Event(s3_event), LambdaContext())
-        
-        # Verify message sent to SQS
-        queue_url = sqs_client.get_queue_url(QueueName=self.env_queue_target_generated)['QueueUrl']
-        messages = sqs_client.receive_message(QueueUrl=queue_url, MaxNumberOfMessages=10)
-        
-        self.assertIn('Messages', messages)
-        message_body = json.loads(messages['Messages'][0]['Body'])
-        
-        # Verify legacy format works - should have policies list with one item
-        self.assertIn('policies', message_body)
-        self.assertEqual(len(message_body['policies']), 1)
-        self.assertEqual(message_body['policies'][0]['name'], 'legacy-policy')
-
-    def test_lambda_handler_mixed_parameters(self):
-        """Test mixing new multi-value and legacy single-value parameters"""
-        reset_circuit('iot_get_policy')
-        reset_circuit('iot_get_thing_group')
-        
-        # Setup
-        iot_client = self.session.client('iot')
-        sqs_client = self.session.client('sqs')
-        s3_client = self.session.client('s3')
-        
-        # Create policies and thing group
-        iot_client.create_policy(policyName='policy-1', policyDocument=json.dumps(self.IOT_POLICY))
-        iot_client.create_policy(policyName='policy-2', policyDocument=json.dumps(self.IOT_POLICY))
-        iot_client.create_thing_group(thingGroupName='legacy-group')
-        
-        # New multi-value for policies, legacy for thing group
-        os.environ['POLICY_NAMES'] = 'policy-1,policy-2'
-        os.environ['THING_GROUP_NAMES'] = ''
-        os.environ['THING_GROUP_NAME'] = 'legacy-group'
-        os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
-        
-        # Create S3 bucket and upload object
-        s3_client.create_bucket(Bucket=self.bucket_generated_pos)
-        s3_client.put_object(Bucket=self.bucket_generated_pos, Key=self.obj_generated, Body=b'test')
-        
-        # Create SQS queue
-        sqs_client.create_queue(QueueName=self.env_queue_target_generated)
-        
-        # Create S3 event
-        s3_event = {
-            "Records": [{
-                "eventSource": "aws:s3",
-                "s3": {
-                    "bucket": {"name": self.bucket_generated_pos},
-                    "object": {"key": self.obj_generated}
-                }
-            }]
-        }
-        
-        # Execute
-        result = lambda_handler(S3Event(s3_event), LambdaContext())
-        
-        # Verify message sent to SQS
-        queue_url = sqs_client.get_queue_url(QueueName=self.env_queue_target_generated)['QueueUrl']
-        messages = sqs_client.receive_message(QueueUrl=queue_url, MaxNumberOfMessages=10)
-        
-        self.assertIn('Messages', messages)
-        message_body = json.loads(messages['Messages'][0]['Body'])
-        
-        # Verify new policies used
-        self.assertIn('policies', message_body)
-        self.assertEqual(len(message_body['policies']), 2)
-        
-        # Verify legacy thing group used
-        self.assertIn('thing_groups', message_body)
-        self.assertEqual(len(message_body['thing_groups']), 1)
-        self.assertEqual(message_body['thing_groups'][0]['name'], 'legacy-group')

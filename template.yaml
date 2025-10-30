@@ -34,21 +34,11 @@ Parameters:
       manifests.
     Type: String
 
-  IoTPolicy:
-    Default: None
-    Type: String
-    Description: (DEPRECATED - Use IoTPolicies) Single AWS IoT Policy for backward compatibility.
-
   IoTPolicies:
     Default: None
     Type: CommaDelimitedList
     Description: Comma-separated list of AWS IoT Policies to apply to certificates.
       Use 'None' for no policies. Example policy1,policy2,policy3
-
-  IoTThingGroup:
-    Default: None
-    Type: String
-    Description: (DEPRECATED - Use IoTThingGroups) Single Thing Group for backward compatibility.
 
   IoTThingGroups:
     Default: None
@@ -388,8 +378,6 @@ Resources:
           QUEUE_TARGET_GENERATED: !Ref ThingpressGeneratedProviderQueue
           POLICY_NAMES: !Join [',', !Ref IoTPolicies]
           THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
-          POLICY_NAME: !Ref IoTPolicy
-          THING_GROUP_NAME: !Ref IoTThingGroup
           THING_TYPE_NAME: !Ref IoTThingType
       Events:
         EV1:
