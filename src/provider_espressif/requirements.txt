@@ -1,2 +1,2 @@
-boto3==1.40.21
+boto3==1.40.64
 aws_lambda_powertools==3.22.0
