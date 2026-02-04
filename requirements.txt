@@ -7,5 +7,5 @@
 -r src/provider_microchip/requirements.txt
 -r test/unit/requirements.txt
 fastjsonschema==2.21.2
-pyYAML==6.0.2
+pyYAML==6.0.3
 types-boto3==1.42.22
