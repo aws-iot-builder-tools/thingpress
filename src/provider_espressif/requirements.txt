@@ -1,2 +1,2 @@
 boto3==1.42.22
-aws_lambda_powertools==3.22.0
+aws_lambda_powertools==3.24.0
