@@ -111,9 +111,10 @@ def process_sqs(config, session: Session=default_session):
         "certificate_arn": certificate_arn
     })
 
-    process_thing(config.get(ImporterMessageKey.THING_NAME.value),
-                  certificate_arn=certificate_arn,
-                  session=session)
+    if (config['thing_deferred'] == "FALSE"):
+        process_thing(config.get(ImporterMessageKey.THING_NAME.value),
+                    certificate_arn=certificate_arn,
+                    session=session)
 
     # Process multiple policies
     policies = config.get('policies', [])
@@ -122,27 +123,33 @@ def process_sqs(config, session: Session=default_session):
                       certificate_arn=certificate_arn,
                       session=session)
 
-    thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value),
-                              session=session)
+    if (config['thing_deferred'] == "TRUE"):
+        thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value),
+                                session=session)
     
-    # Process multiple thing groups
-    thing_groups = config.get('thing_groups', [])
-    for thing_group_info in thing_groups:
-        process_thing_group(thing_group_arn=thing_group_info['arn'],
-                           thing_arn=thing_arn,
-                           session=session)
+        # Process multiple thing groups
+        thing_groups = config.get('thing_groups', [])
+        for thing_group_info in thing_groups:
+            process_thing_group(thing_group_arn=thing_group_info['arn'],
+                            thing_arn=thing_arn,
+                            session=session)
 
-    # Process thing type (singular - AWS IoT allows only one thing type per thing)
-    thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
-    if thing_type_name:
-        process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
-                          thing_type_name=thing_type_name,
-                          session=session)
+        # Process thing type (singular - AWS IoT allows only one thing type per thing)
+        thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
+        if thing_type_name:
+            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                            thing_type_name=thing_type_name,
+                            session=session)
 
-    return {
+    result = {
         "certificate_id": certificate_id,
         "thing_name": config.get(ImporterMessageKey.THING_NAME.value)
     }
+
+    if (config['thing_deferred'] == "TRUE"):
+        result['thing_name'] = "DEFERRED"
+
+    return result
 
 def lambda_handler(event: dict,
                    _context: LambdaContext) -> dict:

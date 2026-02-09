@@ -113,6 +113,19 @@ class TestBulkImporter(TestCase):
                 block = pem_obj.public_bytes(encoding=serialization.Encoding.PEM).decode('ascii')
                 self.local_cert_loaded = str(base64.b64encode(block.encode('ascii')))
 
+    def _create_test_config(self, thing_name='test-thing', **kwargs):
+        """Helper to create test config with required defaults"""
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': thing_name,
+            'thing_deferred': kwargs.get('thing_deferred', 'FALSE'),
+            'policies': kwargs.get('policies', []),
+            'thing_groups': kwargs.get('thing_groups', [])
+        }
+        if 'thing_type_name' in kwargs:
+            config['thing_type_name'] = kwargs['thing_type_name']
+        return config
+
     def test_certificate_key_generator(self):
         """Test the certificate key generator function"""
         # Test with valid input
@@ -247,14 +260,13 @@ class TestBulkImporter(TestCase):
         iot_client.create_policy(policyName='test-policy-2', policyDocument=json.dumps(IOT_POLICY))
         
         # Create config with multiple policies
-        config = {
-            'certificate': self.local_cert_loaded,
-            'thing': 'test-thing-multi-policy',
-            'policies': [
+        config = self._create_test_config(
+            thing_name='test-thing-multi-policy',
+            policies=[
                 {'name': 'test-policy-1', 'arn': 'arn:aws:iot:us-east-1:123456789012:policy/test-policy-1'},
                 {'name': 'test-policy-2', 'arn': 'arn:aws:iot:us-east-1:123456789012:policy/test-policy-2'}
             ]
-        }
+        )
         
         # Execute
         result = process_sqs(config, session=_get_default_session())
@@ -275,6 +287,7 @@ class TestBulkImporter(TestCase):
         
         # Setup: Create thing groups
         iot_client = _get_default_session().client('iot')
+        iot_client.create_thing(thingName='test-thing-multi-group')  # Pre-create for deferred mode
         iot_client.create_thing_group(thingGroupName='test-group-1')
         iot_client.create_thing_group(thingGroupName='test-group-2')
         
@@ -282,21 +295,21 @@ class TestBulkImporter(TestCase):
         group1_arn = iot_client.describe_thing_group(thingGroupName='test-group-1')['thingGroupArn']
         group2_arn = iot_client.describe_thing_group(thingGroupName='test-group-2')['thingGroupArn']
         
-        # Create config with multiple thing groups
-        config = {
-            'certificate': self.local_cert_loaded,
-            'thing': 'test-thing-multi-group',
-            'thing_groups': [
+        # Create config with multiple thing groups (deferred mode for associations)
+        config = self._create_test_config(
+            thing_name='test-thing-multi-group',
+            thing_deferred='TRUE',
+            thing_groups=[
                 {'name': 'test-group-1', 'arn': group1_arn},
                 {'name': 'test-group-2', 'arn': group2_arn}
             ]
-        }
+        )
         
         # Execute
         result = process_sqs(config, session=_get_default_session())
         
         # Verify: Thing is in both groups
-        thing_name = result['thing_name']
+        thing_name = config.get('thing')  # Use config thing name since result returns DEFERRED
         groups = iot_client.list_thing_groups_for_thing(thingName=thing_name)
         
         self.assertEqual(len(groups['thingGroups']), 2)
@@ -311,21 +324,22 @@ class TestBulkImporter(TestCase):
         # Setup
         iot_client = _get_default_session().client('iot')
         iot_client.create_policy(policyName='legacy-policy', policyDocument=json.dumps(IOT_POLICY))
+        iot_client.create_thing(thingName='test-thing-legacy')  # Pre-create for deferred mode
         iot_client.create_thing_group(thingGroupName='legacy-group')
         group_arn = iot_client.describe_thing_group(thingGroupName='legacy-group')['thingGroupArn']
         
-        # Legacy config format (no 'policies' or 'thing_groups' keys)
-        config = {
-            'certificate': self.local_cert_loaded,
-            'thing': 'test-thing-legacy',
-            'policy_name': 'legacy-policy',
-            'thing_group_arn': group_arn
-        }
+        # Config with new format (policies and thing_groups as lists)
+        config = self._create_test_config(
+            thing_name='test-thing-legacy',
+            thing_deferred='TRUE',
+            policies=[{'name': 'legacy-policy', 'arn': 'arn:aws:iot:us-east-1:123456789012:policy/legacy-policy'}],
+            thing_groups=[{'name': 'legacy-group', 'arn': group_arn}]
+        )
         
         # Execute
         result = process_sqs(config, session=_get_default_session())
         
-        # Verify: Works exactly as before
+        # Verify: Policy attached
         cert_id = result['certificate_id']
         cert_arn = f"arn:aws:iot:us-east-1:123456789012:cert/{cert_id}"
         policies = iot_client.list_principal_policies(principal=cert_arn)
@@ -334,7 +348,7 @@ class TestBulkImporter(TestCase):
         self.assertEqual(policies['policies'][0]['policyName'], 'legacy-policy')
         
         # Verify thing group
-        thing_name = result['thing_name']
+        thing_name = config.get('thing')  # Use config thing name since result returns DEFERRED
         groups = iot_client.list_thing_groups_for_thing(thingName=thing_name)
         self.assertEqual(len(groups['thingGroups']), 1)
         self.assertEqual(groups['thingGroups'][0]['groupName'], 'legacy-group')
@@ -344,12 +358,7 @@ class TestBulkImporter(TestCase):
         from bulk_importer.main import process_sqs
         
         # Config with empty lists and no thing type
-        config = {
-            'certificate': self.local_cert_loaded,
-            'thing': 'test-thing-no-attachments',
-            'policies': [],
-            'thing_groups': []
-        }
+        config = self._create_test_config(thing_name='test-thing-no-attachments')
         
         # Execute
         result = process_sqs(config, session=_get_default_session())
@@ -365,3 +374,66 @@ class TestBulkImporter(TestCase):
         thing_name = result['thing_name']
         groups = _get_default_session().client('iot').list_thing_groups_for_thing(thingName=thing_name)
         self.assertEqual(len(groups['thingGroups']), 0)
+
+    def test_process_sqs_thing_deferred_false_default_behavior(self):
+        """Test default behavior: thing_deferred=FALSE creates thing"""
+        from bulk_importer.main import process_sqs
+        
+        config = self._create_test_config(thing_name='test-thing-default')
+        
+        with patch('bulk_importer.main.process_thing') as mock_process_thing:
+            result = process_sqs(config, session=_get_default_session())
+            
+            # Verify thing creation was called
+            mock_process_thing.assert_called_once()
+            # Verify normal return value
+            self.assertEqual(result['thing_name'], 'test-thing-default')
+
+    def test_process_sqs_thing_deferred_true_skips_creation(self):
+        """Test thing_deferred=TRUE skips thing creation"""
+        from bulk_importer.main import process_sqs
+        
+        # Pre-create thing (deferred mode assumes it exists)
+        iot_client = _get_default_session().client('iot')
+        iot_client.create_thing(thingName='test-thing-deferred')
+        
+        config = self._create_test_config(thing_name='test-thing-deferred', thing_deferred='TRUE')
+        
+        with patch('bulk_importer.main.process_thing') as mock_process_thing:
+            result = process_sqs(config, session=_get_default_session())
+            
+            # Verify thing creation was NOT called
+            mock_process_thing.assert_not_called()
+            # Verify deferred return value
+            self.assertEqual(result['thing_name'], 'DEFERRED')
+
+    def test_process_sqs_thing_deferred_true_with_associations(self):
+        """Test thing_deferred=TRUE processes thing groups and types"""
+        from bulk_importer.main import process_sqs
+        
+        iot_client = _get_default_session().client('iot')
+        
+        # Pre-create resources
+        iot_client.create_thing(thingName='test-thing-assoc')
+        iot_client.create_thing_group(thingGroupName='deferred-group')
+        iot_client.create_thing_type(thingTypeName='deferred-type')
+        
+        group_arn = iot_client.describe_thing_group(thingGroupName='deferred-group')['thingGroupArn']
+        
+        config = self._create_test_config(
+            thing_name='test-thing-assoc',
+            thing_deferred='TRUE',
+            thing_groups=[{'name': 'deferred-group', 'arn': group_arn}],
+            thing_type_name='deferred-type'
+        )
+        
+        result = process_sqs(config, session=_get_default_session())
+        
+        # Verify thing group association
+        groups = iot_client.list_thing_groups_for_thing(thingName='test-thing-assoc')
+        self.assertEqual(len(groups['thingGroups']), 1)
+        self.assertEqual(groups['thingGroups'][0]['groupName'], 'deferred-group')
+        
+        # Verify thing type association
+        thing = iot_client.describe_thing(thingName='test-thing-assoc')
+        self.assertEqual(thing['thingTypeName'], 'deferred-type')

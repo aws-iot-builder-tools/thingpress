@@ -110,6 +110,10 @@ def lambda_handler(event,
         get_thing_type_arn(e_thing_type, default_session)
         config['thing_type_name'] = e_thing_type
 
+    config['cert_active'] = os.environ.get("CERT_ACTIVE")
+    config['cert_format'] = os.environ.get("CERT_FORMAT")
+    config['thing_deferred'] = os.environ.get("THING_DEFERRED")
+
     try:
         queue_url = get_provider_queue(config['bucket'])
     except ValueError as e:

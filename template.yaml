@@ -51,6 +51,27 @@ Parameters:
     Type: String
     Description: AWS IoT Thing Type to apply to things. Use 'None' for no thing type.
 
+  IoTCertActive:
+    Default: "TRUE"
+    Type: String
+    Description: Upon import, set the certificate state to active or inactive.
+    AllowedValues: ["TRUE", "FALSE"]
+
+  IoTCertFormat:
+    Default: "X509"
+    Type: "String"
+    Description: The certificate (principal) format in the artifact is either an X509
+      certificate or X509 fingerprint. Used only for MES artifact processing. Vendor
+      processing will always be X509.
+    AllowedValues: ["X509", "FINGERPRINT"]
+
+  IoTThingDeferred:
+    Default: "FALSE"
+    Type: "String"
+    Description: Do not create the IoT Things or make IoT Thing associations. Useful only
+      if you don't want to use IoT Things (not recommended) or if you have delayed processing
+      for the MES process.
+ 
   InfineonCertBundleType:
     Default: E0E0
     Type: String
@@ -379,6 +400,9 @@ Resources:
           POLICY_NAMES: !Join [',', !Ref IoTPolicies]
           THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
           THING_TYPE_NAME: !Ref IoTThingType
+          CERT_ACTIVE: !Ref IoTCertActive
+          CERT_FORMAT: !Ref IoTCertFormat
+          THING_DEFERRED: !Ref IoTThingDeferred
       Events:
         EV1:
           Type: S3

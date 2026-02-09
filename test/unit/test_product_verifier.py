@@ -38,6 +38,11 @@ class TestProductProvider(TestCase):
         self.session = _get_default_session()
 
     def setUp(self):
+        # Add new environment variables with defaults
+        os.environ['CERT_ACTIVE'] = 'TRUE'
+        os.environ['CERT_FORMAT'] = 'X509'
+        os.environ['THING_DEFERRED'] = 'FALSE'
+        
         self.obj_dir = "./test/artifacts/"
         self.obj_espressif = "manifest-espressif.csv"
         self.obj_infineon = "manifest-infineon.7z"
@@ -267,7 +272,8 @@ class TestProductProvider(TestCase):
         env_vars_to_clear = [
             'POLICY_NAMES', 'THING_GROUP_NAMES', 'THING_TYPE_NAME',
             'QUEUE_TARGET_ESPRESSIF', 'QUEUE_TARGET_INFINEON',
-            'QUEUE_TARGET_MICROCHIP', 'QUEUE_TARGET_GENERATED'
+            'QUEUE_TARGET_MICROCHIP', 'QUEUE_TARGET_GENERATED',
+            'CERT_ACTIVE', 'CERT_FORMAT', 'THING_DEFERRED'
         ]
         for var in env_vars_to_clear:
             os.environ.pop(var, None)
@@ -421,6 +427,10 @@ class TestProductProvider(TestCase):
         self.assertIn('thing_groups', message_body)
         self.assertEqual(len(message_body['thing_groups']), 1)
         self.assertEqual(message_body['thing_type_name'], self.env_thing_type_name_pos)
+        # Verify new config fields are passed through
+        self.assertEqual(message_body['cert_active'], 'TRUE')
+        self.assertEqual(message_body['cert_format'], 'X509')
+        self.assertEqual(message_body['thing_deferred'], 'FALSE')
 
 
     # ========================================================================
@@ -567,3 +577,114 @@ class TestProductProvider(TestCase):
         group_names = [g['name'] for g in message_body['thing_groups']]
         self.assertIn('test-group-1', group_names)
         self.assertIn('test-group-2', group_names)
+
+
+    def test_lambda_handler_thing_deferred_true(self):
+        """Test lambda handler with thing_deferred=TRUE"""
+        reset_circuit('iot_get_policy')
+        
+        # Override environment variable
+        os.environ['THING_DEFERRED'] = 'TRUE'
+        os.environ['POLICY_NAMES'] = 'test-policy'
+        os.environ['THING_GROUP_NAMES'] = 'None'
+        os.environ['THING_TYPE_NAME'] = 'None'
+        os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
+        
+        # Setup
+        iot_client = self.session.client('iot')
+        sqs_client = self.session.client('sqs')
+        s3_client = self.session.client('s3')
+        
+        iot_client.create_policy(
+            policyName='test-policy',
+            policyDocument=json.dumps(self.IOT_POLICY)
+        )
+        
+        s3_client.create_bucket(Bucket=self.bucket_generated_pos)
+        s3_client.put_object(
+            Bucket=self.bucket_generated_pos,
+            Key=self.obj_generated,
+            Body=b'test'
+        )
+        
+        sqs_client.create_queue(QueueName=self.env_queue_target_generated)
+        
+        s3_event = {
+            "Records": [{
+                "eventSource": "aws:s3",
+                "s3": {
+                    "bucket": {"name": self.bucket_generated_pos},
+                    "object": {"key": self.obj_generated}
+                }
+            }]
+        }
+        
+        # Execute
+        result = lambda_handler(S3Event(s3_event), LambdaContext())
+        
+        # Verify
+        queue_url = sqs_client.get_queue_url(
+            QueueName=self.env_queue_target_generated
+        )['QueueUrl']
+        messages = sqs_client.receive_message(
+            QueueUrl=queue_url,
+            MaxNumberOfMessages=10
+        )
+        
+        message_body = json.loads(messages['Messages'][0]['Body'])
+        self.assertEqual(message_body['thing_deferred'], 'TRUE')
+
+    def test_lambda_handler_cert_inactive(self):
+        """Test lambda handler with cert_active=FALSE"""
+        reset_circuit('iot_get_policy')
+        
+        # Override environment variable
+        os.environ['CERT_ACTIVE'] = 'FALSE'
+        os.environ['POLICY_NAMES'] = 'test-policy'
+        os.environ['THING_GROUP_NAMES'] = 'None'
+        os.environ['THING_TYPE_NAME'] = 'None'
+        os.environ['QUEUE_TARGET_GENERATED'] = self.env_queue_target_generated
+        
+        # Setup
+        iot_client = self.session.client('iot')
+        sqs_client = self.session.client('sqs')
+        s3_client = self.session.client('s3')
+        
+        iot_client.create_policy(
+            policyName='test-policy',
+            policyDocument=json.dumps(self.IOT_POLICY)
+        )
+        
+        s3_client.create_bucket(Bucket=self.bucket_generated_pos)
+        s3_client.put_object(
+            Bucket=self.bucket_generated_pos,
+            Key=self.obj_generated,
+            Body=b'test'
+        )
+        
+        sqs_client.create_queue(QueueName=self.env_queue_target_generated)
+        
+        s3_event = {
+            "Records": [{
+                "eventSource": "aws:s3",
+                "s3": {
+                    "bucket": {"name": self.bucket_generated_pos},
+                    "object": {"key": self.obj_generated}
+                }
+            }]
+        }
+        
+        # Execute
+        result = lambda_handler(S3Event(s3_event), LambdaContext())
+        
+        # Verify
+        queue_url = sqs_client.get_queue_url(
+            QueueName=self.env_queue_target_generated
+        )['QueueUrl']
+        messages = sqs_client.receive_message(
+            QueueUrl=queue_url,
+            MaxNumberOfMessages=10
+        )
+        
+        message_body = json.loads(messages['Messages'][0]['Body'])
+        self.assertEqual(message_body['cert_active'], 'FALSE')
