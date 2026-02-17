@@ -34,6 +34,7 @@ ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
 INFINEON_BUCKET_PREFIX = "thingpress-infineon-"
 MICROCHIP_BUCKET_PREFIX = "thingpress-microchip-"
 GENERATED_BUCKET_PREFIX = "thingpress-generated-"
+MES_BUCKET_PREFIX = "thingpress-mes-"
 
 def get_provider_queue(bucket_name: str) -> str:
     """Returns the queue related to the prefix of a given bucket
@@ -48,6 +49,8 @@ def get_provider_queue(bucket_name: str) -> str:
         return os.environ['QUEUE_TARGET_MICROCHIP']
     if bucket_name.startswith(GENERATED_BUCKET_PREFIX):
         return os.environ['QUEUE_TARGET_GENERATED']
+    if bucket_name.startswith(MES_BUCKET_PREFIX):
+        return os.environ['QUEUE_TARGET_MES']
     raise ValueError(f"Bucket name prefix unidentifiable: {bucket_name}")
 
 def lambda_handler(event,
@@ -59,7 +62,7 @@ def lambda_handler(event,
     event, but is processed as if multiple events were found at once.
     
     Expects the following environment variables to be set:
-    QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED
+    QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED, QUEUE_TARGET_MES
     POLICY_NAMES, THING_GROUP_NAMES (comma-delimited), THING_TYPE_NAME
     """
     config = {}
