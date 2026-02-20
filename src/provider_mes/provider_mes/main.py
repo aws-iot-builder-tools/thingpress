@@ -276,7 +276,11 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
             "bucket": config.get('bucket'),
             "key": config.get('key')
         })
-        total_processed += process_device_infos_file(config, queue_url, default_session)
+        total_processed += process_device_infos_file(
+            config=config,
+            queue_url=queue_url,
+            session=default_session
+        )
 
     logger.info({
         "message": "Total devices processed",
