@@ -27,13 +27,14 @@ Integration testing is an end-to-end live system test for these providers:
 - Espressif: defined in section Espressif-Integration
 - Generated: defined in section Generated-Integration
 - Infineon: defined in section Infineon-Integration
+- MES: defined in section MES-Integration
 - Microchip: defined in section Microchip-Integration
 
 ## General Integration Test Process
 1. Remove all AWS IoT Certificates and AWS IoT Things having resource tag created-by=thingpress
    - Do not fail when no Certificates or Things are found
 2. Deploy Cloudformation Stack.
-3. Invoke import for each Provider: Espressif-Integration, Generated-Integration, Infineon-Integration, Microchip-Integration
+3. Invoke import for each Provider: Espressif-Integration, Generated-Integration, Infineon-Integration, MES-Integration, Microchip-Integration
 4. Remove Cloudformation Stack.
    - When fail, attempt a force deletion.
 5. Remove all AWS IoT Certificates and AWS IoT Things having resource tag created-by=thingpress.
@@ -49,6 +50,9 @@ Integration testing is an end-to-end live system test for these providers:
 
 ### Microchip-Integration
 - Input file: test/artifacts/ECC608C-TNGTLSU-B.json
+
+### MES-Integration
+- Input files: Phase 1 vendor certificates, Phase 2 device-infos JSON
 
 ## Github Integration Testing Workflow Design
 
