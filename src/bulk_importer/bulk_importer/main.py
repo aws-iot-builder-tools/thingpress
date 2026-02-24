@@ -22,7 +22,10 @@ from layer_utils.aws_utils import (
     process_thing,
     process_thing_group,
     process_thing_type,
-    register_certificate)
+    register_certificate,
+    validate_and_get_certificate,
+    activate_certificate,
+    process_thing_attributes)
 from layer_utils.cert_utils import (
     decode_certificate,
     get_certificate_fingerprint,
@@ -61,37 +64,78 @@ def certificate_key_generator(event: dict, _context):
     data_keyword_argument="config"
 )
 def process_certificate(config, session: Session=default_session) -> tuple[str,str]:
-    """ Imports the certificate to IoT Core """
-    payload = config['certificate']
+    """ Imports the certificate to IoT Core or looks up existing certificate by fingerprint """
+    cert_format = config.get('cert_format', 'X509')
 
-    decoded_certificate = decode_certificate(payload)
-    x509_certificate = load_certificate(decoded_certificate.encode('ascii'))
-    fingerprint = get_certificate_fingerprint(x509_certificate)
+    # Phase 1 or Normal: X509 format - register new certificate
+    if cert_format == 'X509':
+        payload = config['certificate']
+        decoded_certificate = decode_certificate(payload)
+        x509_certificate = load_certificate(decoded_certificate.encode('ascii'))
+        fingerprint = get_certificate_fingerprint(x509_certificate)
 
-    try:
-        certificate_id = get_certificate(fingerprint, session)
-    except ClientError as error:
-        logger.info({
-            "message": "Certificate not found in IoT Core. Importing.",
-            "fingerprint": fingerprint,
-            "error": str(error)
-        })
         try:
-            certificate_id = register_certificate(certificate=decoded_certificate,
-                                        session=session)
-        except ClientError as import_error:
-            logger.error({
-                "message": "Certificate could not be created.",
-                "error": str(import_error)
+            certificate_id = get_certificate(fingerprint, session)
+        except ClientError as error:
+            logger.info({
+                "message": "Certificate not found in IoT Core. Importing.",
+                "fingerprint": fingerprint,
+                "error": str(error)
             })
-            raise
+            try:
+                # Determine certificate status based on cert_active config
+                # Default to 'TRUE' for backward compatibility (certificates active by default)
+                # Note: AWS IoT RegisterCertificateWithoutCA only supports ACTIVE or INACTIVE
+                # PENDING_ACTIVATION is not a valid status for registration
+                cert_active = config.get('cert_active', 'TRUE')
+                cert_status = 'ACTIVE' if cert_active == 'TRUE' else 'INACTIVE'
 
-    certificate_arn = get_certificate_arn(certificate_id, session)
-    return certificate_id, certificate_arn
+                certificate_id = register_certificate(
+                    certificate=decoded_certificate,
+                    status=cert_status,
+                    session=session
+                )
+            except ClientError as import_error:
+                logger.error({
+                    "message": "Certificate could not be created.",
+                    "error": str(import_error)
+                })
+                raise
+
+        certificate_arn = get_certificate_arn(certificate_id, session)
+        return certificate_id, certificate_arn
+
+    # Phase 2: FINGERPRINT format - look up existing certificate
+    if cert_format == 'FINGERPRINT':
+        cert_fingerprint = config['certificate']
+        logger.info({
+            "message": "Looking up certificate by fingerprint",
+            "fingerprint": cert_fingerprint
+        })
+
+        cert_info = validate_and_get_certificate(cert_fingerprint, session)
+        certificate_id = cert_info['certificate_id']
+        certificate_arn = cert_info['certificate_arn']
+
+        # Activate certificate if it's not already ACTIVE and cert_active is TRUE
+        # Default to 'TRUE' for backward compatibility
+        # Handles both PENDING_ACTIVATION and INACTIVE statuses
+        cert_active = config.get('cert_active', 'TRUE')
+        if cert_info['status'] != 'ACTIVE' and cert_active == 'TRUE':
+            logger.info({
+                "message": "Activating certificate",
+                "certificate_id": certificate_id,
+                "current_status": cert_info['status']
+            })
+            activate_certificate(certificate_id, session)
+
+        return certificate_id, certificate_arn
+
+    raise ValueError(f"Invalid cert_format: {cert_format}. Must be 'X509' or 'FINGERPRINT'")
 
 def get_thingpress_tags() -> list:
     """Generate standard Thingpress tags for IoT objects
-    
+
     Returns:
         List of tags in AWS format: [{'Key': 'key', 'Value': 'value'}]
     """
@@ -111,10 +155,37 @@ def process_sqs(config, session: Session=default_session):
         "certificate_arn": certificate_arn
     })
 
-    if (config['thing_deferred'] == "FALSE"):
+    # Default to 'FALSE' for backward compatibility
+    thing_deferred = config.get('thing_deferred', 'FALSE')
+
+    if thing_deferred == "FALSE":
         process_thing(config.get(ImporterMessageKey.THING_NAME.value),
                     certificate_arn=certificate_arn,
                     session=session)
+
+        # Process thing type FIRST (before attributes)
+        # AWS IoT allows only one thing type per thing
+        # Thing Type is required to have more than 3 attributes
+        thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
+        if thing_type_name:
+            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                            thing_type_name=thing_type_name,
+                            session=session)
+
+        # Process Thing attributes if provided (Phase 2: MES workflow)
+        # Must be done AFTER Thing Type is assigned
+        attributes = config.get('attributes')
+        if attributes:
+            logger.info({
+                "message": "Processing Thing attributes",
+                "thing_name": config.get(ImporterMessageKey.THING_NAME.value),
+                "attribute_count": len(attributes)
+            })
+            process_thing_attributes(
+                thing_name=config.get(ImporterMessageKey.THING_NAME.value),
+                attributes=attributes,
+                session=session
+            )
 
     # Process multiple policies
     policies = config.get('policies', [])
@@ -123,10 +194,10 @@ def process_sqs(config, session: Session=default_session):
                       certificate_arn=certificate_arn,
                       session=session)
 
-    if (config['thing_deferred'] == "TRUE"):
+    if thing_deferred == "FALSE":
         thing_arn = get_thing_arn(config.get(ImporterMessageKey.THING_NAME.value),
                                 session=session)
-    
+
         # Process multiple thing groups
         thing_groups = config.get('thing_groups', [])
         for thing_group_info in thing_groups:
@@ -134,19 +205,12 @@ def process_sqs(config, session: Session=default_session):
                             thing_arn=thing_arn,
                             session=session)
 
-        # Process thing type (singular - AWS IoT allows only one thing type per thing)
-        thing_type_name = config.get(ImporterMessageKey.THING_TYPE_NAME.value)
-        if thing_type_name:
-            process_thing_type(thing_name=config.get(ImporterMessageKey.THING_NAME.value),
-                            thing_type_name=thing_type_name,
-                            session=session)
-
     result = {
         "certificate_id": certificate_id,
         "thing_name": config.get(ImporterMessageKey.THING_NAME.value)
     }
 
-    if (config['thing_deferred'] == "TRUE"):
+    if thing_deferred == "TRUE":
         result['thing_name'] = "DEFERRED"
 
     return result

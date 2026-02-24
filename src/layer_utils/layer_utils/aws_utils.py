@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MIT-0
 """AWS related functions that multiple lambda functions use, here to reduce redundancy
 """
+import re
 import time
 from inspect import stack
 from io import BytesIO
@@ -498,11 +499,13 @@ def get_certificate_arn(certificate_id: str, session: Session=default_session) -
     return response["certificateDescription"].get("certificateArn")
 
 def register_certificate(certificate: str,
+                         status: str = 'ACTIVE',
                          session: Session=default_session) -> str:
-    """ Register an AWS IoT certificate without a registered CA 
+    """ Register an AWS IoT certificate without a registered CA
 
     Args:
         certificate: The certificate PEM string
+        status: Certificate status ('ACTIVE' or 'PENDING_ACTIVATION')
         session: Boto3 session (when tags are provided)
 
     Returns:
@@ -513,13 +516,150 @@ def register_certificate(certificate: str,
         # Register the certificate
         response = iot_client.register_certificate_without_ca(
             certificatePem=certificate,
-            status='ACTIVE')
+            status=status)
     except ClientError as error:
         boto_exception(error, f"register_certificate failed on certificate {certificate}")
         raise
     certificate_id = response.get("certificateId")
 
     return certificate_id
+
+@with_circuit_breaker('validate_and_get_certificate')
+def validate_and_get_certificate(
+        certificate_fingerprint: str,
+        session: Session=default_session) -> dict:
+    """
+    Validate certificate exists in AWS IoT and return details.
+
+    Args:
+        certificate_fingerprint: SHA-256 fingerprint (64 hex chars)
+        session: boto3 Session
+
+    Returns:
+        dict with keys: certificate_id, certificate_arn, status
+
+    Raises:
+        ValueError: If fingerprint format invalid
+        ClientError: If certificate not found
+    """
+    # Validate fingerprint format (64 hex characters)
+    if not re.match(r'^[a-fA-F0-9]{64}$', certificate_fingerprint):
+        raise ValueError(f"Invalid certificate fingerprint format: {certificate_fingerprint}")
+
+    iot_client = session.client('iot')
+
+    try:
+        # In AWS IoT, certificate ID IS the fingerprint
+        response = iot_client.describe_certificate(certificateId=certificate_fingerprint)
+
+        return {
+            'certificate_id': response['certificateDescription']['certificateId'],
+            'certificate_arn': response['certificateDescription']['certificateArn'],
+            'status': response['certificateDescription']['status']
+        }
+    except ClientError as error:
+        error_code = boto_errorcode(error)
+        if error_code == 'ResourceNotFoundException':
+            logger.error("Certificate not found: %s", certificate_fingerprint)
+        boto_exception(error, f"validate_and_get_certificate: {certificate_fingerprint}")
+        raise
+
+@with_circuit_breaker('activate_certificate')
+def activate_certificate(certificate_id: str, session: Session=default_session) -> str:
+    """
+    Activate a certificate (INACTIVE or PENDING_ACTIVATION -> ACTIVE).
+
+    Args:
+        certificate_id: Certificate ID (fingerprint)
+        session: boto3 Session
+
+    Returns:
+        certificate_id: Confirmed certificate ID
+
+    Raises:
+        ValueError: If certificate not in activatable state
+        ClientError: If API error
+    """
+    iot_client = session.client('iot')
+
+    # First validate current status
+    cert_info = validate_and_get_certificate(certificate_id, session)
+
+    if cert_info['status'] == 'ACTIVE':
+        logger.warning("Certificate already active: %s", certificate_id)
+        return certificate_id
+
+    # Accept both INACTIVE (Phase 1) and PENDING_ACTIVATION (fleet provisioning)
+    if cert_info['status'] not in ('INACTIVE', 'PENDING_ACTIVATION'):
+        raise ValueError(
+            f"Certificate {certificate_id} in invalid state: {cert_info['status']}. "
+            f"Expected INACTIVE, PENDING_ACTIVATION, or ACTIVE"
+        )
+
+    try:
+        iot_client.update_certificate(
+            certificateId=certificate_id,
+            newStatus='ACTIVE'
+        )
+        logger.info("Certificate activated: %s", certificate_id)
+        return certificate_id
+    except ClientError as error:
+        boto_exception(error, f"activate_certificate: {certificate_id}")
+        raise
+
+@with_circuit_breaker('process_thing_attributes')
+def process_thing_attributes(
+        thing_name: str,
+        attributes: dict,
+        session: Session=default_session) -> None:
+    """
+    Set or update Thing attributes.
+
+    Args:
+        thing_name: Name of the Thing
+        attributes: Dict of attribute key-value pairs
+        session: boto3 Session
+
+    Raises:
+        ValueError: If attributes invalid
+        ClientError: If API error
+
+    Note:
+        AWS IoT limits:
+        - Things WITH a Thing Type: up to 50 attributes
+        - Things WITHOUT a Thing Type: up to 3 attributes
+        - Key max length: 128 characters
+        - Value max length: 800 characters
+    """
+    if not attributes:
+        logger.info("No attributes to set for thing: %s", thing_name)
+        return
+
+    # Validate attributes (AWS IoT limits)
+    # Note: 50 attributes allowed only if Thing has a Thing Type
+    # Without Thing Type, limit is 3 attributes
+    if len(attributes) > 50:
+        raise ValueError(f"Too many attributes: {len(attributes)}. Maximum 50 allowed.")
+
+    for key, value in attributes.items():
+        if not isinstance(value, str):
+            raise ValueError(f"Attribute value must be string: {key}={value}")
+        if len(key) > 128:
+            raise ValueError(f"Attribute key too long: {key}")
+        if len(value) > 800:
+            raise ValueError(f"Attribute value too long for key: {key}")
+
+    iot_client = session.client('iot')
+
+    try:
+        iot_client.update_thing(
+            thingName=thing_name,
+            attributePayload={'attributes': attributes}
+        )
+        logger.info("Thing attributes updated: %s, count=%d", thing_name, len(attributes))
+    except ClientError as error:
+        boto_exception(error, f"process_thing_attributes: {thing_name}")
+        raise
 
 def get_thing_group_arn(thing_group_name: str, session: Session=default_session) -> str:
     """ Retrieves the thing group ARN with circuit breaker pattern """

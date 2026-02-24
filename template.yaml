@@ -417,7 +417,6 @@ Resources:
           QUEUE_TARGET_INFINEON: !Ref ThingpressInfineonProviderQueue
           QUEUE_TARGET_MICROCHIP: !Ref ThingpressMicrochipProviderQueue
           QUEUE_TARGET_GENERATED: !Ref ThingpressGeneratedProviderQueue
-          QUEUE_TARGET_MES: !Ref ThingpressMesProviderQueue
           POLICY_NAMES: !Join [',', !Ref IoTPolicies]
           THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
           THING_TYPE_NAME: !Ref IoTThingType
@@ -465,7 +464,57 @@ Resources:
                 Rules:
                   - Name: Suffix
                     Value: .json
-        EV5:
+
+  # ========================================================================
+  # MES Verifier - Handles MES manifest bucket events
+  # ========================================================================
+  
+  ThingpressMesVerifierFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub Thingpress-Mes-Verifier-Role-${AWS::StackName}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: aws-api-calls
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iot:DescribeThingGroup
+                  - iot:DescribeThingType
+                  - iot:GetPolicy
+                  - sqs:GetQueueUrl
+                  - sqs:SendMessage
+                Resource: '*'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  ThingpressMesVerifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/mes_verifier/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressMesVerifierFunctionRole.Arn
+      Timeout: 300
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      Environment:
+        Variables:
+          QUEUE_TARGET_MES: !Ref ThingpressMesProviderQueue
+          POLICY_NAMES: !Join [',', !Ref IoTPolicies]
+          THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
+          THING_TYPE_NAME: !Ref IoTThingType
+      Events:
+        MesManifestEvent:
           Type: S3
           Properties:
             Bucket: !Ref ThingpressMesManifestBucket
@@ -1301,6 +1350,9 @@ Outputs:
   ProductVerifierFunction:
     Description: The Lambda function that verifies S3 uploads and routes to provider queues
     Value: !Ref ThingpressProductVerifierFunction
+  MesVerifierFunction:
+    Description: The Lambda function that verifies MES S3 uploads and routes to MES provider queue
+    Value: !Ref ThingpressMesVerifierFunction
   EspressifProviderFunction:
     Description: The Lambda function that processes Espressif manifests
     Value: !Ref ThingpressEspressifProviderFunction

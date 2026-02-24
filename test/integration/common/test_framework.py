@@ -3,6 +3,7 @@ Component Integration Test Framework
 Tests deployed Thingpress components through their interfaces
 """
 
+import os
 import time
 import logging
 import json
@@ -66,29 +67,73 @@ class ComponentTestFramework:
             step['details'].update(details)
 
         status = "✅" if success else "❌"
-        self.logger.info("%s Completed step: %s (%d:.2fms)",
-                         status, step['name'], duration_ms)
+        self.logger.info(
+            "%s Completed step: %s (%d:.2fms)",
+            status, step['name'], duration_ms
+        )
 
-    def get_deployed_resources(self) -> dict[str, str]:
+    def get_deployed_resources(self, stack_name: str = None) -> dict[str, str]:
         """Get deployed Thingpress resources from CloudFormation stack"""
         cloudformation = boto3.client('cloudformation', region_name=self.region)
 
-        try:
-            response = cloudformation.describe_stacks(StackName='sam-app')
-            outputs = response['Stacks'][0]['Outputs']
+        # Try multiple possible stack names
+        if stack_name:
+            stack_names = [stack_name]
+        else:
+            # Check environment variable first
+            env_stack = os.environ.get('THINGPRESS_STACK_NAME')
+            if env_stack:
+                stack_names = [env_stack]
+            else:
+                stack_names = [
+                    'sam-app',  # Default SAM stack name
+                    'thingpress',  # Common custom name
+                ]
 
-            resources = {}
-            for output in outputs:
-                key = output['OutputKey']
-                value = output['OutputValue']
-                resources[key] = value
+                # Also try to find stacks with 'thingpress' in the name
+                try:
+                    list_response = cloudformation.list_stacks(
+                        StackStatusFilter=['CREATE_COMPLETE', 'UPDATE_COMPLETE']
+                    )
+                    for stack in list_response.get('StackSummaries', []):
+                        if 'thingpress' in stack['StackName'].lower():
+                            stack_names.append(stack['StackName'])
+                except Exception:
+                    pass
 
-            self.logger.info("Found %d deployed resources", len(resources))
-            return resources
+        # Try each stack name
+        last_error = None
+        for name in stack_names:
+            try:
+                response = cloudformation.describe_stacks(StackName=name)
+                outputs = response['Stacks'][0]['Outputs']
 
-        except Exception as e:
-            self.logger.error("Failed to get deployed resources: %s", e)
-            raise
+                resources = {}
+                for output in outputs:
+                    key = output['OutputKey']
+                    value = output['OutputValue']
+                    resources[key] = value
+
+                self.logger.info(
+                    "Found %d deployed resources from stack: %s",
+                    len(resources), name
+                )
+                return resources
+
+            except Exception as e:
+                last_error = e
+                continue
+
+        # If we get here, none of the stack names worked
+        self.logger.error(
+            "Failed to get deployed resources. Tried stacks: %s",
+            stack_names
+        )
+        self.logger.error("Last error: %s", last_error)
+        raise Exception(
+            f"Could not find Thingpress stack. "
+            f"Tried: {stack_names}. Last error: {last_error}"
+        )
 
     def invoke_lambda_function(self, function_name: str, payload: dict) -> dict:
         """Invoke a Lambda function and return the response"""
@@ -161,8 +206,10 @@ class ComponentTestFramework:
 
             time.sleep(1)
 
-        self.logger.info("Received %s messages from queue in %d:.2fs",
-                         len(messages), time.time() - start_time)
+        self.logger.info(
+            "Received %s messages from queue in %d:.2fs",
+            len(messages), time.time() - start_time
+        )
         return messages
 
     def check_iot_thing_exists(self, thing_name: str) -> bool:
@@ -272,29 +319,43 @@ class ProviderComponentTest(ComponentTestFramework):
         """Get the bulk importer function name"""
         return self.resources['BulkImporterFunction']
 
-    def create_test_manifest_event(self, bucket: str, key: str) -> dict:
-        """Create a test event for provider function"""
-        return {
+    def create_test_manifest_event(
+            self, bucket: str, key: str,
+            additional_config: dict = None) -> dict:
+        """Create test event for provider with optional config"""
+        event = {
             'Records': [{
-                'eventSource': 'aws:s3',
-                'eventName': 'ObjectCreated:Put',
-                's3': {
-                    'bucket': {'name': bucket},
-                    'object': {'key': key}
-                }
-            }]
-        }
-
-    def create_bulk_import_event(self, certificates: list[dict]) -> dict:
-        """Create a bulk import SQS event"""
-        return {
-            'Records': [{
+                'eventSource': 'aws:sqs',
+                'eventName': 'aws:sqs:SendMessage',
                 'body': json.dumps({
-                    'certificates': certificates,
-                    'metadata': {
-                        'provider': self.provider_name,
-                        'test_id': self.test_id
-                    }
+                    'bucket': bucket,
+                    'key': key
                 })
             }]
         }
+
+        # Add additional config to the body if provided
+        if additional_config:
+            body = json.loads(event['Records'][0]['body'])
+            body.update(additional_config)
+            event['Records'][0]['body'] = json.dumps(body)
+
+        return event
+
+    def get_queue_url(self, queue_name_key: str) -> str:
+        """Get SQS queue URL from resources"""
+        if queue_name_key in self.resources:
+            queue_name = self.resources[queue_name_key]
+        else:
+            # Fallback: try to construct queue name
+            queue_name = queue_name_key
+
+        sqs_client = boto3.client('sqs', region_name=self.region)
+        try:
+            response = sqs_client.get_queue_url(QueueName=queue_name)
+            return response['QueueUrl']
+        except ClientError as e:
+            self.logger.error(
+                "Failed to get queue URL for %s: %s", queue_name, e
+            )
+            raise

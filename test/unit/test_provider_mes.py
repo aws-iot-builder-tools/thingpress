@@ -59,7 +59,7 @@ from .model_provider_mes import LambdaS3Class, LambdaSQSClass
     'iot': {'use_valid_cert': True}})
 class TestProviderMes(TestCase):
     """Unit tests for the MES provider module"""
-    
+
     def __init__(self, x):
         super().__init__(x)
         os.environ["AWS_DEFAULT_REGION"] = "us-east-1"
@@ -77,11 +77,11 @@ class TestProviderMes(TestCase):
             self.test_s3_bucket_name = "unit_test_s3_bucket"
             self.test_s3_key_name = "device-infos.json"
             os.environ["S3_BUCKET_NAME"] = self.test_s3_bucket_name
-            
+
             # Create test S3 bucket
             s3_client = self.session.client('s3')
             s3_client.create_bucket(Bucket=self.test_s3_bucket_name)
-            
+
             # Create valid device-infos JSON
             self.valid_device_infos = {
                 "batch_id": "batch-001",
@@ -109,14 +109,14 @@ class TestProviderMes(TestCase):
                     }
                 ]
             }
-            
+
             # Upload test file to S3
             s3_client.put_object(
                 Bucket=self.test_s3_bucket_name,
                 Key=self.test_s3_key_name,
                 Body=json.dumps(self.valid_device_infos)
             )
-            
+
             mocked_s3_resource = {
                 "resource": self.session.resource('s3'),
                 "bucket_name": self.test_s3_bucket_name
@@ -131,7 +131,7 @@ class TestProviderMes(TestCase):
                 "queue_name": self.test_sqs_queue_name
             }
             self.mocked_sqs_class = LambdaSQSClass(mocked_sqs_resource)
-            
+
             # Create DynamoDB table for idempotency
             dynamodb = self.session.client('dynamodb')
             try:
@@ -159,7 +159,7 @@ class TestProviderMes(TestCase):
         key = file_key_generator(test_event, None)
         self.assertIsNotNone(key)
         self.assertEqual(key, "test-bucket:test-key.json")
-        
+
         # Test with invalid input
         invalid_event = {"not_bucket": "data"}
         key = file_key_generator(invalid_event, None)
@@ -259,9 +259,9 @@ class TestProviderMes(TestCase):
             "thing_groups": [{"name": "test-group", "arn": "arn:aws:iot:us-east-1:123456789012:thinggroup/test-group"}],
             "thing_type_name": "test-type"
         }
-        
+
         message = build_bulk_importer_message(device, config)
-        
+
         self.assertEqual(message['certificate'], device['certFingerprint'])
         self.assertEqual(message['thing'], device['deviceId'])
         self.assertEqual(message['cert_format'], 'FINGERPRINT')
@@ -281,9 +281,9 @@ class TestProviderMes(TestCase):
             "policies": [],
             "thing_groups": []
         }
-        
+
         message = build_bulk_importer_message(device, config)
-        
+
         self.assertEqual(message['certificate'], device['certFingerprint'])
         self.assertEqual(message['thing'], device['deviceId'])
         self.assertEqual(message['cert_format'], 'FINGERPRINT')
@@ -305,10 +305,10 @@ class TestProviderMes(TestCase):
 
             # Process the device-infos file
             count = process_device_infos_file(config, self.test_sqs_queue_name, self.session)
-            
+
             # Verify that 3 devices were processed
             self.assertEqual(count, 3, "Expected 3 devices to be processed")
-            
+
             # Check that 3 messages were sent to the queue
             queue_attrs = sqs_client.get_queue_attributes(
                 QueueUrl=sqs_queue_url,
@@ -328,12 +328,12 @@ class TestProviderMes(TestCase):
                 Key=invalid_key,
                 Body="not valid json"
             )
-            
+
             config = {
                 'bucket': self.test_s3_bucket_name,
                 'key': invalid_key
             }
-            
+
             # Should raise JSONDecodeError
             with self.assertRaises(json.JSONDecodeError):
                 process_device_infos_file(config, self.test_sqs_queue_name, self.session)
@@ -353,12 +353,12 @@ class TestProviderMes(TestCase):
                 Key=invalid_key,
                 Body=json.dumps(invalid_data)
             )
-            
+
             config = {
                 'bucket': self.test_s3_bucket_name,
                 'key': invalid_key
             }
-            
+
             # Should raise ValueError
             with self.assertRaises(ValueError):
                 process_device_infos_file(config, self.test_sqs_queue_name, self.session)
@@ -370,10 +370,16 @@ class TestProviderMes(TestCase):
             event_body = {
                 'bucket': self.test_s3_bucket_name,
                 'key': self.test_s3_key_name,
-                'policies': [{"name": "test-policy", "arn": "arn:aws:iot:us-east-1:123456789012:policy/test-policy"}],
-                'thing_groups': [{"name": "test-group", "arn": "arn:aws:iot:us-east-1:123456789012:thinggroup/test-group"}]
+                'policies': [
+                    {"name": "test-policy",
+                     "arn": "arn:aws:iot:us-east-1:123456789012:policy/test-policy"}
+                ],
+                'thing_groups': [
+                    {"name": "test-group",
+                     "arn": "arn:aws:iot:us-east-1:123456789012:thinggroup/test-group"}
+                ]
             }
-            
+
             event = {
                 "Records": [
                     {
@@ -382,16 +388,16 @@ class TestProviderMes(TestCase):
                     }
                 ]
             }
-            
+
             # Set environment variables
             os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
-            
+
             # Call the Lambda handler
             result = lambda_handler(event, LambdaContext())  # Pass raw dict like AWS sends
-            
+
             # Verify the result
             self.assertEqual(result, event, "Lambda handler should return the original event")
-            
+
             # Check that 3 messages were sent to the queue
             sqs_client = self.session.client("sqs")
             sqs_queue_url = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)['QueueUrl']
@@ -401,16 +407,16 @@ class TestProviderMes(TestCase):
             )
             self.assertEqual(queue_attrs['Attributes']['ApproximateNumberOfMessages'], '3',
                             "Expected 3 messages in the queue")
-            
+
             # Verify message content
             messages = sqs_client.receive_message(
                 QueueUrl=sqs_queue_url,
                 MaxNumberOfMessages=10
             )
-            
+
             self.assertIn('Messages', messages)
             self.assertEqual(len(messages['Messages']), 3)
-            
+
             # Check first message structure
             first_message = json.loads(messages['Messages'][0]['Body'])
             self.assertEqual(first_message['cert_format'], 'FINGERPRINT')
@@ -435,7 +441,7 @@ class TestProviderMes(TestCase):
             sqs_client = self.session.client('sqs')
             sqs_queue_url = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)['QueueUrl']
             self.session.resource('sqs').Queue(url=sqs_queue_url).delete()
-            
+
             # Clean up DynamoDB table
             dynamodb = self.session.client('dynamodb')
             try:

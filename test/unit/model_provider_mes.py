@@ -12,7 +12,7 @@ class LambdaSQSClass:
     """
     AWS SQS Resource Class
     """
-    def __init__(self, lambda_sqs_resource):  
+    def __init__(self, lambda_sqs_resource):
         """
         Initialize an SQS Resource
         """
@@ -24,7 +24,7 @@ class LambdaS3Class:
     """
     AWS S3 Resource Class
     """
-    def __init__(self, lambda_s3_resource):  
+    def __init__(self, lambda_s3_resource):
         """
         Initialize an S3 Resource
         """
