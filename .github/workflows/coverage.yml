@@ -38,7 +38,7 @@ jobs:
                   coveragescore=$(cat coverage_thingpress_perc)
                   anybadge -l coverage -v ${coveragescore} -o -f .github/coverage.svg 50=red 60=orange 80=yellow 100=green
                   
-                  lintscore=$(pylint -f json2 --recursive true --enable-all-extensions src/ | jq -r .statistics.score)
+                  lintscore=$(pylint -f json2 --recursive true --enable-all-extensions src/ | jq -r .statistics.score | xargs printf "%.1f")
                   anybadge -l pylint -v ${lintscore} -o -f .github/linting.svg 2=red 4=orange 8=yellow 10=green
             - name: Verify Changed files
               uses: tj-actions/verify-changed-files@v20
