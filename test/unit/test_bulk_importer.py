@@ -227,6 +227,116 @@ class TestBulkImporter(TestCase):
             v = lambda_handler(e, LambdaContext())  # Pass raw dict like AWS sends
         assert v == e
 
+    # ========================================================================
+    # 6.4 — Bulk Importer device status write integration tests
+    # ========================================================================
+
+    def test_lambda_handler_writes_succeeded_for_mes_device(self):
+        """update_device_succeeded is called for MES device on success."""
+        config = {
+            'certificate': 'a' * 64,
+            'thing': 'mes-thing-ok',
+            'cert_format': 'FINGERPRINT',
+            'batch_id': 'batch-100',
+        }
+        event = {"Records": [{'eventSource': 'aws:sqs', 'body': json.dumps(config)}]}
+        os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
+        os.environ['DEVICE_STATUS_TABLE'] = 'my-table'
+
+        with patch('bulk_importer.main.process_sqs') as mock_proc, \
+             patch('bulk_importer.main.update_device_succeeded') as mock_ok, \
+             patch('bulk_importer.main.update_device_failed') as mock_fail, \
+             patch('bulk_importer.main.logger'):
+            mock_proc.return_value = {"certificate_id": "cid", "thing_name": "mes-thing-ok"}
+            lambda_handler(event, LambdaContext())
+
+            mock_ok.assert_called_once()
+            call_args = mock_ok.call_args[0]
+            self.assertEqual(call_args[0], 'my-table')
+            self.assertEqual(call_args[1], 'batch-100')
+            self.assertEqual(call_args[2], 'mes-thing-ok')
+            mock_fail.assert_not_called()
+
+        os.environ.pop('DEVICE_STATUS_TABLE', None)
+
+    def test_lambda_handler_writes_failed_and_reraises_for_mes_failure(self):
+        """update_device_failed is called for MES device on failure, then exception re-raised."""
+        config = {
+            'certificate': 'b' * 64,
+            'thing': 'mes-thing-bad',
+            'cert_format': 'FINGERPRINT',
+            'batch_id': 'batch-200',
+        }
+        event = {"Records": [{'eventSource': 'aws:sqs', 'body': json.dumps(config)}]}
+        os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
+        os.environ['DEVICE_STATUS_TABLE'] = 'my-table'
+
+        with patch('bulk_importer.main.process_sqs') as mock_proc, \
+             patch('bulk_importer.main.update_device_succeeded') as mock_ok, \
+             patch('bulk_importer.main.update_device_failed') as mock_fail, \
+             patch('bulk_importer.main.logger'):
+            mock_proc.side_effect = RuntimeError("IoT boom")
+
+            with self.assertRaises(RuntimeError):
+                lambda_handler(event, LambdaContext())
+
+            mock_fail.assert_called_once()
+            call_args = mock_fail.call_args[0]
+            self.assertEqual(call_args[0], 'my-table')
+            self.assertEqual(call_args[1], 'batch-200')
+            self.assertEqual(call_args[2], 'mes-thing-bad')
+            self.assertEqual(call_args[3], 'RuntimeError')
+            mock_ok.assert_not_called()
+
+        os.environ.pop('DEVICE_STATUS_TABLE', None)
+
+    def test_lambda_handler_skips_status_for_non_mes_device(self):
+        """No status writes for non-MES device (cert_format != FINGERPRINT)."""
+        config = {
+            'certificate': self.local_cert_loaded,
+            'thing': 'x509-thing',
+            'cert_format': 'X509',
+        }
+        event = {"Records": [{'eventSource': 'aws:sqs', 'body': json.dumps(config)}]}
+        os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
+        os.environ['DEVICE_STATUS_TABLE'] = 'my-table'
+
+        with patch('bulk_importer.main.process_sqs') as mock_proc, \
+             patch('bulk_importer.main.update_device_succeeded') as mock_ok, \
+             patch('bulk_importer.main.update_device_failed') as mock_fail, \
+             patch('bulk_importer.main.logger'):
+            mock_proc.return_value = {"certificate_id": "cid", "thing_name": "x509-thing"}
+            lambda_handler(event, LambdaContext())
+
+            mock_ok.assert_not_called()
+            mock_fail.assert_not_called()
+
+        os.environ.pop('DEVICE_STATUS_TABLE', None)
+
+    def test_lambda_handler_skips_status_when_batch_id_missing(self):
+        """No status writes when batch_id not in message."""
+        config = {
+            'certificate': 'c' * 64,
+            'thing': 'mes-no-batch',
+            'cert_format': 'FINGERPRINT',
+            # no batch_id
+        }
+        event = {"Records": [{'eventSource': 'aws:sqs', 'body': json.dumps(config)}]}
+        os.environ['QUEUE_TARGET'] = self.test_sqs_queue_name
+        os.environ['DEVICE_STATUS_TABLE'] = 'my-table'
+
+        with patch('bulk_importer.main.process_sqs') as mock_proc, \
+             patch('bulk_importer.main.update_device_succeeded') as mock_ok, \
+             patch('bulk_importer.main.update_device_failed') as mock_fail, \
+             patch('bulk_importer.main.logger'):
+            mock_proc.return_value = {"certificate_id": "cid", "thing_name": "mes-no-batch"}
+            lambda_handler(event, LambdaContext())
+
+            mock_ok.assert_not_called()
+            mock_fail.assert_not_called()
+
+        os.environ.pop('DEVICE_STATUS_TABLE', None)
+
     def tearDown(self):
         # Suppress logs during test teardown
         with patch('logging.Logger.info'), patch('logging.Logger.warning'), patch('logging.Logger.error'):

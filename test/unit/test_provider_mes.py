@@ -84,7 +84,7 @@ class TestProviderMes(TestCase):
 
             # Create valid device-infos JSON
             self.valid_device_infos = {
-                "batch_id": "batch-001",
+                "batchId": "batch-001",
                 "devices": [
                     {
                         "certFingerprint": "a1b2c3d4e5f67890123456789012345678901234567890123456789012345678",
@@ -174,18 +174,18 @@ class TestProviderMes(TestCase):
             self.fail("validate_device_infos raised ValueError unexpectedly")
 
     def test_validate_device_infos_missing_batch_id(self):
-        """Test validation fails when batch_id is missing"""
+        """Test validation fails when batchId is missing"""
         invalid_data = {
             "devices": []
         }
         with self.assertRaises(ValueError) as context:
             validate_device_infos(invalid_data)
-        self.assertIn("batch_id", str(context.exception))
+        self.assertIn("batchId", str(context.exception))
 
     def test_validate_device_infos_missing_devices(self):
         """Test validation fails when devices array is missing"""
         invalid_data = {
-            "batch_id": "batch-001"
+            "batchId": "batch-001"
         }
         with self.assertRaises(ValueError) as context:
             validate_device_infos(invalid_data)
@@ -194,7 +194,7 @@ class TestProviderMes(TestCase):
     def test_validate_device_infos_empty_devices(self):
         """Test validation fails when devices array is empty"""
         invalid_data = {
-            "batch_id": "batch-001",
+            "batchId": "batch-001",
             "devices": []
         }
         with self.assertRaises(ValueError) as context:
@@ -204,7 +204,7 @@ class TestProviderMes(TestCase):
     def test_validate_device_infos_missing_fingerprint(self):
         """Test validation fails when certFingerprint is missing"""
         invalid_data = {
-            "batch_id": "batch-001",
+            "batchId": "batch-001",
             "devices": [
                 {
                     "deviceId": "device-001"
@@ -218,7 +218,7 @@ class TestProviderMes(TestCase):
     def test_validate_device_infos_invalid_fingerprint_length(self):
         """Test validation fails when certFingerprint is not 64 chars"""
         invalid_data = {
-            "batch_id": "batch-001",
+            "batchId": "batch-001",
             "devices": [
                 {
                     "certFingerprint": "tooshort",
@@ -233,7 +233,7 @@ class TestProviderMes(TestCase):
     def test_validate_device_infos_missing_device_id(self):
         """Test validation fails when deviceId is missing"""
         invalid_data = {
-            "batch_id": "batch-001",
+            "batchId": "batch-001",
             "devices": [
                 {
                     "certFingerprint": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd"
@@ -260,9 +260,9 @@ class TestProviderMes(TestCase):
             "thing_type_name": "test-type"
         }
 
-        message = build_bulk_importer_message(device, config)
+        message = build_bulk_importer_message(device, config, "batch-001")
 
-        self.assertEqual(message['certificate'], device['certFingerprint'])
+        self.assertEqual(message['certificate'], device['certFingerprint'].lower())
         self.assertEqual(message['thing'], device['deviceId'])
         self.assertEqual(message['cert_format'], 'FINGERPRINT')
         self.assertEqual(message['thing_deferred'], 'FALSE')
@@ -270,6 +270,7 @@ class TestProviderMes(TestCase):
         self.assertEqual(message['thing_groups'], config['thing_groups'])
         self.assertEqual(message['thing_type_name'], config['thing_type_name'])
         self.assertEqual(message['attributes'], device['attributes'])
+        self.assertEqual(message['batch_id'], 'batch-001')
 
     def test_build_bulk_importer_message_without_attributes(self):
         """Test building message without device attributes"""
@@ -282,14 +283,35 @@ class TestProviderMes(TestCase):
             "thing_groups": []
         }
 
-        message = build_bulk_importer_message(device, config)
+        message = build_bulk_importer_message(device, config, "batch-002")
 
-        self.assertEqual(message['certificate'], device['certFingerprint'])
+        self.assertEqual(message['certificate'], device['certFingerprint'].lower())
         self.assertEqual(message['thing'], device['deviceId'])
         self.assertEqual(message['cert_format'], 'FINGERPRINT')
         self.assertEqual(message['thing_deferred'], 'FALSE')
         self.assertNotIn('attributes', message)
         self.assertNotIn('thing_type_name', message)
+        self.assertEqual(message['batch_id'], 'batch-002')
+
+    def test_build_bulk_importer_message_device_type_overrides_config(self):
+        """deviceType on device overrides config-level thing_type_name."""
+        device = {
+            "certFingerprint": "a1b2c3d4e5f6789012345678901234567890123456789012345678901234abcd",
+            "deviceId": "device-001",
+            "deviceType": "MyDeviceType",
+            "attributes": {
+                "DSN": "DSN123"
+            }
+        }
+        config = {
+            "policies": [],
+            "thing_groups": [],
+            "thing_type_name": "config-type"
+        }
+
+        message = build_bulk_importer_message(device, config, "batch-003")
+
+        self.assertEqual(message['thing_type_name'], 'MyDeviceType')
 
     def test_process_device_infos_file(self):
         """Test processing a device-infos file"""
@@ -304,10 +326,10 @@ class TestProviderMes(TestCase):
             sqs_queue_url = sqs_client.get_queue_url(QueueName=self.test_sqs_queue_name)['QueueUrl']
 
             # Process the device-infos file
-            count = process_device_infos_file(config, self.test_sqs_queue_name, self.session)
+            result = process_device_infos_file(config, self.test_sqs_queue_name, self.session)
 
             # Verify that 3 devices were processed
-            self.assertEqual(count, 3, "Expected 3 devices to be processed")
+            self.assertEqual(result, 3, "Expected 3 devices to be processed")
 
             # Check that 3 messages were sent to the queue
             queue_attrs = sqs_client.get_queue_attributes(
@@ -345,7 +367,7 @@ class TestProviderMes(TestCase):
             s3_client = self.session.client('s3')
             invalid_key = "invalid-structure.json"
             invalid_data = {
-                "batch_id": "batch-001"
+                "batchId": "batch-001"
                 # Missing devices array
             }
             s3_client.put_object(
@@ -425,6 +447,110 @@ class TestProviderMes(TestCase):
             self.assertIn('thing', first_message)
             self.assertIn('policies', first_message)
             self.assertIn('thing_groups', first_message)
+
+    # ========================================================================
+    # 6.3 — MES provider status write integration tests
+    # ========================================================================
+
+    def test_process_device_infos_writes_queued_on_success(self):
+        """write_device_queued is called for each successfully processed device."""
+        with patch('src.provider_mes.provider_mes.main.logger'), \
+             patch('src.provider_mes.provider_mes.main.write_device_queued') as mock_queued:
+            config = {
+                'bucket': self.test_s3_bucket_name,
+                'key': self.test_s3_key_name,
+                'policies': [],
+                'thing_groups': []
+            }
+            process_device_infos_file(config, self.test_sqs_queue_name, self.session,
+                                     status_table="my-status-table")
+
+            # 3 devices in the fixture → 3 QUEUED calls
+            self.assertEqual(mock_queued.call_count, 3)
+            # Verify first call args
+            first_call = mock_queued.call_args_list[0]
+            self.assertEqual(first_call[0][0], "my-status-table")
+            self.assertEqual(first_call[0][1], "batch-001")
+            self.assertEqual(first_call[0][2], "device-001")
+
+    def test_process_device_infos_writes_failed_on_device_error(self):
+        """write_device_failed is called when a device fails during processing."""
+        with patch('src.provider_mes.provider_mes.main.logger'), \
+             patch('src.provider_mes.provider_mes.main.write_device_queued') as mock_queued, \
+             patch('src.provider_mes.provider_mes.main.write_device_failed') as mock_failed, \
+             patch('src.provider_mes.provider_mes.main.build_bulk_importer_message') as mock_build:
+
+            # First device succeeds, second raises, third succeeds
+            mock_build.side_effect = [
+                {"thing": "device-001", "certificate": "aabb"},
+                ValueError("bad device"),
+                {"thing": "device-003", "certificate": "ccdd"},
+            ]
+
+            config = {
+                'bucket': self.test_s3_bucket_name,
+                'key': self.test_s3_key_name,
+                'policies': [],
+                'thing_groups': []
+            }
+            process_device_infos_file(config, self.test_sqs_queue_name, self.session,
+                                     status_table="my-status-table")
+
+            # Devices 1 and 3 succeed → QUEUED
+            self.assertEqual(mock_queued.call_count, 2)
+            # Device 2 fails → FAILED
+            self.assertEqual(mock_failed.call_count, 1)
+            failed_call = mock_failed.call_args_list[0]
+            self.assertEqual(failed_call[0][0], "my-status-table")
+            self.assertEqual(failed_call[0][1], "batch-001")
+            self.assertEqual(failed_call[0][2], "device-002")
+
+    def test_process_device_infos_writes_failed_on_sqs_send_failure(self):
+        """write_device_failed is called for all devices when SQS send fails."""
+        with patch('src.provider_mes.provider_mes.main.logger'), \
+             patch('src.provider_mes.provider_mes.main.write_device_queued'), \
+             patch('src.provider_mes.provider_mes.main.write_device_failed') as mock_failed:
+
+            # Patch the throttler to raise on send
+            with patch('src.provider_mes.provider_mes.main.create_standardized_throttler') as mock_throttler_factory:
+                mock_throttler = mock_throttler_factory.return_value
+                mock_throttler.send_batch_with_throttling.side_effect = Exception("SQS down")
+                mock_throttler.get_throttling_stats.return_value = {"total_batches_processed": 0}
+
+                config = {
+                    'bucket': self.test_s3_bucket_name,
+                    'key': self.test_s3_key_name,
+                    'policies': [],
+                    'thing_groups': []
+                }
+
+                with self.assertRaises(Exception):
+                    process_device_infos_file(config, self.test_sqs_queue_name, self.session,
+                                             status_table="my-status-table")
+
+                # All 3 devices should be marked FAILED after SQS failure
+                self.assertGreaterEqual(mock_failed.call_count, 1)
+
+    def test_process_device_infos_passes_none_table_when_not_set(self):
+        """write_device_queued receives table=None so it returns early (no DynamoDB I/O)."""
+        with patch('src.provider_mes.provider_mes.main.logger'), \
+             patch('src.provider_mes.provider_mes.main.write_device_queued') as mock_queued, \
+             patch('src.provider_mes.provider_mes.main.write_device_failed') as mock_failed:
+            config = {
+                'bucket': self.test_s3_bucket_name,
+                'key': self.test_s3_key_name,
+                'policies': [],
+                'thing_groups': []
+            }
+            process_device_infos_file(config, self.test_sqs_queue_name, self.session,
+                                     status_table=None)
+
+            # write_device_queued is still called but with table=None,
+            # which causes it to return early internally.
+            self.assertGreater(mock_queued.call_count, 0)
+            for call in mock_queued.call_args_list:
+                self.assertIsNone(call[0][0])
+            mock_failed.assert_not_called()
 
     def tearDown(self):
         """Clean up test fixtures"""

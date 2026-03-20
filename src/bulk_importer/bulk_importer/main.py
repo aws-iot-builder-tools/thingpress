@@ -4,6 +4,7 @@
 the Thing, Policy, Certificate, Thing Type, and Thing Group
 """
 import hashlib
+import os
 import random
 from json import loads
 
@@ -34,6 +35,7 @@ from layer_utils.aws_utils import (
     ImporterMessageKey,
     powertools_idempotency_environ,
     get_certificate_arn)
+from layer_utils.status_utils import update_device_succeeded, update_device_failed
 
 # Initialize Logger and Idempotency
 logger = Logger(service="bulk_importer")
@@ -219,6 +221,7 @@ def lambda_handler(event: dict,
                    _context: LambdaContext) -> dict:
     """Lambda function main entry point"""
     sqs_event = SQSEvent(event)
+    table = os.environ.get("DEVICE_STATUS_TABLE")
 
     for record in sqs_event.records:
         config = loads(record.body)
@@ -226,6 +229,20 @@ def lambda_handler(event: dict,
             "message": "Processing SQS message",
             "thing_name": config.get(ImporterMessageKey.THING_NAME.value)
         })
-        process_sqs(config)
+        is_mes = (config.get('cert_format') == 'FINGERPRINT'
+                  and config.get('batch_id'))
+        try:
+            process_sqs(config)
+            if is_mes:
+                update_device_succeeded(
+                    table, config['batch_id'], config['thing'],
+                    default_session)
+        except Exception as e:
+            if is_mes:
+                update_device_failed(
+                    table, config['batch_id'], config['thing'],
+                    type(e).__name__, str(e),
+                    default_session)
+            raise
 
     return event

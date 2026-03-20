@@ -168,6 +168,50 @@ Resources:
         - Key: Component
           Value: Idempotency
 
+  # Device status tracking table for MES workflows
+  ThingpressDeviceStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: batch_id
+          AttributeType: S
+        - AttributeName: device_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: vendor
+          AttributeType: S
+        - AttributeName: queued_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: batch_id
+          KeyType: HASH
+        - AttributeName: device_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: batch_id
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: vendor-time-index
+          KeySchema:
+            - AttributeName: vendor
+              KeyType: HASH
+            - AttributeName: queued_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DeviceStatus
+
   ThingpressUtilsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -672,6 +716,8 @@ Resources:
           THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
           THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
           MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
+          # Device status tracking
+          DEVICE_STATUS_TABLE: !Ref ThingpressDeviceStatusTable
       Policies:
         - S3ReadPolicy:
             BucketName: !Ref ThingpressMesManifestBucket
@@ -679,6 +725,8 @@ Resources:
             QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
         - DynamoDBCrudPolicy:
             TableName: !Ref ThingpressIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressDeviceStatusTable
         # Add permission to read queue attributes for throttling
         - Version: '2012-10-17'
           Statement:
@@ -1059,6 +1107,8 @@ Resources:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Device status tracking
+          DEVICE_STATUS_TABLE: !Ref ThingpressDeviceStatusTable
       Policies:
         - AWSLambdaBasicExecutionRole
         - SQSPollerPolicy:
@@ -1066,6 +1116,8 @@ Resources:
         - AWSIoTFullAccess
         - DynamoDBCrudPolicy:
             TableName: !Ref ThingpressIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressDeviceStatusTable
       Events:
         QueueEvent:
           Type: SQS
@@ -1347,6 +1399,9 @@ Outputs:
   IdempotencyTable:
     Description: The DynamoDB table used for idempotency tracking
     Value: !Ref ThingpressIdempotencyTable
+  DeviceStatusTable:
+    Description: The DynamoDB table used for device status tracking
+    Value: !Ref ThingpressDeviceStatusTable
   ProductVerifierFunction:
     Description: The Lambda function that verifies S3 uploads and routes to provider queues
     Value: !Ref ThingpressProductVerifierFunction

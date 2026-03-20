@@ -27,6 +27,7 @@ from layer_utils.aws_utils import (
     ProviderMessageKey
 )
 from layer_utils.throttling_utils import create_standardized_throttler
+from layer_utils.status_utils import write_device_queued, write_device_failed
 
 # Initialize Logger and Idempotency
 logger = Logger(service="provider_mes")
@@ -49,11 +50,12 @@ def validate_device_infos(data: dict) -> None:
 
     Expected format:
     {
-        "batch_id": "batch-001",
+        "batchId": "batch-001",
         "devices": [
             {
                 "certFingerprint": "a1b2c3...",
                 "deviceId": "device-001",
+                "deviceType": "MyDeviceType",
                 "attributes": {
                     "DSN": "DSN123",
                     "MAC": "AA:BB:CC:DD:EE:FF"
@@ -65,8 +67,8 @@ def validate_device_infos(data: dict) -> None:
     Raises:
         ValueError: If structure is invalid
     """
-    if 'batch_id' not in data:
-        raise ValueError("Missing required field: batch_id")
+    if 'batchId' not in data:
+        raise ValueError("Missing required field: batchId")
 
     if 'devices' not in data or not data['devices']:
         raise ValueError("Missing or empty devices array")
@@ -90,24 +92,26 @@ def validate_device_infos(data: dict) -> None:
             raise ValueError(f"Device {idx}: Missing deviceId")
 
 
-def build_bulk_importer_message(device: dict, config: dict) -> dict:
+def build_bulk_importer_message(device: dict, config: dict, batch_id: str) -> dict:
     """
     Build message for Bulk Importer queue.
 
     Args:
         device: Device info from device-infos JSON
         config: Configuration from Product Verifier (policies, thing_groups, cert_active, etc.)
+        batch_id: Batch identifier to include in the message for DynamoDB status tracking
 
     Returns:
         Message dict for Bulk Importer
     """
     message = {
-        'certificate': device['certFingerprint'],
+        'certificate': device['certFingerprint'].lower(),
         'thing': device['deviceId'],
         'cert_format': 'FINGERPRINT',
         'thing_deferred': 'FALSE',  # MES always creates Things (Phase 2)
         'policies': config.get('policies', []),
-        'thing_groups': config.get('thing_groups', [])
+        'thing_groups': config.get('thing_groups', []),
+        'batch_id': batch_id,
     }
 
     # Pass through cert_active from Product Verifier config
@@ -115,8 +119,11 @@ def build_bulk_importer_message(device: dict, config: dict) -> dict:
     if 'cert_active' in config:
         message['cert_active'] = config['cert_active']
 
-    # Add thing type if present
-    if 'thing_type_name' in config:
+    # Add thing type: device-level deviceType overrides config-level thing_type_name
+    device_type = device.get('deviceType')
+    if device_type:
+        message['thing_type_name'] = device_type
+    elif 'thing_type_name' in config:
         message['thing_type_name'] = config['thing_type_name']
 
     # Add attributes if present
@@ -134,7 +141,8 @@ def build_bulk_importer_message(device: dict, config: dict) -> dict:
 def process_device_infos_file(
         config: dict,
         queue_url: str,
-        session: Session = default_session) -> int:
+        session: Session = default_session,
+        status_table: str = None) -> int:
     """
     Process device-infos JSON file from S3.
 
@@ -142,9 +150,10 @@ def process_device_infos_file(
         config: Configuration from Product Verifier (bucket, key, policies, thing_groups)
         queue_url: URL of the Bulk Importer queue
         session: boto3 Session
+        status_table: DynamoDB table name for device status tracking (None to skip writes)
 
     Returns:
-        Number of devices processed
+        int: Number of devices processed
     """
     bucket = config.get(ProviderMessageKey.OBJECT_BUCKET.value)
     key = config.get(ProviderMessageKey.OBJECT_KEY.value)
@@ -167,7 +176,7 @@ def process_device_infos_file(
 
     logger.info({
         "message": "Device-infos file validated",
-        "batch_id": data['batch_id'],
+        "batch_id": data['batchId'],
         "device_count": len(data['devices'])
     })
 
@@ -175,41 +184,73 @@ def process_device_infos_file(
     batch_messages = []
     batch_size = 10  # SQS batch limit
     count = 0
+    batch_id = data['batchId']
 
     # Initialize standardized throttler
     throttler = create_standardized_throttler()
 
     for device in data['devices']:
         try:
-            message = build_bulk_importer_message(device, config)
+            message = build_bulk_importer_message(device, config, batch_id)
             batch_messages.append(message)
             count += 1
 
-            # Send batch when full
-            if len(batch_messages) >= batch_size:
-                throttler.send_batch_with_throttling(batch_messages, queue_url, session)
-                batch_messages = []
+            # Write QUEUED status to DynamoDB (fire-and-forget)
+            write_device_queued(status_table, batch_id, device['deviceId'],
+                                device['certFingerprint'].lower(), session)
 
-        except (ValueError, KeyError, TypeError) as e:
+        except Exception as e:  # pylint: disable=broad-except
             logger.error({
                 "message": "Error processing device",
                 "device_id": device.get('deviceId', 'unknown'),
-                "error": str(e),
-                "error_type": type(e).__name__
+                "error_code": type(e).__name__,
+                "error": str(e)
             })
-            # Continue processing other devices
+            # Write FAILED status to DynamoDB (fire-and-forget)
+            write_device_failed(status_table, batch_id,
+                                device.get('deviceId', 'unknown'),
+                                device.get('certFingerprint', 'unknown').lower(),
+                                type(e).__name__, str(e), session)
+            # Continue processing other devices (fail-independently)
+            continue
+
+        # Send batch when full (outside per-device try/except so SQS errors propagate)
+        if len(batch_messages) >= batch_size:
+            try:
+                throttler.send_batch_with_throttling(
+                    batch_messages, queue_url, session)
+            except Exception as sqs_err:
+                # Mark all devices in this batch as FAILED
+                for msg in batch_messages:
+                    write_device_failed(
+                        status_table, batch_id,
+                        msg.get('thing', 'unknown'),
+                        msg.get('certificate', 'unknown'),
+                        type(sqs_err).__name__, str(sqs_err), session)
+                raise
+            batch_messages = []
 
     # Send remaining messages in final batch
     if batch_messages:
-        throttler.send_batch_with_throttling(
-            batch_messages, queue_url, session, is_final_batch=True)
+        try:
+            throttler.send_batch_with_throttling(
+                batch_messages, queue_url, session, is_final_batch=True)
+        except Exception as sqs_err:
+            # Mark all devices in this final batch as FAILED
+            for msg in batch_messages:
+                write_device_failed(
+                    status_table, batch_id,
+                    msg.get('thing', 'unknown'),
+                    msg.get('certificate', 'unknown'),
+                    type(sqs_err).__name__, str(sqs_err), session)
+            raise
 
     # Get throttling statistics for logging
     throttling_stats = throttler.get_throttling_stats()
 
     logger.info({
         "message": "Processed devices from MES manifest with standardized throttling",
-        "batch_id": data['batch_id'],
+        "batch_id": data['batchId'],
         "total_devices": count,
         "total_batches": throttling_stats["total_batches_processed"],
         "api_calls_saved": count - int(throttling_stats["total_batches_processed"]),
@@ -228,20 +269,22 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     This Lambda function processes SQS messages from Product Verifier containing S3 bucket
     and object information for MES device-infos JSON files. For each file:
     1. Retrieves the JSON file from S3
-    2. Validates the structure (batch_id, devices array)
+    2. Validates the structure (batchId, devices array)
     3. For each device in the file:
        a. Extracts certificate fingerprint and device ID
        b. Builds message with FINGERPRINT format
-       c. Includes device attributes if present
-       d. Forwards to Bulk Importer queue with throttling
+       c. Uses device-level deviceType as thing type if present
+       d. Includes device attributes if present
+       e. Forwards to Bulk Importer queue with throttling
 
     The device-infos files are expected to be in JSON format with structure:
     {
-        "batch_id": "batch-001",
+        "batchId": "batch-001",
         "devices": [
             {
                 "certFingerprint": "64-char-hex-string",
                 "deviceId": "device-001",
+                "deviceType": "MyDeviceType",
                 "attributes": {"DSN": "...", "MAC": "..."}
             }
         ]
@@ -249,6 +292,7 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
 
     Environment variables:
         QUEUE_TARGET: URL of the Bulk Importer SQS queue
+        DEVICE_STATUS_TABLE: DynamoDB table name for device status tracking (optional)
         POWERTOOLS_IDEMPOTENCY_TABLE: DynamoDB table for idempotency
         POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: Expiry time for idempotency records
         AUTO_THROTTLING_ENABLED: Enable/disable adaptive throttling
@@ -267,6 +311,8 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
     sqs_event = SQSEvent(event)
 
     queue_url = os.environ['QUEUE_TARGET']
+    status_table = os.environ.get('DEVICE_STATUS_TABLE') or None
+
     total_processed = 0
 
     for record in sqs_event.records:
@@ -276,11 +322,15 @@ def lambda_handler(event: dict, context: LambdaContext) -> dict: # pylint: disab
             "bucket": config.get('bucket'),
             "key": config.get('key')
         })
-        total_processed += process_device_infos_file(
+
+        result = process_device_infos_file(
             config=config,
             queue_url=queue_url,
-            session=default_session
+            session=default_session,
+            status_table=status_table
         )
+
+        total_processed += result
 
     logger.info({
         "message": "Total devices processed",
