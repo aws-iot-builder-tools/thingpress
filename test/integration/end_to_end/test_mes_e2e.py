@@ -23,26 +23,28 @@ Note: This test requires the stack to be deployed with:
 import json
 import time
 import tempfile
-from pathlib import Path
 from integration.end_to_end.e2e_test_framework import EndToEndTestFramework
+from integration.common.cert_helper import (
+    register_test_certificates,
+    cleanup_test_certificates,
+)
 
 
 class MesEndToEndTest(EndToEndTestFramework):
     """End-to-end test for MES two-phase provisioning"""
 
-    def __init__(self, phase1_manifest_path=None, device_count=3):
+    def __init__(self, device_count=3):
         """
         Initialize MES E2E test
-        
+
         Args:
-            phase1_manifest_path: Path to Phase 1 vendor manifest (optional, will generate if not provided)
             device_count: Number of test devices to create
         """
         super().__init__('mes')
-        self.phase1_manifest_path = phase1_manifest_path
         self.device_count = device_count
         self.test_devices = []
         self.registered_certificates = []
+        self._test_certs = []  # for cleanup
         
     def run_test(self, timeout_minutes=20):
         """Run the complete MES two-phase provisioning test"""
@@ -57,43 +59,26 @@ class MesEndToEndTest(EndToEndTestFramework):
                 'cert_format': self.stack_params.get('IoTCertFormat')
             })
             
-            # Step 2: Phase 1 - Register certificates (PENDING_ACTIVATION, no Things)
-            step2 = self.log_step("phase1_register_certs", "Phase 1: Register certificates without Things")
-            
-            # For this test, we'll use the Generated provider to create test certificates
-            # In production, this would be vendor certificates (Espressif, Infineon, etc.)
-            if not self.phase1_manifest_path:
-                self.phase1_manifest_path = self._generate_test_certificates()
-            
-            # Upload Phase 1 manifest
-            phase1_s3_path = self.upload_manifest('generated', self.phase1_manifest_path)
-            
-            # Wait for certificates to be registered
-            # Note: Increased wait time to account for Lambda cold starts and SQS processing
-            time.sleep(30)  # Give time for processing
-            
-            # Get registered certificates (should be INACTIVE if stack configured correctly)
-            recent_certs = self._get_recent_certificates(minutes=5)
-            
-            # Get full certificate details to check status
-            # list_certificates() may not include status, so we need to describe each one
-            inactive_certs = []
-            for cert in recent_certs:
-                cert_details = self._get_certificate_details(cert['certificateId'])
-                if cert_details and cert_details['status'] == 'INACTIVE':
-                    inactive_certs.append(cert_details)
-            
-            self.registered_certificates = inactive_certs[:self.device_count]
-            
-            self.complete_step(step2, len(self.registered_certificates) > 0, {
-                'phase1_manifest': phase1_s3_path,
+            # Step 2: Phase 1 - Register certificates as INACTIVE directly via IoT API
+            step2 = self.log_step("phase1_register_certs", "Phase 1: Register test certificates as INACTIVE")
+
+            self.registered_certificates = register_test_certificates(
+                count=self.device_count,
+                region=self.region,
+                status='INACTIVE',
+            )
+
+            # Track for cleanup
+            self._test_certs = self.registered_certificates
+
+            self.complete_step(step2, len(self.registered_certificates) == self.device_count, {
                 'certificates_registered': len(self.registered_certificates),
-                'inactive_count': len(inactive_certs),
-                'sample_cert_id': self.registered_certificates[0]['certificateId'] if self.registered_certificates else None
+                'expected': self.device_count,
+                'sample_fingerprint': self.registered_certificates[0]['fingerprint'][:16] if self.registered_certificates else None
             })
-            
-            if not self.registered_certificates:
-                raise Exception("No certificates registered in Phase 1")
+
+            if len(self.registered_certificates) < self.device_count:
+                raise Exception(f"Only registered {len(self.registered_certificates)}/{self.device_count} certificates")
             
             # Step 3: Verify Things were NOT created (deferred)
             step3 = self.log_step("verify_things_deferred", "Verify Things were not created in Phase 1")
@@ -115,7 +100,7 @@ class MesEndToEndTest(EndToEndTestFramework):
             device_infos_path = self._save_device_infos(device_infos)
             
             self.complete_step(step4, True, {
-                'batch_id': device_infos['batch_id'],
+                'batch_id': device_infos['batchId'],
                 'device_count': len(device_infos['devices']),
                 'device_ids': [d['deviceId'] for d in device_infos['devices']]
             })
@@ -127,7 +112,7 @@ class MesEndToEndTest(EndToEndTestFramework):
             
             self.complete_step(step5, True, {
                 'device_infos_path': phase2_s3_path,
-                'batch_id': device_infos['batch_id']
+                'batch_id': device_infos['batchId']
             })
             
             # Step 6: Wait for Phase 2 processing
@@ -143,9 +128,9 @@ class MesEndToEndTest(EndToEndTestFramework):
             while time.time() - start_time < max_wait:
                 # Check for activated certificates
                 for cert in self.registered_certificates:
-                    cert_details = self._get_certificate_details(cert['certificateId'])
+                    cert_details = self._get_certificate_details(cert['certificate_id'])
                     if cert_details and cert_details['status'] == 'ACTIVE':
-                        if cert['certificateId'] not in [c['certificateId'] for c in activated_certs]:
+                        if cert['certificate_id'] not in [c['certificateId'] for c in activated_certs]:
                             activated_certs.append(cert_details)
                 
                 # Check for created Things
@@ -258,37 +243,17 @@ class MesEndToEndTest(EndToEndTestFramework):
         
         self.logger.info("✅ Prerequisites verified")
     
-    def _generate_test_certificates(self):
-        """Generate test certificates for Phase 1"""
-        # Try multiple possible paths for test certificates
-        possible_paths = [
-            Path(__file__).parent.parent.parent / 'artifacts/certificates_test.txt',
-            Path(__file__).parent.parent.parent / 'test/artifacts/certificates_test.txt',
-            Path(__file__).parent.parent / 'artifacts/certificates_test.txt'
-        ]
-        
-        for test_certs_path in possible_paths:
-            if test_certs_path.exists():
-                self.logger.info(f"Using test certificates from: {test_certs_path}")
-                return str(test_certs_path)
-        
-        raise Exception(
-            f"Test certificates not found. Tried paths:\n" +
-            "\n".join(f"  - {p}" for p in possible_paths) +
-            "\n\nPlease ensure test certificate artifacts exist before running this test."
-        )
-    
     def _create_device_infos_json(self):
         """Create device-infos JSON with fingerprints from registered certificates"""
         devices = []
-        
+
         for i, cert in enumerate(self.registered_certificates[:self.device_count]):
-            # Get certificate fingerprint
-            fingerprint = cert.get('certificateId', '')  # In AWS IoT, certificateId is the fingerprint
-            
+            fingerprint = cert['fingerprint']
+
             device = {
                 "certFingerprint": fingerprint,
                 "deviceId": f"test-device-{i+1:03d}-{int(time.time())}",
+                "deviceType": "TestDeviceType",
                 "attributes": {
                     "DSN": f"TEST-DSN-{i+1:03d}",
                     "MAC": f"AA:BB:CC:DD:EE:{i+1:02X}",
@@ -297,9 +262,9 @@ class MesEndToEndTest(EndToEndTestFramework):
             }
             devices.append(device)
             self.test_devices.append(device)
-        
+
         return {
-            "batch_id": f"e2e-batch-{int(time.time())}",
+            "batchId": f"e2e-batch-{int(time.time())}",
             "devices": devices
         }
     
@@ -359,15 +324,19 @@ class MesEndToEndTest(EndToEndTestFramework):
         self.results['success'] = success
         self.results['error'] = error
         self.results['end_time'] = time.time()
-        
-        # Cleanup test resources
-        self.logger.info("Cleaning up test resources...")
-        # Add cleanup logic here if needed
+
+        # Cleanup test certificates
+        if self._test_certs:
+            self.logger.info("Cleaning up %d test certificates...", len(self._test_certs))
+            try:
+                cleanup_test_certificates(self._test_certs, region=self.region)
+            except Exception as e:
+                self.logger.warning("Certificate cleanup failed: %s", e)
 
 
-def run_mes_e2e_test(phase1_manifest_path=None, device_count=3):
+def run_mes_e2e_test(device_count=3):
     """Run the MES two-phase provisioning end-to-end test"""
-    test = MesEndToEndTest(phase1_manifest_path, device_count)
+    test = MesEndToEndTest(device_count)
     results = test.run_test(timeout_minutes=20)
 
     # Print summary

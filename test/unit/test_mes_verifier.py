@@ -51,7 +51,7 @@ class TestMesVerifier(TestCase):
 
         # Upload test file
         test_data = {
-            "batch_id": "test-batch",
+            "batchId": "test-batch",
             "devices": [
                 {
                     "certFingerprint": "a" * 64,

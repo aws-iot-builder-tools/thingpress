@@ -169,11 +169,12 @@ The MES provider expects device-infos files in JSON format for Phase 2 activatio
 **JSON Structure:**
 ```json
 {
-  "batch_id": "batch-identifier",
+  "batchId": "batch-identifier",
   "devices": [
     {
       "certFingerprint": "64-character-hex-fingerprint",
       "deviceId": "unique-device-identifier",
+      "deviceType": "device-type-name",
       "attributes": {
         "DSN": "device-serial-number",
         "MAC": "mac-address",
@@ -188,7 +189,7 @@ The MES provider expects device-infos files in JSON format for Phase 2 activatio
 **Example:**
 ```json
 {
-  "batch_id": "production-batch-2024-001",
+  "batchId": "production-batch-2024-001",
   "devices": [
     {
       "certFingerprint": "a1b2c3d4e5f6789012345678901234567890abcdef1234567890abcdef123456",
@@ -292,7 +293,7 @@ aws iot describe-certificate --certificate-id <cert-id> --region us-west-2
 Create a JSON file with certificate fingerprints and device data:
 ```json
 {
-  "batch_id": "your-batch-id",
+  "batchId": "your-batch-id",
   "devices": [
     {
       "certFingerprint": "fingerprint-from-phase1",
