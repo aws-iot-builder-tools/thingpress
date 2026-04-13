@@ -1,7 +1,7 @@
 coverage==7.13.4
 coverage-badge==1.1.2
 moto==5.1.20
-pylint==4.0.4
+pylint==4.0.5
 pytest==9.0.2
 pytest-cov==7.0.0
 pytest-socket==0.7.0
