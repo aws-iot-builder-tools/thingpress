@@ -54,6 +54,7 @@ Choose your hardware vendor and follow the vendor-specific deployment instructio
 - **[Espressif Systems (ESP32-S3)](../vendors/espressif.md#deployment)** - For ESP32-S3 devices with pre-provisioned certificates
 - **[Infineon Technologies (Optiga Trust M Express)](../vendors/infineon.md#deployment)** - For Optiga Trust M Express security chips
 - **[Microchip Technology (Trust&Go ATECC608B)](../vendors/microchip.md#deployment)** - For Trust&Go ATECC608B with TLS
+- **[MES Two-Phase Provisioning](../vendors/mes.md#deployment)** - For manufacturing execution system workflows
 - **[Generated Certificates](../vendors/generated.md#deployment)** - For programmatically generated certificates or migration scenarios
 
 Each vendor guide will walk you through:

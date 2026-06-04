@@ -17,7 +17,7 @@ The release integration testing workflow is designed for automated, production-r
 
 | Input | Description | Required | Default | Type |
 |-------|-------------|----------|---------|------|
-| `provider` | Provider to test (all, espressif, infineon, microchip, generated) | Yes | `all` | string |
+| `provider` | Provider to test (all, espressif, infineon, microchip, mes, generated) | Yes | `all` | string |
 | `region` | AWS region to deploy to | No | `''` (uses secret or us-east-1) | string |
 | `cleanup` | Clean up resources after tests | Yes | `true` | boolean |
 
@@ -41,7 +41,7 @@ The workflow uses a matrix strategy for parallel execution and includes multiple
 ```yaml
 strategy:
   matrix:
-    provider: [microchip, espressif, infineon, generated]
+    provider: [microchip, espressif, infineon, mes, generated]
   fail-fast: false
 ```
 
@@ -152,6 +152,11 @@ Each provider follows the same testing pattern:
 - **Test File**: `test/artifacts/` (programmatically generated)
 - **Certificate Type**: Dynamically created X.509 certificates
 - **Validation**: Certificate generation and import process
+
+#### MES Provider
+- **Test Files**: Phase 1 vendor certificates, Phase 2 device-infos JSON
+- **Certificate Type**: Two-phase provisioning workflow
+- **Validation**: Certificate registration as INACTIVE, device activation with attributes
 
 ## Cleanup Strategy
 

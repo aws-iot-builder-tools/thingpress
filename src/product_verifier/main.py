@@ -27,7 +27,7 @@ def parse_comma_delimited_list(value: str) -> list[str]:
     """Parse comma-delimited string into list, filtering out 'None' and empty values"""
     if not value or value.strip().lower() == 'none':
         return []
-    return [item.strip() for item in value.split(',') 
+    return [item.strip() for item in value.split(',')
             if item.strip() and item.strip().lower() != 'none']
 
 ESPRESSIF_BUCKET_PREFIX = "thingpress-espressif-"
@@ -57,13 +57,15 @@ def lambda_handler(event,
 
     This lambda function expects invocation by S3 event. There should be only one
     event, but is processed as if multiple events were found at once.
-    
+
     Expects the following environment variables to be set:
-    QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP, QUEUE_TARGET_GENERATED
+    QUEUE_TARGET_ESPRESSIF, QUEUE_TARGET_INFINEON, QUEUE_TARGET_MICROCHIP,
+    QUEUE_TARGET_GENERATED
     POLICY_NAMES, THING_GROUP_NAMES (comma-delimited), THING_TYPE_NAME
+    CERT_ACTIVE, CERT_FORMAT, THING_DEFERRED (optional, with defaults)
     """
     config = {}
-    
+
     # Get multi-value parameters
     e_policies = os.environ.get('POLICY_NAMES', '')
     e_thing_groups = os.environ.get('THING_GROUP_NAMES', '')
@@ -109,6 +111,11 @@ def lambda_handler(event,
     if e_thing_type and check_cfn_prop_valid(e_thing_type):
         get_thing_type_arn(e_thing_type, default_session)
         config['thing_type_name'] = e_thing_type
+
+    # Vendor processing: Use stack-level configuration
+    config['cert_active'] = os.environ.get("CERT_ACTIVE", "TRUE")
+    config['cert_format'] = os.environ.get("CERT_FORMAT", "X509")
+    config['thing_deferred'] = os.environ.get("THING_DEFERRED", "FALSE")
 
     try:
         queue_url = get_provider_queue(config['bucket'])

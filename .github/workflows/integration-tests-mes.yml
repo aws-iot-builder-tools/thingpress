@@ -1,0 +1,226 @@
+name: Manual Integration Tests - MES
+
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'AWS region to deploy to'
+        required: false
+        default: ''
+      cleanup:
+        description: 'Clean up resources after tests'
+        required: true
+        default: true
+        type: boolean
+      keep_stack:
+        description: 'Keep the test stack after completion (for debugging)'
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  integration-tests:
+    name: Manual Integration Tests - MES Two-Phase
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    
+    env:
+      AWS_REGION: ${{ github.event.inputs.region || secrets.AWS_REGION || 'us-east-1' }}
+      STACK_NAME: thingpress-mes-${{ github.run_number }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+      
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.13'
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install boto3 pytest pytest-timeout cryptography
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: arn:aws:iam::${{ secrets.AWS_ACCOUNT_ID }}:role/ThingpressDeploymentRole
+          aws-region: ${{ env.AWS_REGION }}
+          role-session-name: GitHubActions-ThingpressMESTest-${{ github.run_number }}
+      
+      - name: Install AWS SAM CLI
+        uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      
+      - name: Verify AWS access
+        run: |
+          aws sts get-caller-identity
+          aws iam get-role --role-name ThingpressDeploymentRole
+      
+      - name: Pre-deployment cleanup
+        run: |
+          echo "🧹 Pre-deployment cleanup of any existing test resources..."
+          chmod +x scripts/cleanup-integration-test.sh
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress-mes" \
+            --no-dry-run \
+            --region "${{ env.AWS_REGION }}" || true
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Create IoT test prerequisites
+        run: |
+          echo "🔧 Creating IoT test prerequisites..."
+          # Create test policy (if not exists)
+          aws iot create-policy \
+            --policy-name BasicTestPolicy \
+            --policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Action":"iot:*","Resource":"*"}]}' \
+            2>/dev/null || echo "Policy BasicTestPolicy already exists"
+          
+          # Create test thing type (if not exists)
+          aws iot create-thing-type \
+            --thing-type-name BasicTestType \
+            2>/dev/null || echo "ThingType BasicTestType already exists"
+          
+          # Create test thing group (if not exists)
+          aws iot create-thing-group \
+            --thing-group-name BasicTestGroup \
+            2>/dev/null || echo "ThingGroup BasicTestGroup already exists"
+          
+          echo "✅ IoT test prerequisites ready"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+
+      - name: Deploy Thingpress stack for MES testing
+        id: deploy
+        run: |
+          echo "🚀 Deploying Thingpress stack for MES two-phase integration testing..."
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          echo "Region: ${{ env.AWS_REGION }}"
+          echo "Configuration: IoTCertActive=FALSE, IoTThingDeferred=TRUE"
+          sam build --parallel
+          # Deploy the stack with MES two-phase configuration
+          sam deploy \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --resolve-s3 \
+            --config-file configs/sam-integration-mes.toml \
+            --capabilities CAPABILITY_NAMED_IAM \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset
+          
+          echo "✅ Stack deployment completed successfully"
+          
+          # Verify stack exists and get outputs
+          aws cloudformation describe-stacks \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Stacks[0].StackStatus' \
+            --output text
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Wait for stack to be ready
+        run: |
+          echo "⏳ Waiting for stack to be fully ready..."
+          sleep 30
+          
+          # Verify all resources are created
+          aws cloudformation describe-stacks \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --query 'Stacks[0].{StackStatus:StackStatus,CreationTime:CreationTime}' \
+            --output table
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Run MES end-to-end integration test
+        id: e2e_test
+        run: |
+          echo "🧪 Running MES end-to-end two-phase provisioning test..."
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          export PYTHONPATH=$(pwd)/test:$(pwd)/test/integration
+          python -m pytest test/integration/end_to_end/test_mes_e2e.py \
+            -v \
+            --tb=short \
+            --junitxml=test-results-mes-e2e.xml \
+            --timeout=600
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+          THINGPRESS_STACK_NAME: ${{ env.STACK_NAME }}
+      
+      - name: Delete test stack
+        if: always() && github.event.inputs.keep_stack != 'true'
+        run: |
+          echo "🗑️ Deleting integration test stack..."
+          echo "Stack name: ${{ env.STACK_NAME }}"
+          
+          # Delete the stack
+          aws cloudformation delete-stack \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}"
+          
+          echo "⏳ Waiting for stack deletion to complete..."
+          aws cloudformation wait stack-delete-complete \
+            --stack-name "${{ env.STACK_NAME }}" \
+            --region "${{ env.AWS_REGION }}" \
+            --cli-read-timeout 1800 \
+            --cli-connect-timeout 60 || {
+              echo "⚠️ Stack deletion timed out or failed, but continuing..."
+              aws cloudformation describe-stacks \
+                --stack-name "${{ env.STACK_NAME }}" \
+                --region "${{ env.AWS_REGION }}" \
+                --query 'Stacks[0].StackStatus' \
+                --output text || echo "Stack may have been deleted"
+            }
+          
+          echo "✅ Stack deletion completed"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Final cleanup verification
+        if: always() && github.event.inputs.cleanup == 'true'
+        run: |
+          echo "🔍 Final cleanup verification..."
+          
+          # Run comprehensive cleanup to ensure no resources are left behind
+          ./scripts/cleanup-integration-test.sh \
+            --stack-prefix "thingpress-mes" \
+            --no-dry-run \
+            --region "${{ env.AWS_REGION }}" || true
+          
+          echo "✅ Final cleanup verification completed"
+        env:
+          AWS_DEFAULT_REGION: ${{ env.AWS_REGION }}
+      
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: mes-integration-test-results-${{ github.run_number }}
+          path: |
+            test-results-mes-e2e.xml
+          retention-days: 30
+      
+      - name: Test Summary
+        if: always()
+        run: |
+          echo "## MES Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Stack Name:** ${{ env.STACK_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Region:** ${{ env.AWS_REGION }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Test Type:** MES Two-Phase Provisioning" >> $GITHUB_STEP_SUMMARY
+          echo "**Configuration:** IoTCertActive=FALSE, IoTThingDeferred=TRUE" >> $GITHUB_STEP_SUMMARY
+          echo "**Keep Stack:** ${{ github.event.inputs.keep_stack }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ -f "test-results-mes-e2e.xml" ]; then
+            echo "**E2E Test Results:** See uploaded artifacts" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "**E2E Test Results:** No results file found" >> $GITHUB_STEP_SUMMARY
+          fi

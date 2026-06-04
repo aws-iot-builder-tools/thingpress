@@ -60,6 +60,10 @@ class EndToEndTestFramework:
         # Get deployed resources
         self.resources = self._get_deployed_resources()
 
+    def is_thing_creation_deferred(self) -> bool:
+        """Check if thing creation is deferred based on stack parameters"""
+        return self.stack_params.get('IoTThingDeferred', 'FALSE') == 'TRUE'
+
     def log_step(self, step_name: str, description: str = ""):
         """Log a test step"""
         step = {
@@ -96,15 +100,23 @@ class EndToEndTestFramework:
             # Allow stack name to be configured via environment variable
             stack_name = os.environ.get('THINGPRESS_STACK_NAME', 'sam-app')
             response = self.cloudformation.describe_stacks(StackName=stack_name)
-            outputs = response['Stacks'][0]['Outputs']
-
+            stack = response['Stacks'][0]
+            
+            outputs = stack['Outputs']
             resources = {}
             for output in outputs:
                 key = output['OutputKey']
                 value = output['OutputValue']
                 resources[key] = value
 
+            # Get stack parameters for conditional validation
+            parameters = stack.get('Parameters', [])
+            self.stack_params = {}
+            for param in parameters:
+                self.stack_params[param['ParameterKey']] = param['ParameterValue']
+
             self.logger.info("Found %d deployed resources", len(resources))
+            self.logger.info("Stack parameters: %s", self.stack_params)
             return resources
 
         except Exception as e:
@@ -149,6 +161,10 @@ class EndToEndTestFramework:
             'certificates_found': 0
         }
 
+        thing_deferred = self.is_thing_creation_deferred()
+        if thing_deferred:
+            self.logger.info("⚠️  Thing creation is DEFERRED - will not validate thing creation")
+        
         self.logger.info("Monitoring processing for up to %d minutes...", timeout_minutes)
 
         # Give the system a moment to start processing after manifest upload
@@ -157,11 +173,11 @@ class EndToEndTestFramework:
         while (time.time() - start_time < timeout_seconds):
 
             # Check for recently created IoT things (use longer window for detection)
-
-            things = self._get_iot_things(manifest_cert_count)
+            things = [] if thing_deferred else self._get_iot_things(manifest_cert_count)
             certificates = self._get_iot_certificates(manifest_cert_count)
-            things_completed = False
+            things_completed = thing_deferred  # If deferred, skip thing check
             certificates_completed = False
+            
             if things:
                 processing_indicators['iot_things'] = things
                 self.logger.info("Found %d recent IoT things", len(things))
@@ -172,7 +188,8 @@ class EndToEndTestFramework:
                 certificates_completed = len(certificates) == manifest_cert_count
 
             if things_completed and certificates_completed:
-                self.logger.info("🎉 All things and certificates discovered!")
+                self.logger.info("🎉 All certificates discovered%s!", 
+                               " (things deferred)" if thing_deferred else " and things created")
                 break
 
             # Check for log activity in provider functions

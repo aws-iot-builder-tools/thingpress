@@ -17,7 +17,7 @@ The workflow is triggered manually via GitHub Actions workflow dispatch with the
 
 | Input | Description | Required | Default | Type |
 |-------|-------------|----------|---------|------|
-| `provider` | Provider to test (all, espressif, infineon, microchip, generated) | Yes | `all` | string |
+| `provider` | Provider to test (all, espressif, infineon, microchip, mes, generated) | Yes | `all` | string |
 | `region` | AWS region to deploy to | No | `''` (uses secret or us-east-1) | string |
 | `cleanup` | Clean up resources after tests | Yes | `true` | boolean |
 | `keep_stack` | Keep the test stack after completion (for debugging) | No | `false` | boolean |
@@ -103,6 +103,7 @@ The workflow supports testing the following providers:
 - **Espressif**: Tests ESP32-S3 certificate import
 - **Infineon**: Tests Optiga Trust M Express certificates
 - **Microchip**: Tests Trust&Go ATECC608B certificates
+- **MES**: Tests two-phase provisioning workflow
 - **Generated**: Tests programmatically generated certificates
 
 ## Debugging Features

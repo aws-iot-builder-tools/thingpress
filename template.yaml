@@ -51,6 +51,27 @@ Parameters:
     Type: String
     Description: AWS IoT Thing Type to apply to things. Use 'None' for no thing type.
 
+  IoTCertActive:
+    Default: "TRUE"
+    Type: String
+    Description: Upon import, set the certificate state to active or inactive.
+    AllowedValues: ["TRUE", "FALSE"]
+
+  IoTCertFormat:
+    Default: "X509"
+    Type: "String"
+    Description: The certificate (principal) format in the artifact is either an X509
+      certificate or X509 fingerprint. Used only for MES artifact processing. Vendor
+      processing will always be X509.
+    AllowedValues: ["X509", "FINGERPRINT"]
+
+  IoTThingDeferred:
+    Default: "FALSE"
+    Type: "String"
+    Description: Do not create the IoT Things or make IoT Thing associations. Useful only
+      if you don't want to use IoT Things (not recommended) or if you have delayed processing
+      for the MES process.
+ 
   InfineonCertBundleType:
     Default: E0E0
     Type: String
@@ -147,6 +168,50 @@ Resources:
         - Key: Component
           Value: Idempotency
 
+  # Device status tracking table for MES workflows
+  ThingpressDeviceStatusTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: batch_id
+          AttributeType: S
+        - AttributeName: device_id
+          AttributeType: S
+        - AttributeName: status
+          AttributeType: S
+        - AttributeName: vendor
+          AttributeType: S
+        - AttributeName: queued_at
+          AttributeType: S
+      KeySchema:
+        - AttributeName: batch_id
+          KeyType: HASH
+        - AttributeName: device_id
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: status-index
+          KeySchema:
+            - AttributeName: batch_id
+              KeyType: HASH
+            - AttributeName: status
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+        - IndexName: vendor-time-index
+          KeySchema:
+            - AttributeName: vendor
+              KeyType: HASH
+            - AttributeName: queued_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DeviceStatus
+
   ThingpressUtilsLayer:
     Type: AWS::Serverless::LayerVersion
     Properties:
@@ -187,6 +252,26 @@ Resources:
     UpdateReplacePolicy: Retain
     Properties:
       BucketName: !Sub thingpress-generated-${AWS::StackName}
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: aws:kms
+              KMSMasterKeyID: alias/aws/s3
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+  
+  # S3 bucket for MES (Manufacturing Execution System) device-infos
+  ThingpressMesManifestBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      BucketName: !Sub thingpress-mes-${AWS::StackName}
       BucketEncryption:
         ServerSideEncryptionConfiguration:
           - ServerSideEncryptionByDefault:
@@ -379,6 +464,9 @@ Resources:
           POLICY_NAMES: !Join [',', !Ref IoTPolicies]
           THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
           THING_TYPE_NAME: !Ref IoTThingType
+          CERT_ACTIVE: !Ref IoTCertActive
+          CERT_FORMAT: !Ref IoTCertFormat
+          THING_DEFERRED: !Ref IoTThingDeferred
       Events:
         EV1:
           Type: S3
@@ -414,6 +502,66 @@ Resources:
           Type: S3
           Properties:
             Bucket: !Ref ThingpressMicrochipManifestBucket
+            Events: s3:ObjectCreated:*
+            Filter:
+              S3Key:
+                Rules:
+                  - Name: Suffix
+                    Value: .json
+
+  # ========================================================================
+  # MES Verifier - Handles MES manifest bucket events
+  # ========================================================================
+  
+  ThingpressMesVerifierFunctionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Path: /
+      RoleName: !Sub Thingpress-Mes-Verifier-Role-${AWS::StackName}
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: aws-api-calls
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - iot:DescribeThingGroup
+                  - iot:DescribeThingType
+                  - iot:GetPolicy
+                  - sqs:GetQueueUrl
+                  - sqs:SendMessage
+                Resource: '*'
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action:
+              - sts:AssumeRole
+
+  ThingpressMesVerifierFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/mes_verifier/
+      Handler: main.lambda_handler
+      Runtime: python3.13
+      Role: !GetAtt ThingpressMesVerifierFunctionRole.Arn
+      Timeout: 300
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      Environment:
+        Variables:
+          QUEUE_TARGET_MES: !Ref ThingpressMesProviderQueue
+          POLICY_NAMES: !Join [',', !Ref IoTPolicies]
+          THING_GROUP_NAMES: !Join [',', !Ref IoTThingGroups]
+          THING_TYPE_NAME: !Ref IoTThingType
+      Events:
+        MesManifestEvent:
+          Type: S3
+          Properties:
+            Bucket: !Ref ThingpressMesManifestBucket
             Events: s3:ObjectCreated:*
             Filter:
               S3Key:
@@ -492,6 +640,106 @@ Resources:
           Type: SQS
           Properties:
             Queue: !GetAtt ThingpressGeneratedProviderQueue.Arn
+            BatchSize: 10
+            # Enhanced batch configuration for better throughput
+            MaximumBatchingWindowInSeconds: 5
+            FunctionResponseTypes:
+              - ReportBatchItemFailures
+
+  # Dead letter queue for MES provider
+  ThingpressMesProviderDLQ:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Mes-Provider-DLQ-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      MessageRetentionPeriod: !Ref DLQRetentionPeriod
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: DLQ
+
+  # The product provider lambda function sends a message to this queue if the
+  # manifest source comes from the MES bucket.
+  ThingpressMesProviderQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName: !Sub Thingpress-Mes-Provider-Queue-${AWS::StackName}
+      SqsManagedSseEnabled: true
+      VisibilityTimeout: !Ref QueueVisibilityTimeout
+      RedrivePolicy:
+        deadLetterTargetArn: !GetAtt ThingpressMesProviderDLQ.Arn
+        maxReceiveCount: 3
+      Tags:
+        - Key: Application
+          Value: Thingpress
+        - Key: Component
+          Value: Queue
+
+  ThingpressMesProviderQueuePolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressMesProviderQueue
+      PolicyDocument:
+        Id: MesProviderQueuePolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MesProviderQueuePolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource:
+              - !GetAtt ThingpressMesProviderQueue.Arn
+            Principal:
+              AWS:
+                - !GetAtt ThingpressProductVerifierFunctionRole.Arn
+
+  # Lambda function for processing MES device-infos
+  ThingpressMesProviderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: src/provider_mes/
+      Handler: provider_mes.main.lambda_handler
+      Runtime: python3.13
+      MemorySize: 256
+      Timeout: !Ref LambdaTimeout
+      Layers:
+        - !Ref ThingpressUtilsLayer
+      Environment:
+        Variables:
+          QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
+          POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
+          POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Throttling configuration
+          AUTO_THROTTLING_ENABLED: !Ref AutoThrottlingEnabled
+          THROTTLING_BASE_DELAY: !Ref ThrottlingBaseDelay
+          THROTTLING_BATCH_INTERVAL: !Ref ThrottlingBatchInterval
+          MAX_QUEUE_DEPTH: !Ref MaxQueueDepth
+          # Device status tracking
+          DEVICE_STATUS_TABLE: !Ref ThingpressDeviceStatusTable
+      Policies:
+        - S3ReadPolicy:
+            BucketName: !Ref ThingpressMesManifestBucket
+        - SQSSendMessagePolicy:
+            QueueName: !GetAtt ThingpressBulkImporterQueue.QueueName
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressDeviceStatusTable
+        # Add permission to read queue attributes for throttling
+        - Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - sqs:GetQueueAttributes
+              Resource: 
+                - !GetAtt ThingpressBulkImporterQueue.Arn
+      Events:
+        SQSEvent:
+          Type: SQS
+          Properties:
+            Queue: !GetAtt ThingpressMesProviderQueue.Arn
             BatchSize: 10
             # Enhanced batch configuration for better throughput
             MaximumBatchingWindowInSeconds: 5
@@ -859,6 +1107,8 @@ Resources:
           QUEUE_TARGET: !Ref ThingpressBulkImporterQueue
           POWERTOOLS_IDEMPOTENCY_TABLE: !Ref ThingpressIdempotencyTable
           POWERTOOLS_IDEMPOTENCY_EXPIRY_SECONDS: !Ref IdempotencyExpirySeconds
+          # Device status tracking
+          DEVICE_STATUS_TABLE: !Ref ThingpressDeviceStatusTable
       Policies:
         - AWSLambdaBasicExecutionRole
         - SQSPollerPolicy:
@@ -866,6 +1116,8 @@ Resources:
         - AWSIoTFullAccess
         - DynamoDBCrudPolicy:
             TableName: !Ref ThingpressIdempotencyTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ThingpressDeviceStatusTable
       Events:
         QueueEvent:
           Type: SQS
@@ -973,6 +1225,26 @@ Resources:
             Condition:
               ArnEquals:
                 aws:SourceArn: !GetAtt ThingpressGeneratedProviderQueue.Arn
+
+  ThingpressMesProviderDLQPolicy:
+    Type: AWS::SQS::QueuePolicy
+    Properties:
+      Queues:
+        - !Ref ThingpressMesProviderDLQ
+      PolicyDocument:
+        Id: MesProviderDLQPolicyId
+        Version: '2012-10-17'
+        Statement:
+          - Sid: MesProviderDLQPolicySId
+            Action:
+              - sqs:SendMessage
+            Effect: Allow
+            Resource: !GetAtt ThingpressMesProviderDLQ.Arn
+            Principal:
+              Service: sqs.amazonaws.com
+            Condition:
+              ArnEquals:
+                aws:SourceArn: !GetAtt ThingpressMesProviderQueue.Arn
 
   # CloudWatch Alarms for SQS Throttling Monitoring
   ThingpressBulkImporterQueueDepthAlarm:
@@ -1118,15 +1390,24 @@ Outputs:
   GeneratedIngestPoint:
     Description: The Amazon S3 bucket for uploading Generated certificate files (TXT)
     Value: !Ref ThingpressGeneratedManifestBucket
+  MesIngestPoint:
+    Description: The Amazon S3 bucket for uploading MES device-infos files (JSON)
+    Value: !Ref ThingpressMesManifestBucket
   MicrochipVerificationCertsBucket:
     Description: The Amazon S3 bucket containing Microchip verification certificates
     Value: !Ref ThingpressMicrochipVerificationCertsBucket
   IdempotencyTable:
     Description: The DynamoDB table used for idempotency tracking
     Value: !Ref ThingpressIdempotencyTable
+  DeviceStatusTable:
+    Description: The DynamoDB table used for device status tracking
+    Value: !Ref ThingpressDeviceStatusTable
   ProductVerifierFunction:
     Description: The Lambda function that verifies S3 uploads and routes to provider queues
     Value: !Ref ThingpressProductVerifierFunction
+  MesVerifierFunction:
+    Description: The Lambda function that verifies MES S3 uploads and routes to MES provider queue
+    Value: !Ref ThingpressMesVerifierFunction
   EspressifProviderFunction:
     Description: The Lambda function that processes Espressif manifests
     Value: !Ref ThingpressEspressifProviderFunction
@@ -1139,6 +1420,9 @@ Outputs:
   GeneratedProviderFunction:
     Description: The Lambda function that processes generated certificate manifests
     Value: !Ref ThingpressGeneratedProviderFunction
+  MesProviderFunction:
+    Description: The Lambda function that processes MES device-infos manifests
+    Value: !Ref ThingpressMesProviderFunction
   BulkImporterFunction:
     Description: The Lambda function that imports certificates to AWS IoT
     Value: !Ref ThingpressBulkImporterFunction
@@ -1154,6 +1438,9 @@ Outputs:
   GeneratedProviderDLQ:
     Description: Dead letter queue for Generated provider
     Value: !Ref ThingpressGeneratedProviderDLQ
+  MesProviderDLQ:
+    Description: Dead letter queue for MES provider
+    Value: !Ref ThingpressMesProviderDLQ
   BulkImporterDLQ:
     Description: Dead letter queue for Bulk Importer
     Value: !Ref ThingpressBulkImporterDLQ

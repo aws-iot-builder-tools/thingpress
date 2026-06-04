@@ -40,10 +40,12 @@ module_paths = [
     os.path.join(project_root, "src", "layer_utils"),
     os.path.join(project_root, "src", "bulk_importer"),
     os.path.join(project_root, "src", "product_verifier"),
+    os.path.join(project_root, "src", "mes_verifier"),
     os.path.join(project_root, "src", "provider_espressif"),
     os.path.join(project_root, "src", "provider_generated"),
     os.path.join(project_root, "src", "provider_infineon"),
     os.path.join(project_root, "src", "provider_microchip"),
+    os.path.join(project_root, "src", "provider_mes"),
     os.path.join(project_root, "src", "certificate_generator"),
 ]
 
@@ -56,10 +58,10 @@ for path in module_paths:
 try:
     # Create aliases for common modules
     # For example, make src.layer_utils.aws_utils available as just aws_utils
-    import src.layer_utils.aws_utils
+    import src.layer_utils.aws_utils  # pylint: disable=unused-import
     sys.modules['aws_utils'] = sys.modules['src.layer_utils.aws_utils']
 
-    import src.layer_utils.cert_utils
+    import src.layer_utils.cert_utils  # pylint: disable=unused-import
     sys.modules['cert_utils'] = sys.modules['src.layer_utils.cert_utils']
 except ImportError:
     # Handle case where modules aren't found
@@ -73,12 +75,13 @@ def reset_circuit_state(request):
     if 'test_aws_utils' in request.node.name:
         yield
         return
-        
+
     # Reset circuit state for other tests
     try:
+        # pylint: disable=import-outside-toplevel
         from src.layer_utils.circuit_state import _circuit_states
         _circuit_states.clear()
     except ImportError:
         pass
-        
+
     yield
